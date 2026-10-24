@@ -1,4 +1,4 @@
-[![Tests](https://github.com/Tashji/mnemosine/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/Tashji/mnemosine/actions/workflows/tests.yml)
+[![Tests](https://github.com/Tashji/mnemosine/workflows/Tests/badge.svg?branch=main)](https://github.com/Tashji/mnemosine/actions/workflows/tests.yml)
 
 Specifica tecnica: Sistema di architettura cognitiva e memoria per agenti AI basato su MCP
 
