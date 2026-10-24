@@ -408,6 +408,7 @@ class SemanticService:
         item_id: str | None = None,
         changed_by: str = "semantic_service",
         change_reason: str = "Creazione della conoscenza.",
+        cascade_id: str | None = None,
     ) -> dict[str, Any]:
         title = _require_str(title, "title")
         content = _require_str(content, "content")
@@ -428,6 +429,7 @@ class SemanticService:
         importance = _validate_importance(importance)
         _validate_quality_rules(knowledge_type, source, reliability)
         source_ref = _optional_str(source_ref, "source_ref")
+        cascade_id = _optional_str(cascade_id, "cascade_id")
         valid_from = _validate_date_or_datetime(valid_from, "valid_from")
         valid_to = _validate_date_or_datetime(valid_to, "valid_to")
         if valid_from and valid_to and valid_from > valid_to:
@@ -478,7 +480,7 @@ class SemanticService:
                             item_id, revision_number, changed_at, changed_by,
                             change_reason, previous_snapshot_json,
                             new_snapshot_json, cascade_id
-                        ) VALUES (?, 1, ?, ?, ?, NULL, ?, NULL)
+                        ) VALUES (?, 1, ?, ?, ?, NULL, ?, ?)
                         """,
                         (
                             item_id,
@@ -486,6 +488,7 @@ class SemanticService:
                             changed_by,
                             change_reason,
                             _snapshot(row),
+                            cascade_id,
                         ),
                     )
                     inserted = conn.execute(
@@ -504,6 +507,7 @@ class SemanticService:
         *,
         changed_by: str = "semantic_service",
         change_reason: str = "Aggiornamento della conoscenza.",
+        cascade_id: str | None = None,
     ) -> dict[str, Any]:
         item_id = _require_str(item_id, "item_id")
         if not isinstance(patch, dict) or not patch:
@@ -559,6 +563,7 @@ class SemanticService:
             importance = _validate_importance(merged["importance"])
             _validate_quality_rules(knowledge_type, source, reliability)
             source_ref = _optional_str(merged.get("source_ref"), "source_ref")
+            cascade_id = _optional_str(cascade_id, "cascade_id")
             valid_from = _validate_date_or_datetime(
                 merged.get("valid_from"), "valid_from"
             )
@@ -605,7 +610,7 @@ class SemanticService:
                             item_id, revision_number, changed_at, changed_by,
                             change_reason, previous_snapshot_json,
                             new_snapshot_json, cascade_id
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             item_id,
@@ -615,6 +620,7 @@ class SemanticService:
                             change_reason,
                             _snapshot(current),
                             _snapshot(updated),
+                            cascade_id,
                         ),
                     )
             except sqlite3.IntegrityError as exc:

@@ -112,6 +112,51 @@
         "description": "Elabora a lungo le critiche e le esperienze negative; recupera lentamente."
       }
     },
+    "evolution": {
+      "max_total_delta_per_seed": 2,
+      "rules": [
+        {
+          "id": "negative_high_intensity",
+          "min_intensity": 7,
+          "max_valence": -0.2,
+          "impacts": {
+            "resilience_sensitivity": 1
+          }
+        },
+        {
+          "id": "positive_high_intensity",
+          "min_intensity": 7,
+          "min_valence": 0.4,
+          "impacts": {
+            "resilience_sensitivity": -1
+          }
+        },
+        {
+          "id": "social_rejection",
+          "tags_any": [
+            "rifiuto",
+            "critica",
+            "umiliazione",
+            "esclusione"
+          ],
+          "impacts": {
+            "introversion_extraversion": -1
+          }
+        },
+        {
+          "id": "loss_or_illness",
+          "tags_any": [
+            "lutto",
+            "perdita",
+            "incidente",
+            "malattia"
+          ],
+          "impacts": {
+            "resilience_sensitivity": 1
+          }
+        }
+      ]
+    },
     "extensions": {
       "big_five": null
     }

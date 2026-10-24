@@ -208,6 +208,7 @@ def _insert_episodic(
     timestamp: str | None = None,
     changed_by: str = "memory_service",
     change_reason: str = "Creazione del ricordo.",
+    cascade_id: str | None = None,
 ) -> dict[str, Any]:
     """Inserisce un ricordo e la sua revisione iniziale.
 
@@ -308,7 +309,7 @@ def _insert_episodic(
                 INSERT INTO memory_revisions (
                     memory_id, revision_number, changed_at, changed_by,
                     change_reason, previous_snapshot_json, new_snapshot_json, cascade_id
-                ) VALUES (?, 1, ?, ?, ?, NULL, ?, NULL)
+                ) VALUES (?, 1, ?, ?, ?, NULL, ?, ?)
                 """,
                 (
                     memory_id,
@@ -316,6 +317,7 @@ def _insert_episodic(
                     changed_by,
                     change_reason,
                     json.dumps(dict(inserted), ensure_ascii=False, indent=2),
+                    cascade_id,
                 ),
             )
     except sqlite3.IntegrityError as exc:
@@ -324,6 +326,124 @@ def _insert_episodic(
         ) from exc
 
     return decode_memory(inserted)
+
+
+def _update_episodic(
+    conn: sqlite3.Connection,
+    memory_id: str,
+    patch: dict[str, Any],
+    *,
+    timestamp: str,
+    changed_by: str,
+    change_reason: str,
+    cascade_id: str | None = None,
+) -> dict[str, Any]:
+    """Aggiorna un ricordo conscio conservando lo snapshot precedente.
+
+    La funzione è condivisa dal servizio e dal motore di evoluzione. Il numero
+    di revisione coincide con la nuova versione del ricordo, così la catena
+    ``version``/``memory_revisions`` resta verificabile.
+    """
+
+    memory_id = _require_str(memory_id, "memory_id")
+    if not isinstance(patch, dict) or not patch:
+        raise ValidationError("Il patch del ricordo deve essere un oggetto non vuoto.")
+    allowed = {
+        "title",
+        "description",
+        "place",
+        "people",
+        "emotional_state",
+        "importance",
+        "consequences",
+        "tags",
+        "reliability",
+        "is_consolidated",
+    }
+    unknown = sorted(set(patch) - allowed)
+    if unknown:
+        raise ValidationError(
+            "Campi non modificabili o sconosciuti: " + ", ".join(unknown) + "."
+        )
+
+    timestamp = _require_datetime(timestamp, "timestamp")
+    cascade_id = _optional_str(cascade_id, "cascade_id")
+
+    row = conn.execute(
+        "SELECT * FROM conscious_episodic_memories WHERE id = ?", (memory_id,)
+    ).fetchone()
+    if row is None:
+        raise NotFoundError(f"Ricordo non trovato nella memoria conscia: {memory_id}.")
+
+    current = decode_memory(row)
+    merged = dict(current)
+    for key, value in patch.items():
+        merged[key] = copy.deepcopy(value)
+
+    title = _require_str(merged["title"], "title")
+    description = _require_str(merged["description"], "description")
+    place = _optional_str(merged.get("place"), "place")
+    people = _string_list(merged.get("people"), "people")
+    emotional_state = _object(merged.get("emotional_state"), "emotional_state")
+    importance = _require_int(merged["importance"], "importance", 1, 10)
+    consequences = _optional_str(merged.get("consequences"), "consequences")
+    tags = _string_list(merged.get("tags"), "tags")
+    reliability = _require_number(merged["reliability"], "reliability", 0.0, 1.0)
+    raw_consolidated = merged.get("is_consolidated")
+    if isinstance(raw_consolidated, int) and not isinstance(raw_consolidated, bool):
+        raw_consolidated = bool(raw_consolidated)
+    is_consolidated = _require_bool(raw_consolidated, "is_consolidated")
+
+    new_version = int(current["version"]) + 1
+    new_row = {
+        "title": title,
+        "description": description,
+        "place": place,
+        "people_json": json_text(people),
+        "emotional_state_json": json_text(emotional_state),
+        "importance": importance,
+        "consequences": consequences,
+        "tags_json": json_text(tags),
+        "reliability": reliability,
+        "is_consolidated": 1 if is_consolidated else 0,
+        "version": new_version,
+        "updated_at": timestamp,
+    }
+    assignments = ", ".join(f"{column} = ?" for column in new_row)
+
+    try:
+        with conn:
+            conn.execute(
+                f"UPDATE episodic_memories SET {assignments} WHERE id = ?",
+                tuple(new_row[column] for column in new_row) + (memory_id,),
+            )
+            updated = conn.execute(
+                "SELECT * FROM episodic_memories WHERE id = ?", (memory_id,)
+            ).fetchone()
+            conn.execute(
+                """
+                INSERT INTO memory_revisions (
+                    memory_id, revision_number, changed_at, changed_by,
+                    change_reason, previous_snapshot_json, new_snapshot_json, cascade_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    memory_id,
+                    new_version,
+                    timestamp,
+                    changed_by,
+                    change_reason,
+                    json.dumps(dict(row), ensure_ascii=False, indent=2),
+                    json.dumps(dict(updated), ensure_ascii=False, indent=2),
+                    cascade_id,
+                ),
+            )
+    except sqlite3.IntegrityError as exc:
+        raise ConflictError(
+            f"Impossibile aggiornare il ricordo '{memory_id}': {exc}"
+        ) from exc
+
+    return decode_memory(updated)
 
 
 # ---------------------------------------------------------------------------
@@ -615,6 +735,7 @@ class MemoryService:
         is_simulated: bool | None = None,
         is_consolidated: bool = False,
         memory_id: str | None = None,
+        cascade_id: str | None = None,
     ) -> dict[str, Any]:
         """Crea un ricordo conscio.
 
@@ -649,6 +770,35 @@ class MemoryService:
                 timestamp=timestamp,
                 changed_by="memory_service",
                 change_reason="Creazione del ricordo dalla memoria conscia.",
+                cascade_id=cascade_id,
+            )
+
+    def update_memory(
+        self,
+        memory_id: str,
+        patch: dict[str, Any],
+        *,
+        changed_by: str = "memory_service",
+        change_reason: str = "Aggiornamento del ricordo.",
+        cascade_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Aggiornamento interno con revisione, usato dal motore di evoluzione.
+
+        Non viene registrato come tool MCP: il server può creare ricordi, ma
+        non riscrivere il passato con un semplice patch. I ricordi latenti o
+        repressi non sono modificabili da questa superficie.
+        """
+
+        timestamp = now_iso(self.config.timezone_name())
+        with self.db.timeline() as conn:
+            return _update_episodic(
+                conn,
+                memory_id,
+                patch,
+                timestamp=timestamp,
+                changed_by=changed_by,
+                change_reason=change_reason,
+                cascade_id=cascade_id,
             )
 
     def add_memory_link(

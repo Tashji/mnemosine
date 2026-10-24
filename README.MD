@@ -1357,6 +1357,58 @@ python -m agent_memory.index --rebuild
 
 
 
+17.2. Seed esterni, tratti e riconsolidamento a cascata
+
+La Fase 5 è implementata in `agent_memory/evolution.py`. Un seed è un evento amministrativo collocato nel passato: viene registrato come ricordo `admin_seed` e avvia il riconsolidamento di tutti i ricordi simulati successivi. Le interazioni reali, i ricordi latenti e i ricordi repressi non vengono riscritti.
+
+Esempio di seed:
+
+```json
+{
+  "seed_id": "critica_laboratorio_2024",
+  "event_time": "2024-11-05T18:30:00+01:00",
+  "title": "Una critica ricevuta in laboratorio",
+  "description": "Un docente criticò pubblicamente il mio approccio durante un progetto universitario.",
+  "importance": 8,
+  "tags": ["critica", "università", "rifiuto"],
+  "emotional_state": {
+    "label": "vergogna",
+    "valence": -0.7,
+    "arousal": 0.7,
+    "intensity": 8
+  },
+  "trait_impacts": {},
+  "cascade": {"max_memories": 200}
+}
+```
+
+Il seed può specificare anche `place`, `people`, `consequences`, `is_simulated`, `memory_id`, `cascade_id` e `trait_impacts`. I tratti psicologici vengono aggiornati combinando le regole in `identity.personality.evolution.rules` con gli eventuali `trait_impacts` espliciti; il totale dei delta è limitato da `max_total_delta_per_seed`. Ogni modifica viene registrata in `config/personality_history.json`.
+
+Il riconsolidamento usa un rewriter deterministico predefinito. Il protocollo `MemoryRewriter` permette di sostituirlo con un motore LLM senza cambiare il flusso di seed e tracciabilità. Ogni ricordo aggiornato incrementa `version`, crea una riga in `memory_revisions` con il proprio `cascade_id` e conserva gli snapshot precedenti. Le conoscenze collegate di tipo `opinion`, `hypothesis` e `uncertain` ricevono una nota in `metadata.cascade_reflections`; i `verified_fact` e i contenuti `user_provided` restano intatti.
+
+Comandi:
+
+```bash
+# Anteprima del piano, senza scrivere
+python -m agent_memory.evolution --seed seed.json
+
+# Piano completo in JSON
+python -m agent_memory.evolution --seed seed.json --json
+
+# Applica seed, tratti e riconsolidamento
+python -m agent_memory.evolution --seed seed.json --apply
+
+# Applica senza aggiornare l'indice vettoriale
+python -m agent_memory.evolution --seed seed.json --apply --no-reindex
+
+# Storico delle modifiche ai tratti
+python -m agent_memory.evolution --history
+```
+
+Se l'indice vettoriale non era pronto durante l'applicazione, eseguire `python -m agent_memory.index --sync` per allinearlo ai nuovi testi.
+
+
+
 
 \---
 
