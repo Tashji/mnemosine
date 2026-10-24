@@ -190,6 +190,90 @@ Ogni tratto sarà associato a trigger specifici e a regole che ne determineranno
 
 
 
+2.4. Costruzione del primo profilo (implementazione)
+
+
+
+Il comando `profile init` crea un profilo nuovo e vuoto, senza il dataset demo di `scripts/init_db.py`. Il profilo è una directory autonoma: contiene i cinque file JSON in `config/` e i quattro database SQLite in `data/`, con gli schemi già applicati e zero ricordi.
+
+
+
+```bash
+python -m agent_memory.profile init \
+  --root ./profiles/marco \
+  --first-name Marco --last-name Rossi \
+  --birth-date 2003-05-12 \
+  --birth-city Roma --birth-province Roma --birth-region Lazio \
+  --father-name Luca --mother-name Anna --sibling-name Sara
+```
+
+
+
+In modalità non interattiva i campi obbligatori sono nome, cognome, data di nascita, città di nascita e `--root`. La root non può puntare al progetto corrente: il profilo va creato in una directory separata, così il dataset demo non viene sovrascritto.
+
+
+
+La modalità guidata chiede i dati uno alla volta e usa il valore tra parentesi come default; premere Invio lo accetta. Se `--root` viene omesso, propone `./profiles/<nome>_<cognome>`. I familiari sono facoltativi: lasciare vuoto il nome per saltarli.
+
+
+
+```bash
+python -m agent_memory.profile init --interactive
+```
+
+
+
+`--interactive` può essere combinato con gli altri argomenti: i valori passati diventano i default mostrati nei prompt; con `--root` la directory non viene richiesta. `--dry-run`, `--force` e `--json` funzionano anche in questa modalità. Il comando genera:
+
+
+
+\- `identity.json` con anagrafica, famiglia e quattro tratti iniziali a valore neutro (5/10).
+
+\- `shadow_traits.json` vuoto, con la lettura conscia disabilitata.
+
+\- `current_state.json` in stato `setup`, senza attività simulate.
+
+\- `world_history.json` vuoto; la data di nascita è già allineata all'identità.
+
+\- `social_graph.json` senza persone.
+
+\- i database `timeline_episodic.db`, `shadow_diary.db`, `semantic_memory.db` e `vector_index.db`, tutti vuoti.
+
+
+
+Per personalizzare il profilo, modifica i JSON in `config/`. In particolare `world_history.json` può contenere eventi storici reali: devono avere date successive alla nascita per entrare nella biografia. `--dry-run` mostra i file che verrebbero creati; `--force` sovrascrive solo i cinque file di configurazione, i quattro database e i file dell'indice, senza toccare `data/models` o `data/dashboard_tls`.
+
+
+
+La creazione è transazionale: il profilo viene preparato in una directory temporanea e installato solo dopo la validazione. Un'interruzione durante la scrittura rimuove la copia temporanea e non lascia un profilo parziale; con `--force`, i file precedenti vengono ripristinati.
+
+
+
+Due `profile init` sulla stessa root non possono essere eseguiti contemporaneamente: il secondo termina con un errore che invita a riprovare. Il lock dura quanto il processo e non crea file dentro il profilo. Con `--wait` il comando attende il rilascio del lock senza limite; Ctrl+C interrompe l'attesa. `--wait-timeout SECONDI` implica l'attesa e la limita: allo scadere il comando termina con un errore che invita a riprovare.
+
+
+
+Dopo la creazione, popola il passato e l'indice vettoriale:
+
+
+
+```bash
+# Genera i ricordi biografici (senza --apply mostra solo il piano)
+python -m agent_memory.biography --root ./profiles/marco --apply
+
+# Costruisce l'indice vettoriale (richiede il modello di embedding)
+python -m agent_memory.index --root ./profiles/marco --rebuild
+
+# Avvia la dashboard sul nuovo profilo
+python -m agent_memory.dashboard --root ./profiles/marco --auth
+```
+
+
+
+`biography` e `index` non vengono eseguiti automaticamente da `profile init`: la biografia dipende dalla data di riferimento e l'indice richiede il modello FastEmbed. Se modifichi l'identità dopo aver generato la biografia, controlla che `world_history.birth_date` resti uguale a `identity.personal_data.birth_date`.
+
+
+
 \---
 
 
@@ -1308,7 +1392,7 @@ Implementare backup, logging, protezione dei dati, controlli di sicurezza e test
 
 17.1. Biografia procedurale: implementazione e comandi
 
-La Fase 4 è implementata in `agent_memory/biography.py`. Il generatore è deterministico e non utilizza un modello linguistico: legge identità, tratti, famiglia, percorso scolastico, `world_history.json` e la timeline esistente, quindi costruisce i ricordi mancanti per macro-ere.
+La Fase 4 è implementata in `agent_memory/biography.py`. Il generatore è deterministico e non utilizza un modello linguistico: legge identità, tratti, famiglia, percorso scolastico, `world_history.json` e la timeline esistente, quindi costruisce i ricordi mancanti per macro-ere. Per creare prima un profilo nuovo da zero, usa `profile init` descritto nella sezione 2.4; `scripts/init_db.py --reset` ricrea invece il dataset demo.
 
 La densità prevista è:
 
@@ -1354,6 +1438,10 @@ Per ricostruire completamente l'indice:
 ```bash
 python -m agent_memory.index --rebuild
 ```
+
+
+
+`biography --apply` e le operazioni di scrittura di `index` (`--sync` e `--rebuild`) condividono il lock di `profile init`: se un'altra creazione o scrittura è in corso, terminano con un errore. `--wait` attende senza limite, mentre `--wait-timeout SECONDI` limita l'attesa. Le modalità di sola lettura (`biography` senza `--apply`, `index --status` e `index --check`) non acquisiscono il lock.
 
 
 
@@ -1406,6 +1494,105 @@ python -m agent_memory.evolution --history
 ```
 
 Se l'indice vettoriale non era pronto durante l'applicazione, eseguire `python -m agent_memory.index --sync` per allinearlo ai nuovi testi.
+
+
+
+17.3. Dashboard amministrativa locale
+
+La dashboard di sola lettura è implementata in `agent_memory/dashboard.py`; l'interfaccia è in `agent_memory/dashboard_assets/`. Usa gli stessi servizi e database del progetto, senza dipendenze web aggiuntive.
+
+Avvio:
+
+```bash
+# Loopback, porta predefinita 8765
+python -m agent_memory.dashboard
+
+# Porta diversa e apertura automatica del browser
+python -m agent_memory.dashboard --port 8766 --open
+
+# Progetto in un'altra directory
+python -m agent_memory.dashboard --root /percorso/del/progetto
+
+# Autenticazione anche in locale
+python -m agent_memory.dashboard --auth
+
+# HTTPS locale con certificato dedicato
+python -m agent_memory.dashboard --https
+
+# Accesso da un altro dispositivo in HTTPS, password da file con permessi 600
+python -m agent_memory.dashboard --host 0.0.0.0 --https --password-file ~/.mnemosine-dashboard.pass
+
+# Aggiunge l'IP LAN al certificato (ripetibile per più nomi/IP)
+python -m agent_memory.dashboard --https --tls-san 192.168.1.42
+```
+
+Autenticazione:
+
+\- Su `127.0.0.1` l'accesso è disattivato per impostazione predefinita; `--auth` lo rende obbligatorio anche in locale.
+
+\- Su un host non loopback l'accesso è sempre obbligatorio. Se non viene configurata una password, ne viene generata una temporanea e stampata una sola volta all'avvio.
+
+\- La password può essere fornita con la variabile `AGENT_MEMORY_DASHBOARD_PASSWORD` oppure con `--password-file`. Il file deve essere leggibile solo dal proprietario (`chmod 600`).
+
+\- La pagina di accesso è `/login`; la sessione usa un cookie `HttpOnly` e `SameSite=Strict`, dura 12 ore e viene invalidata dal riavvio del server o dal logout.
+
+\- Dopo 8 tentativi falliti in 5 minuti l'indirizzo client viene bloccato temporaneamente.
+
+HTTPS:
+
+\- `--https` abilita TLS con un certificato self-signed dedicato. È richiesto OpenSSL.
+
+\- Certificato e chiave vengono creati al primo avvio in `data/dashboard_tls/` (`cert.pem` e `key.pem`), con la chiave leggibile solo dal proprietario; la directory è ignorata da Git.
+
+\- Il certificato viene riutilizzato negli avvii successivi. Per rigenerarlo, rimuovi `cert.pem` e `key.pem` (o l'intera directory).
+
+\- Il certificato include `localhost`, `127.0.0.1`, `::1` e il nome host locale. Per l'accesso da un altro dispositivo aggiungi il suo IP o hostname con `--tls-san`; se il certificato esiste già, rimuovilo prima di rigenerarlo con i nuovi nomi.
+
+\- Essendo self-signed, il browser mostra un avviso finché non lo consideri attendibile. Non fornisce una identità verificata da una CA pubblica.
+
+\- In HTTPS il cookie di sessione diventa `Secure`. Senza TLS il traffico è in chiaro: usare la dashboard solo su una rete fidata.
+
+\- Se la dashboard è dietro un reverse proxy che riscrive l'header `Host`, passa `--trusted-origin https://dashboard.example` (origine esatta, ripetibile) per accettare i POST di quel proxy. Non usare wildcard: l'origine dichiarata deve essere quella reale del browser.
+
+\- `--allow-null-origin` accetta `Origin: null`, inviato dagli iframe sandbox. Il token CSRF resta obbligatorio; usalo solo per una preview locale fidata.
+
+Esportazione, trust store e rimozione:
+
+```bash
+# Esporta il certificato e stampa il fingerprint SHA-256
+python -m agent_memory.dashboard_cert export --output ~/mnemosine-dashboard.crt
+
+# Mostra cosa verrebbe modificato, senza toccare il sistema
+python -m agent_memory.dashboard_cert install --dry-run
+
+# Installa nel trust store di sistema (richiede privilegi amministrativi)
+sudo python -m agent_memory.dashboard_cert install --yes
+
+# Mostra cosa verrebbe rimosso, senza toccare il sistema
+python -m agent_memory.dashboard_cert uninstall --dry-run
+
+# Rimuove dal trust store di sistema (richiede privilegi amministrativi)
+sudo python -m agent_memory.dashboard_cert uninstall --yes
+```
+
+`install` e `uninstall` usano `update-ca-certificates`, `update-ca-trust` o `trust` su Linux, `security` su macOS e `certutil` su Windows. Il certificato viene installato o rimosso solo con `--yes`; `--dry-run` mostra il piano senza modificare il sistema. Per usare un file già esportato passa `--cert`. Se la dashboard usa una directory TLS personalizzata, passa `--tls-dir` prima del sottocomando. `uninstall` non genera un certificato se non esiste: in quel caso termina con errore e indica di usare `--cert`. Rimuove solo la copia nel trust store; `cert.pem` e `key.pem` restano in `data/dashboard_tls/`.
+
+Il certificato è self-signed e locale: non va usato come certificato di produzione. Alcuni browser, in particolare Firefox, mantengono un trust store separato; se l'avviso resta, importa `mnemosine-dashboard.crt` nelle impostazioni del browser.
+
+
+La dashboard espone cinque viste:
+
+\- **Panoramica**: identità, stato corrente, conteggi e ultimi ricordi.
+
+\- **Timeline**: ricerca e filtri per fonte e livello di accesso; i ricordi latenti e repressi sono visibili solo attivando esplicitamente l'opzione dedicata. Il dettaglio mostra revisioni, collegamenti episodici e conoscenze collegate.
+
+\- **Tratti**: tratti della personalità conscia e configurazione amministrativa dell'ombra, inclusi trigger, difese, ricordi collegati e limiti di sicurezza.
+
+\- **Conoscenze**: memoria semantica con tipo, stato, fonte, affidabilità e metadati, inclusi i riferimenti ai riconsolidamenti.
+
+\- **Evoluzioni**: storico delle variazioni dei tratti, seed esterni, cascate e revisioni recenti.
+
+Le API dei dati sono in sola lettura; gli unici POST gestiscono accesso e logout. Il server ascolta su `127.0.0.1` per impostazione predefinita: contiene dati amministrativi e tratti dell'ombra, quindi non va pubblicato su Internet. L'opzione `--host` permette di cambiare l'indirizzo; su un host non loopback l'autenticazione è obbligatoria. Usa `--https` per cifrare il traffico quando la dashboard è raggiungibile da altri dispositivi.
 
 
 

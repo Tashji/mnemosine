@@ -21,6 +21,7 @@ from pathlib import Path
 from .config import project_root
 from .embeddings import FastEmbedder
 from .errors import AgentMemoryError
+from .profile import _positive_seconds, _profile_lock
 from .retrieval import RetrievalService
 from .vector_index import VectorIndexManager
 
@@ -56,6 +57,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Verifica che ogni mapping abbia un vettore ricostruibile.",
     )
     parser.add_argument(
+        "--wait",
+        action="store_true",
+        help=(
+            "Durante la sincronizzazione, attende il rilascio del lock senza "
+            "limite invece di terminare subito."
+        ),
+    )
+    parser.add_argument(
+        "--wait-timeout",
+        type=_positive_seconds,
+        default=None,
+        metavar="SECONDI",
+        help=(
+            "Durante la sincronizzazione, attende il lock al massimo per "
+            "SECONDI secondi; implica --wait e allo scadere termina con errore."
+        ),
+    )
+    parser.add_argument(
         "--model",
         default=None,
         help=(
@@ -72,11 +91,35 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _build_retrieval(
+    root: Path, args: argparse.Namespace
+) -> RetrievalService:
+    embedder = FastEmbedder(
+        model_name=args.model,
+        cache_dir=root / "data" / "models",
+    )
+    return RetrievalService(
+        root,
+        embedder=embedder,
+        index=VectorIndexManager(
+            root,
+            embedder=embedder,
+            index_dir=args.index_dir,
+        ),
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.rebuild and args.sync:
         parser.error("--rebuild e --sync sono alternativi.")
+    if (args.wait or args.wait_timeout is not None) and (
+        args.status or args.check
+    ):
+        parser.error(
+            "--wait e --wait-timeout non si applicano a --status o --check."
+        )
 
     try:
         root = (
@@ -84,31 +127,22 @@ def main(argv: list[str] | None = None) -> int:
             if args.root is not None
             else project_root()
         )
-        embedder = FastEmbedder(
-            model_name=args.model,
-            cache_dir=root / "data" / "models",
-        )
-        retrieval = RetrievalService(
-            root,
-            embedder=embedder,
-            index=VectorIndexManager(
-                root,
-                embedder=embedder,
-                index_dir=args.index_dir,
-            ),
-        )
+        if args.status or args.check:
+            retrieval = _build_retrieval(root, args)
+            if args.status:
+                status = retrieval.index.status()
+                print(json.dumps(status, ensure_ascii=False, indent=2))
+                return 0 if status.get("ok") else 1
 
-        if args.status:
-            status = retrieval.index.status()
-            print(json.dumps(status, ensure_ascii=False, indent=2))
-            return 0 if status.get("ok") else 1
-
-        if args.check:
             status = retrieval.index.check()
             print(json.dumps(status, ensure_ascii=False, indent=2))
             return 0 if status.get("ok") else 1
 
-        result = retrieval.sync_index(rebuild=bool(args.rebuild))
+        with _profile_lock(
+            root, wait=args.wait, timeout=args.wait_timeout
+        ):
+            retrieval = _build_retrieval(root, args)
+            result = retrieval.sync_index(rebuild=bool(args.rebuild))
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0 if result.get("ok") else 1
     except AgentMemoryError as exc:

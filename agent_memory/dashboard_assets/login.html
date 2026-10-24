@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Accedi · Mnemosine</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body class="login-page">
+    <main class="login-shell">
+      <div class="login-brand">
+        <span class="brand-mark" aria-hidden="true">M</span>
+        <div>
+          <strong>Mnemosine</strong>
+          <span>Console amministrativa</span>
+        </div>
+      </div>
+
+      <section class="login-card" aria-labelledby="login-title">
+        <p class="eyebrow">Accesso riservato</p>
+        <h1 id="login-title">Accedi alla dashboard</h1>
+        <p class="login-intro">
+          Inserisci la password configurata per consultare timeline, tratti,
+          conoscenze ed evoluzioni.
+        </p>
+
+        <p class="login-error" role="alert">{{error}}</p>
+
+        <form method="post" action="/login">
+          <input type="hidden" name="csrf" value="{{csrf}}">
+          <input type="hidden" name="next" value="{{next}}">
+          <label class="login-field">
+            <span>Password</span>
+            <input
+              type="password"
+              name="password"
+              autocomplete="current-password"
+              required
+              autofocus
+            >
+          </label>
+          <button class="login-submit" type="submit">Entra</button>
+        </form>
+
+        <p class="login-note">
+          Sessione locale con cookie HttpOnly. La password non viene salvata
+          nel browser.
+        </p>
+      </section>
+
+      <p class="login-footer">Mnemosine · dashboard di sola lettura</p>
+    </main>
+  </body>
+</html>

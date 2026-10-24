@@ -35,6 +35,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .config import project_root
 from .errors import AgentMemoryError, ConflictError, ValidationError
+from .profile import _positive_seconds, _profile_lock
 from .service import MemoryService
 
 GENERATOR_VERSION = "v1"
@@ -2242,6 +2243,24 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--wait",
+        action="store_true",
+        help=(
+            "Con --apply, attende il rilascio del lock senza limite invece "
+            "di terminare subito."
+        ),
+    )
+    parser.add_argument(
+        "--wait-timeout",
+        type=_positive_seconds,
+        default=None,
+        metavar="SECONDI",
+        help=(
+            "Con --apply, attende il lock al massimo per SECONDI secondi; "
+            "implica --wait e allo scadere termina con errore."
+        ),
+    )
+    parser.add_argument(
         "--json",
         action="store_true",
         help="Stampa il piano o il risultato in JSON.",
@@ -2288,15 +2307,21 @@ def _print_plan(plan: BiographyPlan) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if not args.apply and (args.wait or args.wait_timeout is not None):
+        parser.error("--wait e --wait-timeout richiedono --apply.")
     try:
         root = (
             Path(args.root).expanduser().resolve()
             if args.root is not None
             else project_root()
         )
-        service = BiographyService(root, as_of=args.as_of)
         if args.apply:
-            result = service.apply()
+            with _profile_lock(
+                root, wait=args.wait, timeout=args.wait_timeout
+            ):
+                result = BiographyService(
+                    root, as_of=args.as_of
+                ).apply()
             if args.json:
                 print(json.dumps(result, ensure_ascii=False, indent=2))
             else:
@@ -2311,6 +2336,7 @@ def main(argv: list[str] | None = None) -> int:
                         )
             return 0
 
+        service = BiographyService(root, as_of=args.as_of)
         plan = service.plan()
         if args.json:
             print(json.dumps(plan.to_dict(), ensure_ascii=False, indent=2))

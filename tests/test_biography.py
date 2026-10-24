@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import shutil
 import sqlite3
 import tempfile
@@ -9,6 +11,7 @@ import unittest
 from datetime import date
 from pathlib import Path
 
+from agent_memory import profile as profile_module
 from agent_memory.biography import (
     BiographyService,
     age_on,
@@ -310,6 +313,41 @@ class BiographyTests(unittest.TestCase):
         )
         self.assertIn("Ci ho rimuginato per giorni", rejection.description)
         self.assertGreaterEqual(rejection.emotional_state["intensity"], 8)
+
+    def test_cli_apply_respects_profile_lock(self) -> None:
+        from agent_memory.biography import main
+
+        argv = [
+            "--root",
+            str(self.root),
+            "--as-of",
+            AS_OF.isoformat(),
+            "--apply",
+        ]
+        with profile_module._profile_lock(self.root):
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                blocked = main(argv)
+            self.assertEqual(blocked, 1)
+            self.assertIn("già in corso", stderr.getvalue())
+            self.assertEqual(len(self._all_memories()), 5)
+
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                timed_out = main([*argv, "--wait-timeout", "0.1"])
+            self.assertEqual(timed_out, 1)
+            self.assertIn("Timeout di", stderr.getvalue())
+            self.assertEqual(len(self._all_memories()), 5)
+
+        self.assertEqual(main(argv), 0)
+        self.assertEqual(len(self._all_memories()), 40)
+
+    def test_cli_wait_flags_require_apply(self) -> None:
+        from agent_memory.biography import main
+
+        with self.assertRaises(SystemExit) as caught:
+            main(["--root", str(self.root), "--wait-timeout", "1"])
+        self.assertEqual(caught.exception.code, 2)
 
     def test_cli_preview_and_apply(self) -> None:
         from agent_memory.biography import main
