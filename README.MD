@@ -190,6 +190,90 @@ Ogni tratto sarà associato a trigger specifici e a regole che ne determineranno
 
 
 
+2.4. Costruzione del primo profilo (implementazione)
+
+
+
+Il comando `profile init` crea un profilo nuovo e vuoto, senza il dataset demo di `scripts/init_db.py`. Il profilo è una directory autonoma: contiene i cinque file JSON in `config/` e i quattro database SQLite in `data/`, con gli schemi già applicati e zero ricordi.
+
+
+
+```bash
+python -m agent_memory.profile init \
+  --root ./profiles/marco \
+  --first-name Marco --last-name Rossi \
+  --birth-date 2003-05-12 \
+  --birth-city Roma --birth-province Roma --birth-region Lazio \
+  --father-name Luca --mother-name Anna --sibling-name Sara
+```
+
+
+
+In modalità non interattiva i campi obbligatori sono nome, cognome, data di nascita, città di nascita e `--root`. La root non può puntare al progetto corrente: il profilo va creato in una directory separata, così il dataset demo non viene sovrascritto.
+
+
+
+La modalità guidata chiede i dati uno alla volta e usa il valore tra parentesi come default; premere Invio lo accetta. Se `--root` viene omesso, propone `./profiles/<nome>_<cognome>`. I familiari sono facoltativi: lasciare vuoto il nome per saltarli.
+
+
+
+```bash
+python -m agent_memory.profile init --interactive
+```
+
+
+
+`--interactive` può essere combinato con gli altri argomenti: i valori passati diventano i default mostrati nei prompt; con `--root` la directory non viene richiesta. `--dry-run`, `--force` e `--json` funzionano anche in questa modalità. Il comando genera:
+
+
+
+\- `identity.json` con anagrafica, famiglia e quattro tratti iniziali a valore neutro (5/10).
+
+\- `shadow_traits.json` vuoto, con la lettura conscia disabilitata.
+
+\- `current_state.json` in stato `setup`, senza attività simulate.
+
+\- `world_history.json` vuoto; la data di nascita è già allineata all'identità.
+
+\- `social_graph.json` senza persone.
+
+\- i database `timeline_episodic.db`, `shadow_diary.db`, `semantic_memory.db` e `vector_index.db`, tutti vuoti.
+
+
+
+Per personalizzare il profilo, modifica i JSON in `config/`. In particolare `world_history.json` può contenere eventi storici reali: devono avere date successive alla nascita per entrare nella biografia. `--dry-run` mostra i file che verrebbero creati; `--force` sovrascrive solo i cinque file di configurazione, i quattro database e i file dell'indice, senza toccare `data/models` o `data/dashboard_tls`.
+
+
+
+La creazione è transazionale: il profilo viene preparato in una directory temporanea e installato solo dopo la validazione. Un'interruzione durante la scrittura rimuove la copia temporanea e non lascia un profilo parziale; con `--force`, i file precedenti vengono ripristinati.
+
+
+
+Due `profile init` sulla stessa root non possono essere eseguiti contemporaneamente: il secondo termina con un errore che invita a riprovare. Il lock dura quanto il processo e non crea file dentro il profilo. Con `--wait` il comando attende il rilascio del lock senza limite; Ctrl+C interrompe l'attesa. `--wait-timeout SECONDI` implica l'attesa e la limita: allo scadere il comando termina con un errore che invita a riprovare.
+
+
+
+Dopo la creazione, popola il passato e l'indice vettoriale:
+
+
+
+```bash
+# Genera i ricordi biografici (senza --apply mostra solo il piano)
+python -m agent_memory.biography --root ./profiles/marco --apply
+
+# Costruisce l'indice vettoriale (richiede il modello di embedding)
+python -m agent_memory.index --root ./profiles/marco --rebuild
+
+# Avvia la dashboard sul nuovo profilo
+python -m agent_memory.dashboard --root ./profiles/marco --auth
+```
+
+
+
+`biography` e `index` non vengono eseguiti automaticamente da `profile init`: la biografia dipende dalla data di riferimento e l'indice richiede il modello FastEmbed. Se modifichi l'identità dopo aver generato la biografia, controlla che `world_history.birth_date` resti uguale a `identity.personal_data.birth_date`.
+
+
+
 \---
 
 
@@ -1308,7 +1392,7 @@ Implementare backup, logging, protezione dei dati, controlli di sicurezza e test
 
 17.1. Biografia procedurale: implementazione e comandi
 
-La Fase 4 è implementata in `agent_memory/biography.py`. Il generatore è deterministico e non utilizza un modello linguistico: legge identità, tratti, famiglia, percorso scolastico, `world_history.json` e la timeline esistente, quindi costruisce i ricordi mancanti per macro-ere.
+La Fase 4 è implementata in `agent_memory/biography.py`. Il generatore è deterministico e non utilizza un modello linguistico: legge identità, tratti, famiglia, percorso scolastico, `world_history.json` e la timeline esistente, quindi costruisce i ricordi mancanti per macro-ere. Per creare prima un profilo nuovo da zero, usa `profile init` descritto nella sezione 2.4; `scripts/init_db.py --reset` ricrea invece il dataset demo.
 
 La densità prevista è:
 
@@ -1354,6 +1438,10 @@ Per ricostruire completamente l'indice:
 ```bash
 python -m agent_memory.index --rebuild
 ```
+
+
+
+`biography --apply` e le operazioni di scrittura di `index` (`--sync` e `--rebuild`) condividono il lock di `profile init`: se un'altra creazione o scrittura è in corso, terminano con un errore. `--wait` attende senza limite, mentre `--wait-timeout SECONDI` limita l'attesa. Le modalità di sola lettura (`biography` senza `--apply`, `index --status` e `index --check`) non acquisiscono il lock.
 
 
 
