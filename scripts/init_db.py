@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""Fase 1 — bootstrap di configurazione e database.
+"""Bootstrap di configurazione, database e archivi della memoria.
 
 Il comando:
   1. carica e valida i cinque file JSON in config/;
-  2. applica gli schemi in schemas/ ai database in data/;
-  3. inserisce ricordi episodici, collegamenti, revisioni e voci dell'ombra;
-  4. verifica i riferimenti incrociati tra JSON, timeline e diario.
+  2. applica gli schemi in schemas/ ai quattro database in data/;
+  3. inserisce ricordi episodici, voci dell'ombra e conoscenze semantiche;
+  4. verifica i riferimenti incrociati tra JSON, timeline, diario e semantica.
+
+L'indice vettoriale FAISS non viene costruito qui: dopo il bootstrap esegui
+``python -m agent_memory.index --rebuild`` (richiede il modello di embedding).
 
 Uso:
     python scripts/init_db.py
@@ -30,6 +33,9 @@ DATA_DIR = ROOT / "data"
 
 TIMELINE_DB = DATA_DIR / "timeline_episodic.db"
 SHADOW_DB = DATA_DIR / "shadow_diary.db"
+SEMANTIC_DB = DATA_DIR / "semantic_memory.db"
+VECTOR_DB = DATA_DIR / "vector_index.db"
+INDEX_DIR = DATA_DIR / "indexes"
 
 CONFIG_FILES = {
     "identity": "identity.json",
@@ -275,7 +281,16 @@ def validate_current_state(state: dict[str, Any]) -> None:
         raise ValidationError(
             "current_state.mental_load_thresholds: 'soft' deve essere minore di 'overload'."
         )
-    for key in ["clock", "activity", "emotion", "routine", "sleep", "availability", "heartbeat", "flags"]:
+    for key in [
+        "clock",
+        "activity",
+        "emotion",
+        "routine",
+        "sleep",
+        "availability",
+        "heartbeat",
+        "flags",
+    ]:
         require_object(state[key], f"current_state.{key}")
 
 
@@ -472,7 +487,8 @@ EPISODIC_MEMORIES: list[dict[str, Any]] = [
         "is_simulated": 1,
         "access_level": "repressed",
         "access_reason": (
-            "Evento traumatico rimosso dalla memoria conscia; i dettagli sono nel diario dell'ombra."
+            "Evento traumatico rimosso dalla memoria conscia; i dettagli "
+            "sono nel diario dell'ombra."
         ),
         "is_consolidated": 1,
         "tags": ["adolescenza", "scuola", "vergogna", "trauma", "presentazioni"],
@@ -794,6 +810,31 @@ def shadow_row(entry: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def semantic_row(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": item["id"],
+        "title": item["title"],
+        "content": item["content"],
+        "category": item["category"],
+        "knowledge_type": item["knowledge_type"],
+        "source": item["source"],
+        "source_ref": item.get("source_ref"),
+        "reliability": item.get("reliability", 0.5),
+        "importance": item.get("importance", 5),
+        "status": item.get("status", "active"),
+        "valid_from": item.get("valid_from"),
+        "valid_to": item.get("valid_to"),
+        "tags_json": json_text(item.get("tags", [])),
+        "metadata_json": json_text(item.get("metadata", {})),
+        "embedding_model": item.get("embedding_model"),
+        "embedding_updated_at": item.get("embedding_updated_at"),
+        "version": item.get("version", 1),
+        "previous_version_id": item.get("previous_version_id"),
+        "created_at": SEED_TIMESTAMP,
+        "updated_at": SEED_TIMESTAMP,
+    }
+
+
 MEMORY_COLUMNS = [
     "id",
     "event_time",
@@ -822,6 +863,30 @@ MEMORY_COLUMNS = [
     "updated_at",
 ]
 
+SEMANTIC_COLUMNS = [
+    "id",
+    "title",
+    "content",
+    "category",
+    "knowledge_type",
+    "source",
+    "source_ref",
+    "reliability",
+    "importance",
+    "status",
+    "valid_from",
+    "valid_to",
+    "tags_json",
+    "metadata_json",
+    "embedding_model",
+    "embedding_updated_at",
+    "version",
+    "previous_version_id",
+    "created_at",
+    "updated_at",
+]
+
+
 SHADOW_COLUMNS = [
     "id",
     "entry_time",
@@ -842,6 +907,223 @@ SHADOW_COLUMNS = [
     "source_ref",
     "version",
     "previous_version_id",
+]
+
+
+SEMANTIC_ITEMS: list[dict[str, Any]] = [
+    {
+        "id": "sem_0001",
+        "title": "Una bicicletta è un veicolo a due ruote",
+        "content": (
+            "Una bicicletta è un veicolo generalmente dotato di due ruote, "
+            "azionato da pedali e utilizzato per il trasporto o per attività sportive."
+        ),
+        "category": "trasporti",
+        "knowledge_type": "verified_fact",
+        "source": "admin_seed",
+        "source_ref": "seed_enciclopedia_bicicletta",
+        "reliability": 0.99,
+        "importance": 5,
+        "tags": ["bicicletta", "veicoli", "trasporti"],
+        "metadata": {"origin": "phase3_seed"},
+    },
+    {
+        "id": "sem_0002",
+        "title": "Python è un linguaggio di programmazione",
+        "content": (
+            "Python è un linguaggio di programmazione interpretato, dinamico e "
+            "multiparadigma, molto usato per sviluppo web, automazione e analisi dati."
+        ),
+        "category": "informatica",
+        "knowledge_type": "verified_fact",
+        "source": "admin_seed",
+        "source_ref": "seed_enciclopedia_python",
+        "reliability": 0.99,
+        "importance": 6,
+        "tags": ["python", "programmazione", "informatica"],
+        "metadata": {"origin": "phase3_seed"},
+    },
+    {
+        "id": "sem_0003",
+        "title": "SQLite è un DBMS relazionale embedded",
+        "content": (
+            "SQLite è un sistema di gestione di database relazionali embedded: "
+            "memorizza i dati in un singolo file e non richiede un server separato."
+        ),
+        "category": "informatica",
+        "knowledge_type": "verified_fact",
+        "source": "admin_seed",
+        "source_ref": "seed_enciclopedia_sqlite",
+        "reliability": 0.98,
+        "importance": 6,
+        "tags": ["sqlite", "database", "informatica"],
+        "metadata": {"origin": "phase3_seed"},
+    },
+    {
+        "id": "sem_0004",
+        "title": "Model Context Protocol (MCP)",
+        "content": (
+            "Il Model Context Protocol è un protocollo aperto per collegare modelli "
+            "linguistici a strumenti, risorse e fonti dati in modo standardizzato."
+        ),
+        "category": "informatica",
+        "knowledge_type": "verified_fact",
+        "source": "admin_seed",
+        "source_ref": "seed_mcp_protocol",
+        "reliability": 0.95,
+        "importance": 6,
+        "tags": ["mcp", "protocolli", "agenti", "informatica"],
+        "metadata": {"origin": "phase3_seed"},
+    },
+    {
+        "id": "sem_0005",
+        "title": "Marco sta lavorando a un progetto Python",
+        "content": (
+            "Durante la conversazione del 18 ottobre 2026, Marco ha raccontato di "
+            "essere impegnato in un progetto Python universitario e ha chiesto un "
+            "parere su come organizzare il codice."
+        ),
+        "category": "persone",
+        "knowledge_type": "user_provided",
+        "source": "conversation",
+        "source_ref": "chat_2026_10_18_marco_001",
+        "reliability": 0.7,
+        "importance": 4,
+        "tags": ["marco", "python", "progetto", "università"],
+        "metadata": {"origin": "phase3_seed"},
+    },
+    {
+        "id": "sem_0006",
+        "title": "Il gaming cooperativo come decompressione",
+        "content": (
+            "L'agente tende a preferire il gaming cooperativo perché riduce la "
+            "pressione sociale e permette di condividere un'attività senza dover "
+            "parlare troppo di sé."
+        ),
+        "category": "preferenze",
+        "knowledge_type": "opinion",
+        "source": "reflection",
+        "source_ref": "seed_self_observation_gaming",
+        "reliability": 0.6,
+        "importance": 4,
+        "tags": ["gaming", "amicizia", "decompressione", "preferenze"],
+        "metadata": {"origin": "phase3_seed"},
+    },
+    {
+        "id": "sem_0007",
+        "title": "Un modello multilingue è preferibile per l'italiano",
+        "content": (
+            "Per la memoria semantica in italiano è ragionevole preferire un modello "
+            "di embedding multilingue a un modello addestrato soltanto sull'inglese."
+        ),
+        "category": "informatica",
+        "knowledge_type": "hypothesis",
+        "source": "inference",
+        "source_ref": "seed_embedding_hypothesis",
+        "reliability": 0.5,
+        "importance": 5,
+        "tags": ["embedding", "italiano", "multilingue"],
+        "metadata": {"origin": "phase3_seed"},
+    },
+    {
+        "id": "sem_0008",
+        "title": "Il progetto di Marco usa SQLite",
+        "content": (
+            "Ipotesi iniziale: il progetto Python di Marco potrebbe usare SQLite per "
+            "la persistenza locale dei dati. Non è stato confermato esplicitamente."
+        ),
+        "category": "persone",
+        "knowledge_type": "uncertain",
+        "source": "inference",
+        "source_ref": "seed_marco_project_hypothesis",
+        "reliability": 0.3,
+        "importance": 3,
+        "tags": ["marco", "sqlite", "progetto"],
+        "metadata": {"origin": "phase3_seed"},
+    },
+    {
+        "id": "sem_0009",
+        "title": "Un modello solo inglese è sufficiente per la memoria italiana",
+        "content": (
+            "Ipotesi alternativa: un modello di embedding addestrato soltanto "
+            "sull'inglese potrebbe essere sufficiente anche per testi italiani brevi."
+        ),
+        "category": "informatica",
+        "knowledge_type": "hypothesis",
+        "source": "inference",
+        "source_ref": "seed_embedding_alternative",
+        "reliability": 0.3,
+        "importance": 4,
+        "tags": ["embedding", "inglese", "italiano"],
+        "metadata": {"origin": "phase3_seed"},
+    },
+]
+
+
+SEMANTIC_ITEM_LINKS: list[dict[str, Any]] = [
+    {
+        "from_item_id": "sem_0002",
+        "to_item_id": "sem_0004",
+        "relation_type": "related_to",
+        "strength": 0.8,
+        "note": "Python e MCP sono entrambi temi tecnici ricorrenti nelle conversazioni.",
+    },
+    {
+        "from_item_id": "sem_0003",
+        "to_item_id": "sem_0002",
+        "relation_type": "related_to",
+        "strength": 0.6,
+        "note": "SQLite è usato spesso come persistenza in progetti Python.",
+    },
+    {
+        "from_item_id": "sem_0007",
+        "to_item_id": "sem_0004",
+        "relation_type": "related_to",
+        "strength": 0.6,
+        "note": "La scelta del modello di embedding riguarda l'archivio semantico degli agenti.",
+    },
+    {
+        "from_item_id": "sem_0007",
+        "to_item_id": "sem_0009",
+        "relation_type": "contradicts",
+        "strength": 0.9,
+        "note": (
+            "Le due ipotesi sono in tensione; nessuna delle due viene sovrascritta "
+            "automaticamente. La contraddizione resta esplicita."
+        ),
+    },
+]
+
+
+SEMANTIC_EPISODIC_LINKS: list[dict[str, Any]] = [
+    {
+        "semantic_id": "sem_0001",
+        "memory_id": "mem_0001",
+        "relation_type": "related_to",
+        "strength": 0.8,
+        "note": "Il concetto generale di bicicletta è collegato alla caduta del 2007.",
+    },
+    {
+        "semantic_id": "sem_0002",
+        "memory_id": "mem_0004",
+        "relation_type": "related_to",
+        "strength": 0.7,
+        "note": "La conversazione con Marco ha riguardato Python e MCP.",
+    },
+    {
+        "semantic_id": "sem_0005",
+        "memory_id": "mem_0004",
+        "relation_type": "derived_from",
+        "strength": 0.8,
+        "note": "La conoscenza su Marco deriva dalla conversazione del 18 ottobre.",
+    },
+    {
+        "semantic_id": "sem_0006",
+        "memory_id": "mem_0005",
+        "relation_type": "related_to",
+        "strength": 0.7,
+        "note": "La serata gaming con Davide è un esempio della preferenza per il cooperativo.",
+    },
 ]
 
 
@@ -937,6 +1219,69 @@ def insert_shadow_entries(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def insert_semantic(conn: sqlite3.Connection) -> None:
+    placeholders = ", ".join("?" for _ in SEMANTIC_COLUMNS)
+    columns = ", ".join(SEMANTIC_COLUMNS)
+    sql = f"INSERT OR IGNORE INTO semantic_items ({columns}) VALUES ({placeholders})"
+
+    for item in SEMANTIC_ITEMS:
+        row = semantic_row(item)
+        conn.execute(sql, tuple(row[column] for column in SEMANTIC_COLUMNS))
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO semantic_revisions (
+                item_id, revision_number, changed_at, changed_by,
+                change_reason, previous_snapshot_json, new_snapshot_json, cascade_id
+            ) VALUES (?, 1, ?, ?, ?, NULL, ?, NULL)
+            """,
+            (
+                item["id"],
+                SEED_TIMESTAMP,
+                "seed_process",
+                "Creazione della conoscenza di esempio della Fase 3.",
+                json.dumps(row, ensure_ascii=False, indent=2),
+            ),
+        )
+
+    for link in SEMANTIC_ITEM_LINKS:
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO semantic_item_links (
+                from_item_id, to_item_id, relation_type,
+                strength, note, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                link["from_item_id"],
+                link["to_item_id"],
+                link["relation_type"],
+                link["strength"],
+                link.get("note"),
+                SEED_TIMESTAMP,
+            ),
+        )
+
+    for link in SEMANTIC_EPISODIC_LINKS:
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO semantic_episodic_links (
+                semantic_id, memory_id, relation_type,
+                strength, note, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                link["semantic_id"],
+                link["memory_id"],
+                link["relation_type"],
+                link["strength"],
+                link.get("note"),
+                SEED_TIMESTAMP,
+            ),
+        )
+
+    conn.commit()
+
+
 # ---------------------------------------------------------------------------
 # Verifica dei riferimenti incrociati
 # ---------------------------------------------------------------------------
@@ -946,6 +1291,7 @@ def validate_references(
     configs: dict[str, Any],
     timeline: sqlite3.Connection,
     shadow: sqlite3.Connection,
+    semantic: sqlite3.Connection,
 ) -> None:
     shadow_traits = configs["shadow_traits"]
     world_history = configs["world_history"]
@@ -1029,6 +1375,57 @@ def validate_references(
                 "in world_history."
             )
 
+    semantic_ids = {
+        row["id"] for row in semantic.execute("SELECT id FROM semantic_items")
+    }
+    for row in semantic.execute(
+        "SELECT id, previous_version_id FROM semantic_items"
+    ):
+        previous = row["previous_version_id"]
+        if previous is not None and previous not in semantic_ids:
+            raise ValidationError(
+                f"semantic_items.{row['id']}: previous_version_id '{previous}' "
+                "non esiste nell'archivio semantico."
+            )
+
+    for link in semantic.execute(
+        "SELECT id, from_item_id, to_item_id FROM semantic_item_links"
+    ):
+        if link["from_item_id"] not in semantic_ids:
+            raise ValidationError(
+                f"semantic_item_links.{link['id']}: from_item_id "
+                f"'{link['from_item_id']}' inesistente."
+            )
+        if link["to_item_id"] not in semantic_ids:
+            raise ValidationError(
+                f"semantic_item_links.{link['id']}: to_item_id "
+                f"'{link['to_item_id']}' inesistente."
+            )
+
+    for link in semantic.execute(
+        "SELECT id, semantic_id, memory_id FROM semantic_episodic_links"
+    ):
+        if link["semantic_id"] not in semantic_ids:
+            raise ValidationError(
+                f"semantic_episodic_links.{link['id']}: semantic_id "
+                f"'{link['semantic_id']}' inesistente."
+            )
+        memory = timeline.execute(
+            "SELECT access_level FROM episodic_memories WHERE id = ?",
+            (link["memory_id"],),
+        ).fetchone()
+        if memory is None:
+            raise ValidationError(
+                f"semantic_episodic_links.{link['id']}: memory_id "
+                f"'{link['memory_id']}' inesistente."
+            )
+        if memory["access_level"] != "conscious":
+            raise ValidationError(
+                f"semantic_episodic_links.{link['id']}: il ricordo "
+                f"'{link['memory_id']}' non è conscio e non può essere collegato "
+                "dalla memoria semantica."
+            )
+
 
 # ---------------------------------------------------------------------------
 # Bootstrap
@@ -1036,7 +1433,7 @@ def validate_references(
 
 
 def remove_database_files() -> None:
-    for path in [TIMELINE_DB, SHADOW_DB]:
+    for path in [TIMELINE_DB, SHADOW_DB, SEMANTIC_DB, VECTOR_DB]:
         for candidate in [
             path,
             Path(f"{path}-wal"),
@@ -1044,6 +1441,10 @@ def remove_database_files() -> None:
             Path(f"{path}-journal"),
         ]:
             if candidate.exists():
+                candidate.unlink()
+    if INDEX_DIR.exists():
+        for candidate in INDEX_DIR.glob("*"):
+            if candidate.is_file():
                 candidate.unlink()
 
 
@@ -1061,11 +1462,16 @@ def table_count(conn: sqlite3.Connection, table: str) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Bootstrap della Fase 1.")
+    parser = argparse.ArgumentParser(
+        description="Bootstrap dei database della memoria (Fasi 1 e 3)."
+    )
     parser.add_argument(
         "--reset",
         action="store_true",
-        help="Elimina e ricrea i database in data/ prima di inserire i dati.",
+        help=(
+            "Elimina e ricrea i database e gli indici in data/ prima di "
+            "inserire i dati. Il modello di embedding in data/models non viene toccato."
+        ),
     )
     args = parser.parse_args()
 
@@ -1080,17 +1486,27 @@ def main() -> int:
 
         timeline = open_database(TIMELINE_DB, SCHEMA_DIR / "timeline_episodic.sql")
         shadow = open_database(SHADOW_DB, SCHEMA_DIR / "shadow_diary.sql")
+        semantic = open_database(
+            SEMANTIC_DB, SCHEMA_DIR / "semantic_memory.sql"
+        )
+        vector = open_database(VECTOR_DB, SCHEMA_DIR / "vector_index.sql")
 
         try:
             insert_memories(timeline)
             insert_shadow_entries(shadow)
-            validate_references(configs, timeline, shadow)
+            insert_semantic(semantic)
+            validate_references(configs, timeline, shadow, semantic)
 
-            timeline_check = timeline.execute("PRAGMA integrity_check").fetchone()[0]
-            shadow_check = shadow.execute("PRAGMA integrity_check").fetchone()[0]
-            if timeline_check != "ok" or shadow_check != "ok":
+            checks = {
+                "timeline": timeline.execute("PRAGMA integrity_check").fetchone()[0],
+                "shadow": shadow.execute("PRAGMA integrity_check").fetchone()[0],
+                "semantic": semantic.execute("PRAGMA integrity_check").fetchone()[0],
+                "vector": vector.execute("PRAGMA integrity_check").fetchone()[0],
+            }
+            if any(value != "ok" for value in checks.values()):
                 raise ValidationError(
-                    f"Integrity check fallita: timeline={timeline_check}, ombra={shadow_check}"
+                    "Integrity check fallita: "
+                    + ", ".join(f"{name}={value}" for name, value in checks.items())
                 )
 
             print("Validazione riferimenti: OK")
@@ -1106,9 +1522,29 @@ def main() -> int:
                 f"{table_count(shadow, 'shadow_revisions')} revisioni, "
                 f"{table_count(shadow, 'shadow_trigger_log')} trigger"
             )
+            semantic_links = table_count(
+                semantic, "semantic_item_links"
+            ) + table_count(semantic, "semantic_episodic_links")
+            print(
+                "semantic_memory.db: "
+                f"{table_count(semantic, 'semantic_items')} conoscenze, "
+                f"{table_count(semantic, 'semantic_revisions')} revisioni, "
+                f"{semantic_links} collegamenti"
+            )
+            print(
+                "vector_index.db: pronto "
+                f"({table_count(vector, 'vector_entries')} mapping)"
+            )
+            print(
+                "Embedding: alla prima installazione esegui "
+                "`python -m agent_memory.index --rebuild`; per aggiornamenti usa "
+                "`python -m agent_memory.index --sync`."
+            )
         finally:
             timeline.close()
             shadow.close()
+            semantic.close()
+            vector.close()
 
         return 0
     except ValidationError as exc:

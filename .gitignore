@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Modello FastEmbed scaricato localmente: grande e rigenerabile.
+data/models/
+
+# File temporanei dell'indice FAISS.
+data/indexes/*.tmp

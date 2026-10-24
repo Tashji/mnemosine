@@ -1,0 +1,11 @@
+# Server MCP (FastMCP incluso in mcp>=1.30,<2).
+mcp>=1.30,<2
+
+# Embedding locale multilingue (ONNX Runtime, nessuna API esterna).
+fastembed==0.9.0
+
+# Indice vettoriale persistente.
+faiss-cpu>=1.9,<2
+
+# Operazioni sui vettori.
+numpy>=1.26,<3
