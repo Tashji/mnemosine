@@ -1306,6 +1306,58 @@ Implementare backup, logging, protezione dei dati, controlli di sicurezza e test
 
 
 
+17.1. Biografia procedurale: implementazione e comandi
+
+La Fase 4 è implementata in `agent_memory/biography.py`. Il generatore è deterministico e non utilizza un modello linguistico: legge identità, tratti, famiglia, percorso scolastico, `world_history.json` e la timeline esistente, quindi costruisce i ricordi mancanti per macro-ere.
+
+La densità prevista è:
+
+\- prima infanzia: 3 ricordi complessivi tra i 2 e i 6 anni;
+
+\- fanciullezza: 1 ricordo per anno tra i 7 e i 13 anni;
+
+\- adolescenza: 2 ricordi per anno tra i 14 e i 19 anni;
+
+\- età adulta: 3 ricordi per anno dai 20 anni in poi.
+
+Il filtro di anacronismo calcola l'età alla data dell'evento. Gli eventi precedenti alla nascita vengono esclusi; quelli sotto la soglia di comprensione restano soltanto contesto familiare e non vengono scritti nella timeline. Per politica e geopolitica la soglia minima è di 7 anni. Gli eventi mondiali sopra soglia possono diventare ricordi diretti, collegati tramite `world_event_id`; quelli già coperti da un ricordo esistente non vengono duplicati.
+
+Ogni ricordo generato ha ID e `source_ref` stabili, è marcato come simulato e non sovrascrive i ricordi esistenti. L'applicazione è idempotente: una seconda esecuzione non crea duplicati. Se un evento del piano è già presente, viene saltato e riportato con il motivo.
+
+Comandi:
+
+```bash
+# Anteprima del piano, senza scrivere
+python -m agent_memory.biography
+
+# Piano completo in JSON
+python -m agent_memory.biography --json
+
+# Applica i nuovi ricordi alla timeline
+python -m agent_memory.biography --apply
+
+# Usa una data di riferimento diversa da oggi
+python -m agent_memory.biography --as-of 2026-10-24
+
+# Esegue il generatore su un progetto in un'altra directory
+python -m agent_memory.biography --root /percorso/del/progetto
+```
+
+Dopo l'applicazione, sincronizzare l'indice vettoriale:
+
+```bash
+python -m agent_memory.index --sync
+```
+
+Per ricostruire completamente l'indice:
+
+```bash
+python -m agent_memory.index --rebuild
+```
+
+
+
+
 \---
 
 
