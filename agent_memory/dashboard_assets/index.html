@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>Mnemosine · Dashboard amministrativa</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Navigazione principale">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">M</span>
+          <div>
+            <strong>Mnemosine</strong>
+            <span>Console amministrativa</span>
+          </div>
+        </div>
+
+        <nav class="nav">
+          <button class="nav-item is-active" type="button" data-view="overview">
+            <span class="nav-number">01</span>
+            <span>Panoramica</span>
+          </button>
+          <button class="nav-item" type="button" data-view="timeline">
+            <span class="nav-number">02</span>
+            <span>Timeline</span>
+          </button>
+          <button class="nav-item" type="button" data-view="traits">
+            <span class="nav-number">03</span>
+            <span>Tratti</span>
+          </button>
+          <button class="nav-item" type="button" data-view="semantic">
+            <span class="nav-number">04</span>
+            <span>Conoscenze</span>
+          </button>
+          <button class="nav-item" type="button" data-view="evolution">
+            <span class="nav-number">05</span>
+            <span>Evoluzioni</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <span class="status-dot" aria-hidden="true"></span>
+          <div>
+            <strong>Sola lettura</strong>
+            <span>Server locale · loopback</span>
+          </div>
+        </div>
+      </aside>
+
+      <div class="main-column">
+        <header class="topbar">
+          <div class="title-block">
+            <p class="eyebrow">Amministrazione locale</p>
+            <h1 id="page-title">Panoramica</h1>
+            <p class="page-subtitle" id="page-subtitle">
+              Stato, memoria e identità in un'unica vista.
+            </p>
+          </div>
+          <div class="topbar-actions">
+            <div class="clock" id="live-clock" aria-label="Ora locale">—</div>
+            <button class="button button-quiet" type="button" id="refresh-button">
+              <span class="button-icon" aria-hidden="true">↻</span>
+              Aggiorna
+            </button>
+            <form class="logout-form" id="logout-form" method="post" action="/logout" hidden>
+              <button class="button button-quiet" type="submit">Esci</button>
+            </form>
+          </div>
+        </header>
+
+        <div class="notice" id="notice" role="alert" hidden></div>
+
+        <main class="content">
+          <section class="view is-active" id="view-overview" aria-labelledby="page-title">
+            <div class="loading-block" id="overview-content">
+              <span class="spinner" aria-hidden="true"></span>
+              Caricamento della panoramica…
+            </div>
+          </section>
+
+          <section class="view" id="view-timeline" hidden>
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Memoria episodica</p>
+                <h2>Timeline</h2>
+                <p>Ricordi ordinati dal più recente. Apri una riga per il dettaglio.</p>
+              </div>
+              <span class="count-chip" id="timeline-count">—</span>
+            </div>
+
+            <form class="filters" id="timeline-filters">
+              <label class="field field-grow">
+                <span>Cerca</span>
+                <input id="timeline-query" name="q" type="search" placeholder="Titolo, luogo, persona, tag…" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Fonte</span>
+                <select id="timeline-source" name="source">
+                  <option value="">Tutte</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Accesso</span>
+                <select id="timeline-access" name="access">
+                  <option value="">Visibili</option>
+                  <option value="conscious">Conosciuti</option>
+                  <option value="latent">Latenti</option>
+                  <option value="repressed">Repressi</option>
+                </select>
+              </label>
+              <label class="check-field">
+                <input id="timeline-hidden" name="include_hidden" type="checkbox">
+                <span>Includi ricordi latenti e repressi</span>
+              </label>
+            </form>
+
+            <div class="table-wrap" id="timeline-content">
+              <div class="loading-block">
+                <span class="spinner" aria-hidden="true"></span>
+                Caricamento dei ricordi…
+              </div>
+            </div>
+          </section>
+
+          <section class="view" id="view-traits" hidden>
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Profilo psicologico</p>
+                <h2>Tratti</h2>
+                <p>Personalità conscia e configurazione amministrativa dell'ombra.</p>
+              </div>
+            </div>
+            <div id="traits-content">
+              <div class="loading-block">
+                <span class="spinner" aria-hidden="true"></span>
+                Caricamento dei tratti…
+              </div>
+            </div>
+          </section>
+
+          <section class="view" id="view-semantic" hidden>
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Memoria semantica</p>
+                <h2>Conoscenze</h2>
+                <p>Fatti, opinioni, ipotesi e conoscenze incerte, con provenienza e stato.</p>
+              </div>
+              <span class="count-chip" id="semantic-count">—</span>
+            </div>
+
+            <form class="filters" id="semantic-filters">
+              <label class="field field-grow">
+                <span>Cerca</span>
+                <input id="semantic-query" name="q" type="search" placeholder="Titolo, contenuto, categoria…" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Tipo</span>
+                <select id="semantic-type" name="type">
+                  <option value="">Tutti</option>
+                  <option value="verified_fact">Fatto verificato</option>
+                  <option value="user_provided">Fornito dall'utente</option>
+                  <option value="opinion">Opinione</option>
+                  <option value="hypothesis">Ipotesi</option>
+                  <option value="uncertain">Incerto</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Stato</span>
+                <select id="semantic-status" name="status">
+                  <option value="active">Attive</option>
+                  <option value="all">Tutte</option>
+                  <option value="superseded">Superate</option>
+                  <option value="retracted">Ritirate</option>
+                </select>
+              </label>
+            </form>
+
+            <div id="semantic-content">
+              <div class="loading-block">
+                <span class="spinner" aria-hidden="true"></span>
+                Caricamento delle conoscenze…
+              </div>
+            </div>
+          </section>
+
+          <section class="view" id="view-evolution" hidden>
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Storico amministrativo</p>
+                <h2>Evoluzioni</h2>
+                <p>Seed esterni, variazioni dei tratti e riconsolidamenti a cascata.</p>
+              </div>
+              <span class="count-chip" id="evolution-count">—</span>
+            </div>
+            <div id="evolution-content">
+              <div class="loading-block">
+                <span class="spinner" aria-hidden="true"></span>
+                Caricamento dello storico…
+              </div>
+            </div>
+          </section>
+        </main>
+
+        <footer class="footer">
+          <span>Mnemosine · dashboard di sola lettura</span>
+          <span id="footer-generated">—</span>
+        </footer>
+      </div>
+    </div>
+
+    <div class="modal" id="memory-modal" hidden>
+      <div class="modal-backdrop" data-close-modal></div>
+      <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <header class="modal-header">
+          <div>
+            <p class="eyebrow">Dettaglio ricordo</p>
+            <h2 id="modal-title">—</h2>
+          </div>
+          <button class="icon-button" type="button" id="modal-close" aria-label="Chiudi">×</button>
+        </header>
+        <div class="modal-body" id="modal-body"></div>
+      </div>
+    </div>
+
+    <noscript>
+      <div class="noscript">La dashboard richiede JavaScript per visualizzare i dati.</div>
+    </noscript>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

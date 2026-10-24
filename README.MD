@@ -1497,6 +1497,105 @@ Se l'indice vettoriale non era pronto durante l'applicazione, eseguire `python -
 
 
 
+17.3. Dashboard amministrativa locale
+
+La dashboard di sola lettura è implementata in `agent_memory/dashboard.py`; l'interfaccia è in `agent_memory/dashboard_assets/`. Usa gli stessi servizi e database del progetto, senza dipendenze web aggiuntive.
+
+Avvio:
+
+```bash
+# Loopback, porta predefinita 8765
+python -m agent_memory.dashboard
+
+# Porta diversa e apertura automatica del browser
+python -m agent_memory.dashboard --port 8766 --open
+
+# Progetto in un'altra directory
+python -m agent_memory.dashboard --root /percorso/del/progetto
+
+# Autenticazione anche in locale
+python -m agent_memory.dashboard --auth
+
+# HTTPS locale con certificato dedicato
+python -m agent_memory.dashboard --https
+
+# Accesso da un altro dispositivo in HTTPS, password da file con permessi 600
+python -m agent_memory.dashboard --host 0.0.0.0 --https --password-file ~/.mnemosine-dashboard.pass
+
+# Aggiunge l'IP LAN al certificato (ripetibile per più nomi/IP)
+python -m agent_memory.dashboard --https --tls-san 192.168.1.42
+```
+
+Autenticazione:
+
+\- Su `127.0.0.1` l'accesso è disattivato per impostazione predefinita; `--auth` lo rende obbligatorio anche in locale.
+
+\- Su un host non loopback l'accesso è sempre obbligatorio. Se non viene configurata una password, ne viene generata una temporanea e stampata una sola volta all'avvio.
+
+\- La password può essere fornita con la variabile `AGENT_MEMORY_DASHBOARD_PASSWORD` oppure con `--password-file`. Il file deve essere leggibile solo dal proprietario (`chmod 600`).
+
+\- La pagina di accesso è `/login`; la sessione usa un cookie `HttpOnly` e `SameSite=Strict`, dura 12 ore e viene invalidata dal riavvio del server o dal logout.
+
+\- Dopo 8 tentativi falliti in 5 minuti l'indirizzo client viene bloccato temporaneamente.
+
+HTTPS:
+
+\- `--https` abilita TLS con un certificato self-signed dedicato. È richiesto OpenSSL.
+
+\- Certificato e chiave vengono creati al primo avvio in `data/dashboard_tls/` (`cert.pem` e `key.pem`), con la chiave leggibile solo dal proprietario; la directory è ignorata da Git.
+
+\- Il certificato viene riutilizzato negli avvii successivi. Per rigenerarlo, rimuovi `cert.pem` e `key.pem` (o l'intera directory).
+
+\- Il certificato include `localhost`, `127.0.0.1`, `::1` e il nome host locale. Per l'accesso da un altro dispositivo aggiungi il suo IP o hostname con `--tls-san`; se il certificato esiste già, rimuovilo prima di rigenerarlo con i nuovi nomi.
+
+\- Essendo self-signed, il browser mostra un avviso finché non lo consideri attendibile. Non fornisce una identità verificata da una CA pubblica.
+
+\- In HTTPS il cookie di sessione diventa `Secure`. Senza TLS il traffico è in chiaro: usare la dashboard solo su una rete fidata.
+
+\- Se la dashboard è dietro un reverse proxy che riscrive l'header `Host`, passa `--trusted-origin https://dashboard.example` (origine esatta, ripetibile) per accettare i POST di quel proxy. Non usare wildcard: l'origine dichiarata deve essere quella reale del browser.
+
+\- `--allow-null-origin` accetta `Origin: null`, inviato dagli iframe sandbox. Il token CSRF resta obbligatorio; usalo solo per una preview locale fidata.
+
+Esportazione, trust store e rimozione:
+
+```bash
+# Esporta il certificato e stampa il fingerprint SHA-256
+python -m agent_memory.dashboard_cert export --output ~/mnemosine-dashboard.crt
+
+# Mostra cosa verrebbe modificato, senza toccare il sistema
+python -m agent_memory.dashboard_cert install --dry-run
+
+# Installa nel trust store di sistema (richiede privilegi amministrativi)
+sudo python -m agent_memory.dashboard_cert install --yes
+
+# Mostra cosa verrebbe rimosso, senza toccare il sistema
+python -m agent_memory.dashboard_cert uninstall --dry-run
+
+# Rimuove dal trust store di sistema (richiede privilegi amministrativi)
+sudo python -m agent_memory.dashboard_cert uninstall --yes
+```
+
+`install` e `uninstall` usano `update-ca-certificates`, `update-ca-trust` o `trust` su Linux, `security` su macOS e `certutil` su Windows. Il certificato viene installato o rimosso solo con `--yes`; `--dry-run` mostra il piano senza modificare il sistema. Per usare un file già esportato passa `--cert`. Se la dashboard usa una directory TLS personalizzata, passa `--tls-dir` prima del sottocomando. `uninstall` non genera un certificato se non esiste: in quel caso termina con errore e indica di usare `--cert`. Rimuove solo la copia nel trust store; `cert.pem` e `key.pem` restano in `data/dashboard_tls/`.
+
+Il certificato è self-signed e locale: non va usato come certificato di produzione. Alcuni browser, in particolare Firefox, mantengono un trust store separato; se l'avviso resta, importa `mnemosine-dashboard.crt` nelle impostazioni del browser.
+
+
+La dashboard espone cinque viste:
+
+\- **Panoramica**: identità, stato corrente, conteggi e ultimi ricordi.
+
+\- **Timeline**: ricerca e filtri per fonte e livello di accesso; i ricordi latenti e repressi sono visibili solo attivando esplicitamente l'opzione dedicata. Il dettaglio mostra revisioni, collegamenti episodici e conoscenze collegate.
+
+\- **Tratti**: tratti della personalità conscia e configurazione amministrativa dell'ombra, inclusi trigger, difese, ricordi collegati e limiti di sicurezza.
+
+\- **Conoscenze**: memoria semantica con tipo, stato, fonte, affidabilità e metadati, inclusi i riferimenti ai riconsolidamenti.
+
+\- **Evoluzioni**: storico delle variazioni dei tratti, seed esterni, cascate e revisioni recenti.
+
+Le API dei dati sono in sola lettura; gli unici POST gestiscono accesso e logout. Il server ascolta su `127.0.0.1` per impostazione predefinita: contiene dati amministrativi e tratti dell'ombra, quindi non va pubblicato su Internet. L'opzione `--host` permette di cambiare l'indirizzo; su un host non loopback l'autenticazione è obbligatoria. Usa `--https` per cifrare il traffico quando la dashboard è raggiungibile da altri dispositivi.
+
+
+
 
 \---
 

@@ -9,3 +9,6 @@ data/models/
 
 # File temporanei dell'indice FAISS.
 data/indexes/*.tmp
+
+# Certificato e chiave privata della dashboard locale.
+data/dashboard_tls/
