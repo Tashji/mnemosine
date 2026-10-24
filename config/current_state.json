@@ -1,0 +1,103 @@
+{
+  "schema_version": "1.0",
+  "state_id": "state_2026_10_24_1500",
+  "identity_id": "character_001",
+  "created_at": "2026-10-24T15:00:00+02:00",
+  "updated_at": "2026-10-24T15:00:00+02:00",
+  "operational_status": "active",
+  "clock": {
+    "timezone": "Europe/Rome",
+    "local_time": "2026-10-24T15:00:00+02:00",
+    "is_sleep_window": false
+  },
+  "activity": {
+    "id": "act_personal_project",
+    "label": "Programmazione al PC",
+    "category": "solitary_focus",
+    "location": "camera",
+    "started_at": "2026-10-24T13:40:00+02:00",
+    "expected_end_at": "2026-10-24T17:30:00+02:00",
+    "details": "Sta lavorando a un piccolo progetto personale in Python."
+  },
+  "emotion": {
+    "label": "concentrato",
+    "valence": 0.35,
+    "arousal": 0.45,
+    "intensity": 5,
+    "notes": "Stato stabile, con una leggera stanchezza di fondo."
+  },
+  "mental_load": 37,
+  "mental_load_thresholds": {
+    "soft": 60,
+    "overload": 80
+  },
+  "routine": {
+    "mode": "weekend",
+    "day_label": "sabato",
+    "next_transition_at": "2026-10-24T17:30:00+02:00",
+    "planned_activities": [
+      {
+        "time": "09:00",
+        "label": "Colazione e lettura",
+        "category": "routine"
+      },
+      {
+        "time": "10:30",
+        "label": "Studio",
+        "category": "study"
+      },
+      {
+        "time": "13:00",
+        "label": "Pranzo",
+        "category": "meal"
+      },
+      {
+        "time": "14:00",
+        "label": "Programmazione al PC",
+        "category": "solitary_focus"
+      },
+      {
+        "time": "17:30",
+        "label": "Passeggiata",
+        "category": "outdoor"
+      },
+      {
+        "time": "20:00",
+        "label": "Cena",
+        "category": "meal"
+      },
+      {
+        "time": "21:30",
+        "label": "Videogiochi con amici online",
+        "category": "social_online"
+      }
+    ]
+  },
+  "sleep": {
+    "is_sleeping": false,
+    "window": {
+      "start": "00:00",
+      "end": "07:00"
+    },
+    "last_consolidation_at": "2026-10-24T07:10:00+02:00"
+  },
+  "availability": {
+    "accepting_messages": true,
+    "response_style": "normale",
+    "notes": "Nessun sovraccarico cognitivo attivo."
+  },
+  "heartbeat": {
+    "last_run_at": "2026-10-24T15:00:00+02:00",
+    "next_run_at": "2026-10-24T15:30:00+02:00",
+    "last_decision": "continuare_l_attivita",
+    "spontaneous_message_pending": false
+  },
+  "flags": {
+    "whatsapp_sending_enabled": false,
+    "visual_generation_enabled": false,
+    "shadow_direct_read_enabled": false,
+    "shadow_engine_enabled": true,
+    "maintenance_mode": false
+  },
+  "notes": "Stato di esempio della Fase 1. Non è ancora aggiornato da uno scheduler reale."
+}

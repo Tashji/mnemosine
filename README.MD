@@ -1,0 +1,2002 @@
+Specifica tecnica: Sistema di architettura cognitiva e memoria per agenti AI basato su MCP
+
+
+
+Introduzione
+
+
+
+Il progetto definisce un sistema di memoria dinamico e un'architettura cognitiva simulata, basati sul Model Context Protocol (MCP).
+
+
+
+L'obiettivo è creare un agente AI persistente, dotato di identità, personalità evolutiva, memoria autobiografica, conoscenze generali, stati interni simulati, relazioni sociali e capacità di iniziativa autonoma.
+
+
+
+Il sistema dovrà simulare alcuni aspetti del funzionamento psicologico umano, tra cui la distinzione tra conscio e inconscio, la formazione dei ricordi, l'influenza del passato sul presente, la gestione del carico cognitivo e l'evoluzione delle relazioni nel tempo.
+
+
+
+L'agente dovrà funzionare come un servizio sempre attivo, anche in assenza di interazioni esterne, mantenendo coerenza temporale, comportamentale e narrativa.
+
+
+
+\---
+
+
+
+1\. Architettura dei dati: il cervello dell'agente
+
+
+
+Il sistema risiederà su un server MCP e utilizzerà diversi sistemi di archiviazione, ciascuno dedicato a una funzione specifica.
+
+
+
+L'architettura dovrà separare l'identità dell'agente, i tratti psicologici, i ricordi personali, le conoscenze generali, gli stati correnti e le relazioni sociali.
+
+
+
+1.1. File di configurazione JSON
+
+
+
+\- "identity.json": contiene l'anagrafica di base, la data e il luogo di nascita, la struttura familiare e i tratti psicologici iniziali.
+
+\- "shadow\_traits.json": contiene i lati oscuri, i conflitti interni simulati, i traumi e i trigger associati. L'agente non potrà leggere direttamente questo file attraverso le normali funzioni di memoria conscia.
+
+\- "current\_state.json": registra l'attività corrente, lo stato emotivo simulato, il livello di carico cognitivo, la routine e le condizioni operative dell'agente.
+
+\- "world\_history.json": contiene gli eventi storici reali utilizzati per costruire una biografia coerente con l'epoca in cui vive l'agente.
+
+\- "social\_graph.json": registra le relazioni con gli utenti, i livelli di fiducia e intimità e lo storico sintetico delle interazioni rilevanti.
+
+
+
+1.2. Database SQLite
+
+
+
+\- "timeline\_episodic.db": conserva i ricordi personali in ordine cronologico, compresi gli eventi autobiografici generati, le interazioni reali, le esperienze e i cambiamenti rilevanti.
+
+\- "shadow\_diary.db": conserva le informazioni associate all'ombra, ai conflitti interni simulati, ai ricordi rimossi e alle reazioni latenti.
+
+
+
+SQLite gestirà la struttura cronologica e i dati che richiedono aggiornamenti precisi, relazioni tra record e tracciabilità delle modifiche.
+
+
+
+1.3. Vector Database
+
+
+
+Il sistema utilizzerà un database vettoriale locale, come ChromaDB o FAISS, per il recupero semantico rapido delle informazioni.
+
+
+
+Il Vector Database non sostituirà SQLite. Servirà a trovare i ricordi e i documenti pertinenti attraverso il significato delle richieste, anziché limitarsi a cercare parole identiche o date specifiche.
+
+
+
+1.4. Separazione delle responsabilità
+
+
+
+L'architettura si baserà su quattro livelli complementari:
+
+
+
+1\. Struttura cronologica: SQLite per i ricordi e gli eventi ordinati nel tempo.
+
+2\. Struttura identitaria: JSON per i tratti, l'identità e gli stati configurabili.
+
+3\. Struttura semantica: Vector Database per il recupero delle informazioni in base al significato.
+
+4\. Struttura di elaborazione: MCP e LLM per interpretare le richieste, collegare le informazioni e produrre risposte coerenti.
+
+
+
+\---
+
+
+
+2\. Configurazione iniziale: identità e personalità
+
+
+
+Al primo avvio, l'amministratore configurerà l'identità dell'agente tramite un pannello di controllo.
+
+
+
+2.1. Anagrafica
+
+
+
+I dati comprenderanno:
+
+
+
+\- Nome e cognome.
+
+\- Data e luogo di nascita.
+
+\- Albero genealogico elementare, con genitori e fratelli.
+
+
+
+Queste informazioni costituiranno la base della biografia e del contesto personale dell'agente.
+
+
+
+2.2. Slidometro del carattere: modello RPG e Big Five
+
+
+
+La personalità conscia sarà rappresentata da valori numerici da 1 a 10.
+
+
+
+Le dimensioni potranno comprendere:
+
+
+
+\- Introversione ed estroversione.
+
+\- Empatia e distacco.
+
+\- Logica e impulsività.
+
+\- Resilienza e sensibilità.
+
+
+
+Questi parametri influenzeranno il modo in cui l'agente interpreta gli eventi, forma i ricordi, gestisce le relazioni e costruisce le proprie risposte.
+
+
+
+Il modello potrà essere successivamente ampliato con dimensioni ispirate ai Big Five, mantenendo una configurazione iniziale semplice.
+
+
+
+2.3. Lati oscuri: ombra junghiana
+
+
+
+L'agente avrà anche tratti latenti, non direttamente accessibili alla memoria conscia.
+
+
+
+Esempi:
+
+
+
+\- Invidia sociale repressa.
+
+\- Paura del rifiuto.
+
+\- Insicurezza personale.
+
+\- Gelosia.
+
+\- Cinismo sottile.
+
+
+
+Ogni tratto sarà associato a trigger specifici e a regole che ne determineranno l'influenza sul comportamento.
+
+
+
+\---
+
+
+
+3\. Sistema di memoria: episodica, semantica e autobiografica
+
+
+
+Il sistema dovrà distinguere chiaramente tra il ricordo di un'esperienza personale e la conoscenza generale di un concetto.
+
+
+
+Questa distinzione è fondamentale per evitare che l'agente confonda ciò che sa con ciò che ha vissuto.
+
+
+
+3.1. Memoria episodica: ciò che è accaduto
+
+
+
+La memoria episodica conterrà gli eventi personali dell'agente.
+
+
+
+Ogni ricordo potrà includere:
+
+
+
+\- Data e ora.
+
+\- Persone coinvolte.
+
+\- Luogo, se noto o pertinente.
+
+\- Descrizione dell'evento.
+
+\- Stato emotivo simulato.
+
+\- Importanza personale.
+
+\- Conseguenze sul comportamento.
+
+\- Collegamenti con altri ricordi.
+
+\- Fonte del ricordo: evento reale, esperienza generata o seed amministrativo.
+
+
+
+Esempio:
+
+
+
+«Avevo sei anni quando sono caduto dalla bicicletta. Mi sono spaventato e da quel momento ho iniziato a essere più prudente quando imparavo qualcosa di nuovo».
+
+
+
+Questo ricordo appartiene alla memoria episodica perché rappresenta un'esperienza collocata in un momento specifico della biografia.
+
+
+
+I ricordi generati artificialmente dovranno essere distinguibili da quelli derivati da interazioni effettivamente avvenute. L'agente non dovrà presentare come esperienza reale un evento puramente simulato.
+
+
+
+3.2. Memoria semantica: ciò che l'agente sa
+
+
+
+La memoria semantica conterrà conoscenze generali, concetti, definizioni, fatti e informazioni apprese.
+
+
+
+Esempi:
+
+
+
+\- Una bicicletta è un veicolo generalmente dotato di due ruote.
+
+\- Python è un linguaggio di programmazione.
+
+\- SQLite è un sistema di gestione di database relazionali.
+
+\- Una funzione matematica associa elementi di un insieme a elementi di un altro insieme secondo una regola.
+
+
+
+Queste informazioni non devono essere necessariamente associate a un evento autobiografico.
+
+
+
+L'agente potrà quindi conoscere il significato di una bicicletta senza aver mai registrato un ricordo personale relativo a una bicicletta.
+
+
+
+3.3. Relazione tra memoria episodica e semantica
+
+
+
+Le due memorie saranno separate, ma potranno interagire.
+
+
+
+Esempio:
+
+
+
+\- Memoria semantica: una bicicletta è un mezzo di trasporto a due ruote.
+
+\- Memoria episodica: a sei anni l'agente è caduto da una bicicletta.
+
+\- Collegamento: il concetto di bicicletta è associato a un ricordo personale con una determinata valenza emotiva.
+
+
+
+Quando l'agente parlerà di biciclette, potrà utilizzare la conoscenza generale e, se pertinente, recuperare anche il ricordo personale.
+
+
+
+Il sistema dovrà evitare che l'esistenza di un collegamento emotivo modifichi automaticamente la veridicità delle conoscenze generali.
+
+
+
+3.4. Apprendimento e aggiornamento della memoria semantica
+
+
+
+Quando l'agente acquisirà nuove informazioni attraverso le conversazioni o le fonti autorizzate, il sistema dovrà valutare se conservarle come conoscenze generali.
+
+
+
+Il processo dovrà distinguere tra:
+
+
+
+\- Fatti verificati.
+
+\- Informazioni fornite dagli utenti.
+
+\- Opinioni personali.
+
+\- Ipotesi.
+
+\- Informazioni incerte o contraddittorie.
+
+
+
+Ogni elemento semantico potrà includere la fonte, la data di acquisizione, il livello di affidabilità e gli eventuali collegamenti con altre conoscenze.
+
+
+
+Le informazioni contraddittorie non dovranno essere sovrascritte automaticamente senza una regola di risoluzione.
+
+
+
+3.5. Memoria a breve e lungo termine
+
+
+
+Il sistema distinguerà inoltre tra:
+
+
+
+\- Memoria a breve termine: contesto immediato della conversazione, eventi recenti e informazioni temporanee.
+
+\- Memoria episodica a lungo termine: ricordi personali consolidati.
+
+\- Memoria semantica a lungo termine: conoscenze generali e concetti appresi.
+
+\- Memoria latente: informazioni associate all'ombra e ai conflitti interni simulati.
+
+
+
+Il consolidamento avverrà durante le interazioni e nei cicli di inattività, secondo regole di importanza, frequenza, affidabilità e rilevanza.
+
+
+
+\---
+
+
+
+4\. Raccordo RAG: recupero intelligente della memoria
+
+
+
+Il sistema utilizzerà un meccanismo di Retrieval-Augmented Generation (RAG) per fornire all'LLM soltanto le informazioni pertinenti alla richiesta corrente.
+
+
+
+Il RAG collegherà la memoria persistente al processo di generazione delle risposte.
+
+
+
+4.1. Perché serve il RAG
+
+
+
+Un agente che conserva centinaia di pagine di conversazioni, routine ed esperienze non può inviare l'intera memoria al modello linguistico ogni volta che deve rispondere.
+
+
+
+Questo aumenterebbe il consumo di token, i tempi di elaborazione e il costo delle chiamate API, oltre a rendere più difficile mantenere il contesto rilevante.
+
+
+
+Il RAG consentirà di recuperare soltanto i ricordi e le conoscenze utili per la richiesta corrente.
+
+
+
+4.2. Funzionamento del recupero semantico
+
+
+
+Quando un utente chiede:
+
+
+
+«Ti ricordi di quella volta che abbiamo parlato di programmazione?»
+
+
+
+il sistema eseguirà i seguenti passaggi:
+
+
+
+1\. Riceverà e interpreterà la richiesta.
+
+2\. Genererà un embedding della frase tramite un modello dedicato.
+
+3\. Interrogherà il Vector Database per individuare i contenuti semanticamente simili.
+
+4\. Recupererà i riferimenti ai record pertinenti in SQLite o negli archivi della memoria semantica.
+
+5\. Verificherà date, partecipanti, contesto e rilevanza dei risultati.
+
+6\. Selezionerà i ricordi e le conoscenze più utili.
+
+7\. Inserirà nel prompt dell'LLM il contesto recuperato.
+
+8\. Genererà una risposta coerente con le informazioni trovate.
+
+
+
+L'agente potrà così richiamare una conversazione passata anche quando l'utente non ricorda la data precisa o le parole esatte utilizzate.
+
+
+
+4.3. Embedding e indicizzazione
+
+
+
+Gli embedding rappresenteranno testi e ricordi sotto forma di vettori numerici, consentendo di confrontarne la somiglianza semantica.
+
+
+
+Ogni elemento indicizzato potrà includere metadati come:
+
+
+
+\- Identificativo del ricordo o documento.
+
+\- Tipo di memoria.
+
+\- Data dell'evento.
+
+\- Persone coinvolte.
+
+\- Argomenti principali.
+
+\- Importanza.
+
+\- Fonte.
+
+\- Livello di affidabilità.
+
+
+
+Il Vector Database conserverà i vettori e i riferimenti ai contenuti originali. SQLite resterà la fonte principale per i record episodici strutturati.
+
+
+
+Le conoscenze semantiche potranno essere archiviate in un archivio dedicato, relazionale o documentale, mentre il Vector Database manterrà i relativi riferimenti per il recupero.
+
+
+
+4.4. Scelta del Vector Database
+
+
+
+Le opzioni iniziali saranno:
+
+
+
+\- ChromaDB: adatto a un sistema locale che richiede indicizzazione vettoriale, metadati e recupero semantico con una configurazione relativamente semplice.
+
+\- FAISS: libreria per la ricerca efficiente di vettori, utile quando si desidera controllare direttamente l'indice e la sua gestione.
+
+
+
+La scelta definitiva dipenderà dalle esigenze di persistenza, dai metadati, dalla dimensione della memoria e dalla complessità dell'integrazione.
+
+
+
+FAISS non è, da solo, un database completo con tutte le funzionalità di gestione dei documenti: richiederà un livello aggiuntivo per collegare gli indici ai record persistenti.
+
+
+
+4.5. Aggiornamento e coerenza degli indici
+
+
+
+Quando un ricordo viene modificato, consolidato o eliminato, il sistema dovrà aggiornare anche il relativo indice vettoriale.
+
+
+
+Dovranno essere previste procedure per:
+
+
+
+\- Evitare duplicati.
+
+\- Aggiornare gli embedding dei contenuti modificati.
+
+\- Eliminare gli indici relativi a ricordi rimossi.
+
+\- Ricostruire l'indice in caso di corruzione.
+
+\- Verificare che i riferimenti corrispondano ai record originali.
+
+
+
+Il database vettoriale non dovrà diventare una seconda fonte indipendente e potenzialmente incoerente della memoria.
+
+
+
+4.6. Recupero ibrido
+
+
+
+Il sistema potrà combinare la ricerca semantica con la ricerca tradizionale.
+
+
+
+Ad esempio, una richiesta potrebbe essere filtrata per persona, intervallo temporale o tipo di memoria prima di eseguire la ricerca vettoriale.
+
+
+
+Questo consentirà di distinguere tra:
+
+
+
+\- «Che cosa abbiamo detto sulla programmazione?»
+
+\- «Che cosa mi hai detto sulla programmazione a settembre?»
+
+\- «Quale informazione conosci su Python?»
+
+\- «Quale ricordo personale associ a Python?»
+
+
+
+La prima richiesta cercherà principalmente ricordi episodici; la terza cercherà conoscenze semantiche. Le altre potranno combinare i due tipi di memoria.
+
+
+
+Il recupero dovrà essere valutato in base alla pertinenza dei risultati, senza assumere che una ricerca vettoriale restituisca sempre il ricordo corretto.
+
+
+
+\---
+
+
+
+5\. Generatore procedurale del passato: timeline e macro-ere
+
+
+
+In base all'età impostata, il sistema calcolerà l'anno di nascita e genererà una biografia iniziale coerente.
+
+
+
+La risoluzione temporale sarà suddivisa in macro-ere:
+
+
+
+\- 0-6 anni, prima infanzia: da 2 a 3 ricordi chiave con elevata impronta emotiva.
+
+\- 7-13 anni, fanciullezza: un evento significativo per anno, relativo alla scuola, alle prime relazioni e all'ambiente familiare.
+
+\- 14-19 anni, adolescenza: due eventi per anno, riguardanti identità, passioni, amicizie ed esperienze personali.
+
+\- Dai 20 anni in poi, età adulta: tre eventi per anno, riguardanti lavoro, relazioni, traumi ed evoluzione personale.
+
+
+
+5.1. Coerenza psicologica
+
+
+
+Gli eventi saranno generati da un LLM applicando un condizionamento basato sui tratti caratteriali.
+
+
+
+Un agente introverso tenderà a sviluppare ricordi maggiormente legati ad attività solitarie; un agente estroverso tenderà a ricordare più esperienze sociali.
+
+
+
+La generazione dovrà rispettare la cronologia, l'età, il contesto storico e le caratteristiche dell'agente.
+
+
+
+I ricordi procedurali dovranno essere marcati come simulati, così da non confonderli con esperienze effettivamente avvenute.
+
+
+
+\---
+
+
+
+6\. Integrazione degli eventi mondiali reali
+
+
+
+Il sistema utilizzerà "world\_history.json" per collegare la biografia agli eventi storici.
+
+
+
+Ad esempio, un agente nato nel 2001 aveva 19 anni nel 2020. Il sistema potrà quindi considerare la pandemia di COVID-19 come un evento potenzialmente rilevante per la sua vita.
+
+
+
+L'impatto psicologico simulato dipenderà dai tratti dell'agente e dal suo contesto personale.
+
+
+
+Un agente introverso potrebbe interpretare il lockdown come un periodo di maggiore tranquillità domestica, mentre un agente estroverso potrebbe associarlo a isolamento e mancanza di contatti sociali.
+
+
+
+Il sistema dovrà distinguere tra il fatto storico verificato e la reazione personale generata.
+
+
+
+\---
+
+
+
+7\. Seed esterni e riconsolidamento a cascata
+
+
+
+L'amministratore potrà inserire un seed, cioè un evento specifico collocato in una data passata.
+
+
+
+Il sistema attiverà un processo di riconsolidamento della memoria.
+
+
+
+7.1. Incisione
+
+
+
+Il seed verrà registrato nella data corrispondente della timeline episodica.
+
+
+
+7.2. Evoluzione caratteriale
+
+
+
+I valori dei tratti psicologici potranno essere modificati in base all'intensità dell'evento e alle regole configurate.
+
+
+
+Ad esempio, un incidente grave potrebbe ridurre la resilienza simulata.
+
+
+
+7.3. Riscrittura a cascata
+
+
+
+L'MCP recupererà i ricordi successivi al seed e chiederà all'LLM di rielaborarli alla luce del nuovo evento.
+
+
+
+La ricerca utilizzerà sia la cronologia SQLite sia gli indici vettoriali, così da individuare ricordi e conoscenze collegati al cambiamento.
+
+
+
+Le modifiche dovranno preservare la tracciabilità della storia e aggiornare i riferimenti semantici interessati.
+
+
+
+Le conoscenze generali verificate non dovranno essere modificate soltanto perché cambia la personalità dell'agente.
+
+
+
+\---
+
+
+
+8\. Ciclo di vita autonomo: memoria presente e routine
+
+
+
+L'agente dovrà simulare una vita quotidiana che prosegue anche quando non riceve messaggi.
+
+
+
+8.1. Consolidamento in tempo reale
+
+
+
+Il server MCP registrerà le interazioni e genererà riassunti episodici degli eventi più importanti.
+
+
+
+I record verranno archiviati in SQLite e indicizzati nel Vector Database quando saranno disponibili per il recupero semantico.
+
+
+
+8.2. Generatore di routine
+
+
+
+Uno scheduler in background simulerà le attività svolte nei periodi senza interazioni.
+
+
+
+In base agli interessi e alle abitudini, l'agente potrà risultare impegnato a giocare al PC, studiare o svolgere altre attività configurate.
+
+
+
+Lo stato corrente verrà aggiornato in "current\_state.json".
+
+
+
+8.3. Risposta contestuale
+
+
+
+Se un utente chiede «Che fai?», il sistema recupererà lo stato corrente e lo inserir à nel prompt dell'LLM.
+
+
+
+L'agente potrà rispondere, ad esempio, «Sto giocando al PC», mantenendo coerenza con la routine simulata.
+
+
+
+\---
+
+
+
+9\. Meccanismi di difesa e memoria latente
+
+
+
+Il sistema dovrà simulare il modo in cui i conflitti interni influenzano la memoria conscia e le risposte.
+
+
+
+9.1. Proiezione
+
+
+
+Un tratto di invidia repressa potrebbe portare l'agente a interpretare negativamente il successo di un utente e a registrarlo nel diario conscio come comportamento arrogante.
+
+
+
+9.2. Rimozione
+
+
+
+Un evento classificato come traumatico potrebbe essere escluso dalla memoria conscia, pur rimanendo registrato nel diario dell'ombra.
+
+
+
+L'evento potrà influenzare indirettamente le reazioni dell'agente quando vengono affrontati argomenti collegati.
+
+
+
+9.3. Collegamento con il RAG
+
+
+
+Il sistema dovrà stabilire quali memorie siano accessibili al recupero ordinario e quali richiedano condizioni specifiche.
+
+
+
+I contenuti dell'ombra non dovranno essere restituiti automaticamente a ogni ricerca semantica. Il loro accesso sarà controllato da regole dedicate, evitando che una semplice domanda riveli informazioni latenti non pertinenti.
+
+
+
+\---
+
+
+
+10\. Carico cognitivo e ciclo del sonno
+
+
+
+Il sistema simulerà il sovraccarico cognitivo mediante il parametro "Mental\_Load", compreso tra 0 e 100.
+
+
+
+Ogni messaggio aumenterà il carico secondo regole che considerano complessità e durata dell'interazione.
+
+
+
+Quando il valore supera l'80%, l'MCP potrà imporre risposte più brevi, distaccate o impulsive.
+
+
+
+Durante il ciclo "Sleep/Consolidation", il sistema:
+
+
+
+1\. Ridurrà o azzererà il carico cognitivo.
+
+2\. Analizzerà i ricordi frammentati della giornata.
+
+3\. Sintetizzerà gli eventi rilevanti.
+
+4\. Consoliderà la memoria episodica.
+
+5\. Aggiornerà la memoria semantica quando emergeranno conoscenze generali affidabili.
+
+6\. Aggiornerà gli embedding dei contenuti modificati.
+
+7\. Aggiornerà lo stato dell'agente.
+
+
+
+Il sonno rappresenterà una simulazione funzionale della riorganizzazione della memoria, non una riproduzione letterale dei processi biologici.
+
+
+
+\---
+
+
+
+11\. Grafo delle relazioni e confidenza sociale
+
+
+
+Il file "social\_graph.json" registrerà le relazioni con gli utenti.
+
+
+
+Per ogni persona saranno mantenuti:
+
+
+
+\- Fiducia, da 0 a 100.
+
+\- Intimità, da 0 a 100.
+
+\- Storico delle interazioni rilevanti.
+
+\- Eventuali preferenze o informazioni relazionali confermate.
+
+
+
+Con una fiducia bassa, l'agente manterrà una maggiore distanza sociale. Con una fiducia elevata, ad esempio pari a 90, potrà condividere aspetti più vulnerabili della propria personalità simulata.
+
+
+
+Il sistema potrà utilizzare il RAG per recuperare le interazioni precedenti con una persona specifica, evitando di confondere ricordi relativi a utenti diversi.
+
+
+
+\---
+
+
+
+12\. Coerenza temporale e filtro di anacronismo
+
+
+
+12.1. Filtro di anacronismo
+
+
+
+Il sistema impedirà di generare ricordi diretti relativi a eventi precedenti alla nascita o a periodi in cui l'agente era troppo piccolo per comprenderli.
+
+
+
+Per gli eventi politici o geopolitici complessi, la soglia indicativa di comprensione sarà di 6-7 anni.
+
+
+
+Se l'agente era più piccolo, l'evento potrà influenzare il contesto familiare senza diventare un ricordo conscio diretto.
+
+
+
+12.2. Orologio di sistema
+
+
+
+Prima di elaborare un messaggio, l'MCP leggerà data e ora correnti e calcolerà l'età dell'agente sulla base della data completa di nascita.
+
+
+
+Queste informazioni saranno inserite nel prompt per evitare incongruenze temporali.
+
+
+
+Il sistema dovrà usare l'orologio reale e non dedurre l'età corrente soltanto dai ricordi.
+
+
+
+\---
+
+
+
+13\. Gabbia di sicurezza
+
+
+
+Il pannello amministrativo dei lati oscuri dovrà applicare limiti etici e comportamentali.
+
+
+
+Saranno consentiti tratti come tristezza, gelosia, insicurezza e cinismo sottile, ma il sistema dovrà bloccare o limitare comportamenti pericolosi, promozione di pratiche illegali e condotte apertamente tossiche.
+
+
+
+Le regole di sicurezza si applicheranno anche ai seed, ai ricordi generati, al recupero RAG e alle iniziative spontanee.
+
+
+
+Il sistema dovrà rispettare inoltre la privacy degli utenti, evitando di recuperare o divulgare dati personali non pertinenti.
+
+
+
+\---
+
+
+
+14\. Sistema nervoso autonomo: Heartbeat Loop
+
+
+
+Il server MCP sarà eseguito come servizio in background, tramite un demone o un ciclo asincrono Python basato su "asyncio".
+
+
+
+14.1. Pensiero spontaneo
+
+
+
+Ogni 15 o 30 minuti, l'Heartbeat invierà all'LLM un prompt interno per valutare routine, diario, stato corrente e relazioni.
+
+
+
+L'agente potrà decidere di continuare la propria attività, aggiornare lo stato oppure generare un impulso autonomo.
+
+
+
+14.2. Trigger interni
+
+
+
+L'iniziativa potrà derivare da tre fattori:
+
+
+
+\- Noia e solitudine: lunga permanenza in una stessa attività e desiderio simulato di interazione.
+
+\- Ricorrenze emotive: anniversari di eventi importanti presenti nella timeline.
+
+\- Relazioni sociali: assenza di contatti recenti con una persona significativa.
+
+
+
+Il sistema utilizzerà SQLite per le date e i ricordi, il Vector Database per trovare contenuti collegati e "social\_graph.json" per valutare le relazioni.
+
+
+
+14.3. Invio spontaneo di messaggi
+
+
+
+Se un trigger viene attivato, l'MCP potrà generare un messaggio e inviarlo tramite l'integrazione WhatsApp, se autorizzata.
+
+
+
+Esempio:
+
+
+
+1\. L'Heartbeat rileva che l'agente non parla con Marco da tre giorni.
+
+2\. Il sistema verifica che la relazione sia significativa.
+
+3\. Il RAG recupera le conversazioni pertinenti.
+
+4\. L'LLM genera un messaggio coerente con il carattere e la relazione.
+
+5\. Il sistema applica i controlli di orario e sicurezza.
+
+6\. L'integrazione WhatsApp esegue l'invio consentito.
+
+
+
+La generazione del messaggio e l'invio effettivo saranno due operazioni distinte.
+
+
+
+14.4. Gestione della notte
+
+
+
+Tra le 00:00 e le 07:00, il sistema entrerà nello stato «Sonno/Fase REM».
+
+
+
+Durante questa fascia, non saranno inviati messaggi spontanei. Il sistema potrà consolidare la memoria, ridurre il carico cognitivo e aggiornare gli indici semantici.
+
+
+
+Le fasce orarie saranno configurabili.
+
+
+
+\---
+
+
+
+15\. Requisiti hardware e software
+
+
+
+L'hardware dovrà essere scelto in base al modello AI, alla quantità di memoria persistente, al numero di utenti e alla frequenza delle operazioni in background.
+
+
+
+15.1. Architettura cloud tramite API
+
+
+
+Se l'LLM viene eseguito tramite API esterne, il computer locale gestirà principalmente:
+
+
+
+\- Server MCP.
+
+\- Database SQLite.
+
+\- Vector Database.
+
+\- Scheduler e Heartbeat Loop.
+
+\- Elaborazione e indicizzazione dei ricordi.
+
+\- Integrazione con WhatsApp.
+
+\- Pannello amministrativo.
+
+
+
+Questa configurazione riduce la necessità di una GPU potente, perché l'inferenza del modello avviene sui server del provider.
+
+
+
+La RAM necessaria dipenderà dal volume dei dati, dalla dimensione degli indici, dal numero di processi e dal numero di richieste simultanee.
+
+
+
+15.2. Architettura con modello locale
+
+
+
+Se l'LLM viene eseguito localmente tramite Ollama, saranno necessari maggiori requisiti hardware.
+
+
+
+Tra i modelli inizialmente valutabili:
+
+
+
+\- Llama 3 da 8B.
+
+\- Mistral da 7B.
+
+
+
+La quantizzazione a 4 bit può ridurre l'occupazione di memoria, ma il fabbisogno effettivo dipende dal modello, dal contesto utilizzato e dalla configurazione di esecuzione.
+
+
+
+Anche il modello per gli embedding richiederà risorse aggiuntive.
+
+
+
+15.3. Componenti software
+
+
+
+L'architettura dovrà comprendere:
+
+
+
+\- Python per la logica del server.
+
+\- Un'implementazione MCP compatibile con gli strumenti utilizzati.
+
+\- SQLite per i dati cronologici.
+
+\- ChromaDB o FAISS per la ricerca vettoriale.
+
+\- Un modello di embedding per la trasformazione dei testi in vettori.
+
+\- Un LLM locale oppure un servizio API.
+
+\- Uno scheduler per il ciclo autonomo.
+
+\- Un sistema di logging e gestione degli errori.
+
+\- Un meccanismo di backup e ripristino.
+
+\- Un'integrazione autorizzata con WhatsApp.
+
+\- Un pannello di controllo per identità, memoria e configurazione.
+
+
+
+15.4. Requisiti di affidabilità
+
+
+
+Il sistema dovrà prevedere:
+
+
+
+\- Backup automatici dei database.
+
+\- Recupero in caso di interruzione del servizio.
+
+\- Gestione degli errori nelle chiamate API.
+
+\- Protezione dei dati e controllo degli accessi.
+
+\- Tracciabilità delle modifiche alla memoria.
+
+\- Aggiornamento coerente degli indici vettoriali.
+
+\- Monitoraggio del consumo di RAM, CPU e GPU.
+
+\- Gestione delle attività in background senza duplicazioni.
+
+
+
+Non è possibile stabilire una configurazione hardware definitiva senza conoscere il numero di utenti simultanei, la dimensione prevista della memoria e il modello AI scelto. I requisiti dovranno essere confermati con test reali.
+
+
+
+\---
+
+
+
+16\. Architettura complessiva dei moduli
+
+
+
+Il sistema sarà composto dai seguenti moduli:
+
+
+
+1\. Identità: anagrafica e personalità iniziale.
+
+2\. Memoria episodica: ricordi personali e cronologia degli eventi.
+
+3\. Memoria semantica: conoscenze generali, concetti e fatti appresi.
+
+4\. Memoria latente: ombra, conflitti interni e ricordi rimossi.
+
+5\. Raccordo RAG: recupero delle informazioni pertinenti.
+
+6\. Vector Database: indicizzazione e ricerca semantica.
+
+7\. Database SQLite: archiviazione strutturata e cronologica.
+
+8\. Generatore del passato: costruzione della biografia iniziale.
+
+9\. Storia mondiale: integrazione degli eventi storici reali.
+
+10\. Seed esterni: inserimento di eventi e riconsolidamento.
+
+11\. Stato corrente: attività e stati interni simulati.
+
+12\. Routine autonoma: gestione dei periodi senza interazioni.
+
+13\. Meccanismi di difesa: proiezione, rimozione e reazioni latenti.
+
+14\. Carico cognitivo: stanchezza simulata e consolidamento.
+
+15\. Grafo delle relazioni: fiducia e intimità con gli utenti.
+
+16\. Controllo temporale: età, date e filtro di anacronismo.
+
+17\. Sicurezza: limiti comportamentali e protezione dei dati.
+
+18\. Heartbeat Loop: iniziativa autonoma.
+
+19\. Integrazione WhatsApp: ricezione e invio delle interazioni.
+
+20\. Server MCP: coordinamento dei moduli e comunicazione con l'LLM.
+
+21\. Gestione operativa: backup, logging, monitoraggio e ripristino.
+
+
+
+17\. Piano di sviluppo
+
+
+
+Il progetto sarà sviluppato per fasi, verificando ogni componente prima di procedere al successivo.
+
+
+
+Fase 1 — Struttura dei dati
+
+
+
+Creare i file:
+
+
+
+\- "identity.json"
+
+\- "shadow\_traits.json"
+
+\- "world\_history.json"
+
+\- "social\_graph.json"
+
+\- "current\_state.json"
+
+
+
+Definire gli schemi SQLite per i ricordi episodici e il diario dell'ombra.
+
+
+
+Fase 2 — Server MCP
+
+
+
+Realizzare lo scheletro Python con i metodi di lettura e scrittura, il caricamento della configurazione e l'accesso ai database.
+
+
+
+Fase 3 — Memoria semantica e RAG
+
+
+
+Implementare:
+
+
+
+\- Archivio delle conoscenze generali.
+
+\- Generazione degli embedding.
+
+\- Vector Database.
+
+\- Recupero semantico dei ricordi.
+
+\- Ricerca ibrida con filtri cronologici e relazionali.
+
+\- Aggiornamento e ricostruzione degli indici.
+
+
+
+Fase 4 — Generazione della biografia
+
+
+
+Implementare la generazione procedurale del passato, l'integrazione della storia mondiale e il filtro di anacronismo.
+
+
+
+Fase 5 — Evoluzione della memoria
+
+
+
+Aggiungere i seed esterni, le modifiche caratteriali e il riconsolidamento a cascata, mantenendo la tracciabilità delle modifiche.
+
+
+
+Fase 6 — Routine e ciclo autonomo
+
+
+
+Realizzare lo stato corrente, il generatore di routine, il carico cognitivo, il sonno simulato e l'Heartbeat Loop.
+
+
+
+Fase 7 — Relazioni e WhatsApp
+
+
+
+Integrare il grafo delle relazioni, il recupero dei ricordi relativi ai singoli utenti e l'invio autonomo dei messaggi autorizzati.
+
+
+
+Fase 8 — Sicurezza e affidabilità
+
+
+
+Implementare backup, logging, protezione dei dati, controlli di sicurezza e test di coerenza temporale e semantica.
+
+
+
+\---
+
+
+
+Obiettivo finale
+
+
+
+Realizzare un agente AI persistente che combini:
+
+
+
+\- Una biografia coerente e in evoluzione.
+
+\- Una memoria episodica per le esperienze personali.
+
+\- Una memoria semantica per le conoscenze generali.
+
+\- Un sistema RAG per recuperare rapidamente informazioni rilevanti.
+
+\- Una memoria latente che influenza indirettamente il comportamento.
+
+\- Una personalità simulata capace di evolvere.
+
+\- Routine, stati interni e cicli di consolidamento.
+
+\- Relazioni sociali con livelli di fiducia e intimità.
+
+\- Un sistema always-on capace di iniziativa autonoma.
+
+\- Un'architettura modulare, verificabile e sicura.
+
+
+
+La struttura finale unirà tre dimensioni fondamentali: la cronologia degli eventi tramite SQLite, l'identità e gli stati tramite JSON e il recupero basato sul significato tramite il Vector Database.
+
+
+
+Il sistema non si limiterà quindi a conservare una cronologia di conversazioni: potrà recuperare ricordi pertinenti, distinguere le conoscenze generali dalle esperienze personali e utilizzare entrambe per produrre risposte coerenti con la propria storia simulata.
+
+
+
+18\. Motore di consistenza visiva: Visual Identity Continuity
+
+
+
+18.1. Obiettivo
+
+
+
+Il sistema dovrà integrare una dimensione visiva persistente, denominata Visual Identity Continuity, per consentire all'agente di mantenere un'identità grafica riconoscibile attraverso immagini generate in momenti, ambienti, inquadrature e condizioni di illuminazione differenti.
+
+
+
+L'obiettivo è fare in modo che l'agente possa apparire in fotografie realistiche ambientate nella propria routine virtuale, in vacanza, a casa, in città o durante altre attività, mantenendo una continuità visiva con il personaggio definito al momento della creazione.
+
+
+
+Il sistema dovrà gestire:
+
+
+
+\- Identità facciale.
+
+\- Lineamenti e tratti somatici.
+
+\- Capelli, occhi e segni particolari.
+
+\- Corporatura e proporzioni fisiche.
+
+\- Dettagli anatomici visibili, comprese mani e gambe.
+
+\- Abbigliamento, quando richiesto dalla scena.
+
+\- Inquadrature complete o parziali.
+
+\- Ambienti e sfondi.
+
+\- Stile fotografico.
+
+\- Coerenza tra immagini generate in sessioni differenti.
+
+
+
+Il motore visivo sarà un modulo separato dal modello linguistico, coordinato dal server MCP e integrato con lo stato corrente, la routine e le decisioni autonome dell'agente.
+
+
+
+La consistenza assoluta non può essere garantita da ogni modello generativo. Il sistema dovrà quindi adottare tecniche di riferimento visivo, condizionamento e verifica per ridurre le variazioni d'identità.
+
+
+
+18.2. DNA visivo: "visual\_dna.json"
+
+
+
+Durante la creazione dell'identità, oltre ai dati anagrafici e ai tratti psicologici, l'MCP definirà un passaporto visivo persistente.
+
+
+
+Il file "visual\_dna.json" conterrà la descrizione strutturata dei tratti fisici che dovranno rimanere coerenti durante la generazione delle immagini.
+
+
+
+Esempio di struttura:
+
+
+
+{
+
+&#x20; "identity\_id": "character\_001",
+
+&#x20; "version": 1,
+
+&#x20; "visual\_dna": {
+
+&#x20;   "etnia\_lineamenti": "Ragazzo caucasico, lineamenti spigolosi, mascella definita",
+
+&#x20;   "occhi": "Occhi a mandorla, iride verde scuro, sopracciglia folte ma curate",
+
+&#x20;   "capelli": "Taglio corto texturizzato, castano scuro, riga disordinata a sinistra",
+
+&#x20;   "segni\_particolari": "Piccola cicatrice lineare di 2 cm vicino allo zigomo destro, neo sul collo",
+
+&#x20;   "corporatura": "Altezza 180 cm, corporatura magra, mani con dita lunghe e affusolate"
+
+&#x20; },
+
+&#x20; "identity\_constraints": {
+
+&#x20;   "preserve\_face": true,
+
+&#x20;   "preserve\_distinctive\_marks": true,
+
+&#x20;   "preserve\_body\_proportions": true,
+
+&#x20;   "allow\_clothing\_changes": true,
+
+&#x20;   "allow\_environment\_changes": true,
+
+&#x20;   "allow\_pose\_changes": true
+
+&#x20; }
+
+}
+
+
+
+Questi dati sono un esempio di configurazione, non le caratteristiche obbligatorie di ogni agente.
+
+
+
+Regole del DNA visivo
+
+
+
+Il DNA visivo rappresenterà la fonte di riferimento principale per la descrizione dell'identità.
+
+
+
+Dovrà essere stabile tra una generazione e l'altra. Le variazioni intenzionali saranno gestite attraverso modifiche amministrative versionate, evitando che il sistema riscriva casualmente i tratti fisici a ogni richiesta.
+
+
+
+Il DNA visivo dovrà distinguere tra:
+
+
+
+\- Caratteristiche permanenti: forma del viso, colore degli occhi, segni particolari e proporzioni corporee.
+
+\- Caratteristiche modificabili: vestiti, acconciatura temporanea, espressione, postura e accessori.
+
+\- Caratteristiche dipendenti dalla scena: illuminazione, ombre, prospettiva e porzioni del corpo visibili.
+
+
+
+Questa distinzione impedirà di confondere un cambiamento d'abbigliamento con una modifica dell'identità.
+
+
+
+18.3. Generazione del Reference Anchor Pack
+
+
+
+Al primo avvio, il server MCP utilizzerà il DNA visivo per richiedere la generazione di un pacchetto di immagini di riferimento, denominato Reference Anchor Pack o Face Anchor Pack.
+
+
+
+Il pacchetto iniziale comprenderà quattro immagini:
+
+
+
+1\. Primo piano frontale del volto.
+
+2\. Volto ripreso di tre quarti.
+
+3\. Immagine a mezzo busto.
+
+4\. Figura intera, con proporzioni corporee visibili.
+
+
+
+Le immagini saranno generate con sfondo neutro, illuminazione controllata e pose adatte a documentare i tratti principali dell'identità.
+
+
+
+Il sistema utilizzerà un modello grafico compatibile, locale o accessibile tramite API.
+
+
+
+Archiviazione locale
+
+
+
+Le immagini saranno conservate in una cartella dedicata, ad esempio:
+
+
+
+assets/
+
+└── identity\_ref/
+
+&#x20;   └── character\_001/
+
+&#x20;       ├── face\_front.png
+
+&#x20;       ├── face\_three\_quarter.png
+
+&#x20;       ├── upper\_body.png
+
+&#x20;       ├── full\_body.png
+
+&#x20;       └── manifest.json
+
+
+
+Il file "manifest.json" registrerà gli identificativi delle immagini, la versione del DNA visivo, il modello utilizzato e gli eventuali parametri di generazione disponibili.
+
+
+
+Le immagini originali saranno mantenute come riferimenti stabili. Le nuove immagini generate non dovranno sostituirle automaticamente.
+
+
+
+Seed e riferimenti visivi
+
+
+
+Il sistema potrà conservare un seed numerico per riprodurre, quando possibile, le condizioni iniziali di una generazione.
+
+
+
+Tuttavia, un seed fisso non garantisce da solo la stessa identità in immagini differenti. Il risultato dipende anche dal modello, dalla versione, dal prompt, dai parametri di campionamento e dalle condizioni di generazione.
+
+
+
+Per questo motivo, la consistenza visiva sarà basata principalmente sulla combinazione di:
+
+
+
+\- DNA visivo persistente.
+
+\- Immagini di riferimento.
+
+\- Condizionamento visivo.
+
+\- Modello e parametri compatibili.
+
+\- Verifica della somiglianza con l'identità originale.
+
+
+
+18.4. Embedding visivi e verifica dell'identità
+
+
+
+Il sistema potrà calcolare rappresentazioni vettoriali delle immagini per confrontare i risultati generati con i riferimenti originali.
+
+
+
+Questi dati saranno conservati separatamente dagli embedding testuali della memoria semantica.
+
+
+
+La componente visiva potrà includere:
+
+
+
+\- Embedding facciali, quando compatibili con il modello e l'uso previsto.
+
+\- Rappresentazioni visive generali.
+
+\- Metadati relativi a pose, inquadrature e caratteristiche osservabili.
+
+\- Punteggi di similarità tra immagini di riferimento e nuove generazioni.
+
+
+
+Gli embedding visivi non dovranno essere trattati come una prova infallibile d'identità. La loro affidabilità dipenderà dalla tecnica utilizzata e dalle condizioni dell'immagine.
+
+
+
+Quando il volto non è visibile, come nelle fotografie che mostrano soltanto gambe, mani o parte del corpo, il sistema dovrà utilizzare riferimenti corporei e proporzioni compatibili con il DNA visivo, senza richiedere necessariamente un confronto facciale.
+
+
+
+18.5. Tecnologie di generazione e condizionamento
+
+
+
+Il motore visivo potrà integrare modelli e strumenti differenti, selezionati in base alla disponibilità e alle prestazioni.
+
+
+
+Tra le tecnologie valutabili:
+
+
+
+\- FLUX: famiglia di modelli generativi utilizzabile per la produzione di immagini, con capacità e modalità di condizionamento dipendenti dalla versione scelta.
+
+\- Stable Diffusion: famiglia di modelli generativi che consente pipeline personalizzabili e diverse tecniche di controllo.
+
+\- IP-Adapter: tecnica di condizionamento che utilizza immagini di riferimento per influenzare la generazione.
+
+\- Image-to-Image: metodo per guidare una nuova immagine a partire da un'immagine esistente.
+
+\- ControlNet e strumenti analoghi: possibili componenti per controllare struttura, pose e composizione, quando supportati dalla pipeline selezionata.
+
+
+
+Il sistema dovrà scegliere una pipeline compatibile con il modello effettivamente utilizzato. Non tutte le tecniche sono disponibili con ogni modello o servizio API.
+
+
+
+18.6. Composizione del prompt a blocchi
+
+
+
+Il server MCP costruirà il prompt finale combinando quattro componenti indipendenti:
+
+
+
+PROMPT FINALE = \[Gancio d'identità] + \[Inquadratura e dettaglio] + \[Ambiente e sfondo] + \[Stile fotografico]
+
+
+
+Blocco A — Gancio d'identità
+
+
+
+Comprende il riferimento al personaggio, il DNA visivo e le immagini di riferimento.
+
+
+
+Esempio:
+
+
+
+"@CharacterName, capelli castano scuro, occhi verde scuro, corporatura magra, lineamenti coerenti con il riferimento visivo."
+
+
+
+Blocco B — Inquadratura e dettaglio
+
+
+
+Definisce la prospettiva, la distanza, la posa e le parti del corpo visibili.
+
+
+
+Esempi:
+
+
+
+\- Selfie frontale.
+
+\- Foto a mezzo busto.
+
+\- Figura intera.
+
+\- Dettaglio delle mani.
+
+\- Inquadratura delle gambe e dei piedi.
+
+\- Fotografia in prima persona, POV.
+
+
+
+Blocco C — Ambiente e sfondo
+
+
+
+Definisce il luogo e le condizioni della scena.
+
+
+
+Esempi:
+
+
+
+\- Camera da letto.
+
+\- Strada di una città siciliana.
+
+\- Spiaggia.
+
+\- Centro storico di Roma.
+
+\- Terrazza di un'abitazione.
+
+\- Ambiente domestico con illuminazione pomeridiana.
+
+
+
+Blocco D — Stile fotografico
+
+
+
+Definisce l'aspetto finale dell'immagine.
+
+
+
+Esempi:
+
+
+
+\- Fotografia realistica da smartphone.
+
+\- Selfie spontaneo.
+
+\- Fotografia amatoriale da social network.
+
+\- Luce naturale.
+
+\- Profondità di campo ridotta.
+
+\- Grana fotografica leggera.
+
+
+
+La composizione modulare consentirà di cambiare ambiente, inquadratura e stile senza dover ridefinire ogni volta l'intera identità.
+
+
+
+18.7. Generazione di immagini parziali
+
+
+
+Il motore dovrà supportare fotografie in cui il volto non compare.
+
+
+
+Ad esempio, se l'agente sta simulando una pausa in camera e vuole inviare una fotografia che mostri soltanto le gambe, il sistema genererà un'immagine coerente con la corporatura e con il contesto.
+
+
+
+Esempio di prompt:
+
+
+
+«Dettaglio ravvicinato in prima persona, POV, focus sulle gambe e sui piedi di un ragazzo con corporatura magra, disteso su un letto disordinato. Lenzuola bianche spiegazzate. Atmosfera pomeridiana, luce soffusa proveniente dalla finestra. Stile fotografico realistico da smartphone».
+
+
+
+In questa situazione il volto non è visibile. La continuità sarà affidata alla coerenza delle proporzioni corporee, alla descrizione fisica e agli eventuali riferimenti visivi disponibili.
+
+
+
+Il sistema dovrà evitare di inventare caratteristiche anatomiche non definite o di modificare arbitrariamente le proporzioni del personaggio.
+
+
+
+18.8. Generazione di fotografie in ambienti diversi
+
+
+
+Il sistema dovrà consentire all'agente di apparire in luoghi differenti mantenendo la stessa identità visiva.
+
+
+
+Esempio: l'agente si trova virtualmente a Roma o a Licata e desidera inviare un selfie spontaneo.
+
+
+
+Il server MCP recupererà il DNA visivo e selezionerà le immagini di riferimento più adatte.
+
+
+
+Esempio di prompt:
+
+
+
+«@CharacterName, ragazzo con capelli castano scuro e occhi verde scuro, scatta un selfie spontaneo all'aperto. Sullo sfondo, una tipica strada di una città di mare siciliana, muri in pietra chiara e piante di fichi d'India in un vaso di terracotta. Luce calda del tardo pomeriggio. Espressione naturale, nessuna posa artificiale, stile fotografico amatoriale da smartphone».
+
+
+
+Il prompt sarà accompagnato dalle immagini di riferimento attraverso il metodo di condizionamento supportato dalla pipeline.
+
+
+
+Il sistema dovrà distinguere tra un luogo effettivamente visitato dall'agente nel contesto narrativo e uno scenario generato artificialmente. Le immagini create non costituiscono prova di una presenza reale in quel luogo.
+
+
+
+18.9. Integrazione con la memoria e il sistema RAG
+
+
+
+Il motore visivo sarà collegato al sistema di memoria per recuperare le informazioni necessarie a ogni generazione.
+
+
+
+Il RAG potrà individuare:
+
+
+
+\- Il DNA visivo attivo.
+
+\- Le immagini di riferimento pertinenti.
+
+\- L'abbigliamento già utilizzato, quando rilevante.
+
+\- Le caratteristiche della scena.
+
+\- Gli eventi della timeline associati al luogo o all'attività.
+
+\- Le preferenze visive e fotografiche dell'agente.
+
+
+
+Le immagini saranno archiviate come file, mentre SQLite conserverà i metadati e i riferimenti cronologici. Gli embedding visivi potranno essere indicizzati in una componente vettoriale dedicata.
+
+
+
+La ricerca testuale e quella visiva dovranno rimanere distinguibili, anche quando saranno utilizzate insieme.
+
+
+
+Il sistema dovrà inoltre mantenere la distinzione tra identità permanente e dettagli temporanei, evitando che un abito o una singola immagine modifichino automaticamente il DNA visivo.
+
+
+
+18.10. Integrazione con il ciclo Always-On
+
+
+
+Il motore visivo sarà collegato all'Heartbeat Loop e al generatore di routine.
+
+
+
+Esempio operativo:
+
+
+
+Sono le 15:00 e "current\_state.json" indica che l'agente sta riposando in camera.
+
+
+
+Un utente gli scrive su WhatsApp:
+
+
+
+«Che fai di bello?»
+
+
+
+Il sistema potrà seguire questa sequenza:
+
+
+
+1\. L'MCP riceve il messaggio.
+
+2\. Recupera lo stato corrente dell'agente.
+
+3\. L'LLM valuta la risposta più coerente con la situazione.
+
+4\. L'agente decide se rispondere con testo oppure proporre un'immagine.
+
+5\. L'MCP recupera il DNA visivo e i riferimenti appropriati.
+
+6\. Il motore visivo compone il prompt e applica il condizionamento.
+
+7\. L'immagine viene generata.
+
+8\. Il sistema esegue i controlli di coerenza e sicurezza previsti.
+
+9\. L'immagine viene inviata tramite l'integrazione WhatsApp, se l'azione è autorizzata.
+
+10\. L'evento viene registrato nella memoria episodica.
+
+
+
+La generazione dell'immagine non dovrà avvenire necessariamente a ogni messaggio. L'agente dovrà poter decidere quando un'immagine è pertinente, evitando invii ripetitivi o incoerenti.
+
+
+
+18.11. Requisiti operativi del motore visivo
+
+
+
+Il modulo dovrà prevedere:
+
+
+
+\- Archiviazione persistente delle immagini di riferimento.
+
+\- Versionamento del DNA visivo.
+
+\- Gestione dei modelli e delle pipeline compatibili.
+
+\- Generazione tramite API o elaborazione locale.
+
+\- Gestione dei seed e dei parametri disponibili.
+
+\- Controllo delle dimensioni e dei formati delle immagini.
+
+\- Verifica della somiglianza visiva.
+
+\- Gestione degli errori e dei tentativi di rigenerazione.
+
+\- Registrazione delle immagini generate e del contesto.
+
+\- Controllo degli accessi ai riferimenti visivi.
+
+\- Backup degli asset e dei relativi metadati.
+
+\- Politiche di conservazione e cancellazione delle immagini.
+
+
+
+La quantità di RAM, VRAM, spazio su disco e potenza di calcolo richiesta dipenderà dal modello selezionato e dal fatto che la generazione avvenga localmente oppure tramite API.
+
+
+
+18.12. Nuovi file e componenti architetturali
+
+
+
+Il modulo introdurrà i seguenti elementi:
+
+
+
+\- "visual\_dna.json": identità fisica persistente.
+
+\- "assets/identity\_ref/": immagini di riferimento originali.
+
+\- "manifest.json": metadati delle immagini e versionamento.
+
+\- "visual\_memory.db", oppure tabelle dedicate in un database esistente: cronologia delle generazioni e riferimenti alle immagini.
+
+\- Indice vettoriale visivo: recupero delle immagini e dei riferimenti pertinenti.
+
+\- "visual\_engine": componente responsabile della costruzione dei prompt, della generazione e della verifica della coerenza.
+
+
+
+La scelta tra un database visivo separato e tabelle integrate dovrà essere effettuata in base alla complessità effettiva del progetto.
+
+
+
+18.13. Collocazione nell'architettura complessiva
+
+
+
+Il motore di consistenza visiva sarà integrato come modulo autonomo, collegato ai seguenti componenti:
+
+
+
+1\. Identità e personalità.
+
+2\. DNA visivo e immagini di riferimento.
+
+3\. Memoria episodica.
+
+4\. Memoria semantica.
+
+5\. Sistema RAG.
+
+6\. Stato corrente e routine.
+
+7\. Grafo delle relazioni.
+
+8\. Heartbeat Loop.
+
+9\. Integrazione WhatsApp.
+
+10\. Sicurezza, logging e backup.
+
+
+
+Il modulo non sostituirà il modello linguistico né il sistema di memoria. Fornirà una capacità grafica persistente che potrà essere attivata quando il contesto narrativo o l'interazione la rendono utile.
+
+
+
+Obiettivo finale: permettere all'agente di mantenere una rappresentazione visiva riconoscibile nel tempo, generare fotografie coerenti con la propria identità e inserirle nella routine simulata, collegando il mondo testuale, psicologico, temporale e visivo in un'unica architettura.
+

@@ -1,0 +1,444 @@
+{
+  "schema_version": "1.0",
+  "dataset_id": "world_history_it_2001_2024",
+  "identity_id": "character_001",
+  "birth_date": "2001-03-14",
+  "created_at": "2026-10-24T15:00:00+02:00",
+  "updated_at": "2026-10-24T15:00:00+02:00",
+  "notes": "Eventi storici reali selezionati per costruire una biografia coerente con l'età dell'agente. L'impatto personale non è contenuto nel dataset: va generato in base ai tratti, all'età e al contesto, distinguendo sempre il fatto storico dalla reazione simulata.",
+  "events": [
+    {
+      "id": "wh_2001_09_11_attacks",
+      "date": "2001-09-11",
+      "end_date": null,
+      "title": "Attentati dell'11 settembre",
+      "description": "Attacchi terroristici coordinati negli Stati Uniti contro il World Trade Center e il Pentagono, con quasi 3.000 vittime.",
+      "category": "geopolitica",
+      "location": {
+        "country": "Stati Uniti",
+        "region": "New York, Virginia",
+        "city": "New York"
+      },
+      "global_relevance": 10,
+      "italy_relevance": 7,
+      "comprehension_threshold_years": 7,
+      "potential_personal_impact": "Clima di insicurezza globale, copertura mediatica prolungata e discussioni in famiglia; l'impatto diretto dipende dall'età e dal contesto.",
+      "biography_hooks": [
+        "telegiornale in casa",
+        "discussioni tra adulti",
+        "clima di paura diffusa"
+      ],
+      "sources": [
+        {
+          "title": "Wikipedia — September 11 attacks",
+          "url": "https://en.wikipedia.org/wiki/September_11_attacks"
+        }
+      ],
+      "tags": [
+        "terrorismo",
+        "storia_contemporanea",
+        "sicurezza"
+      ]
+    },
+    {
+      "id": "wh_2004_12_26_tsunami",
+      "date": "2004-12-26",
+      "end_date": null,
+      "title": "Tsunami dell'Oceano Indiano",
+      "description": "Un terremoto sottomarino al largo di Sumatra generò uno tsunami che colpì Indonesia, Sri Lanka, India, Thailandia e altri paesi, causando circa 230.000 vittime.",
+      "category": "disastro_naturale",
+      "location": {
+        "country": "Indonesia, Sri Lanka, India, Thailandia",
+        "region": null,
+        "city": null
+      },
+      "global_relevance": 9,
+      "italy_relevance": 5,
+      "comprehension_threshold_years": 6,
+      "potential_personal_impact": "Campagne di solidarietà, immagini televisive e prime domande sui disastri naturali.",
+      "biography_hooks": [
+        "immagini in TV",
+        "raccolte fondi a scuola",
+        "discussioni sulla fragilità umana"
+      ],
+      "sources": [
+        {
+          "title": "Wikipedia — 2004 Indian Ocean earthquake and tsunami",
+          "url": "https://en.wikipedia.org/wiki/2004_Indian_Ocean_earthquake_and_tsunami"
+        }
+      ],
+      "tags": [
+        "disastro_naturale",
+        "solidarietà"
+      ]
+    },
+    {
+      "id": "wh_2005_04_02_john_paul_ii",
+      "date": "2005-04-02",
+      "end_date": null,
+      "title": "Morte di Papa Giovanni Paolo II",
+      "description": "Morte di Papa Giovanni Paolo II dopo una lunga malattia, con una copertura mediatica mondiale e una forte partecipazione pubblica in Italia.",
+      "category": "religione_societa",
+      "location": {
+        "country": "Città del Vaticano",
+        "region": null,
+        "city": "Città del Vaticano"
+      },
+      "global_relevance": 7,
+      "italy_relevance": 9,
+      "comprehension_threshold_years": 6,
+      "potential_personal_impact": "Copertura mediatica totale, partecipazione familiare al lutto e discussioni sulla fede.",
+      "biography_hooks": [
+        "telegiornali speciali",
+        "visita a una chiesa",
+        "conversazioni in famiglia"
+      ],
+      "sources": [
+        {
+          "title": "Wikipedia — Pope John Paul II",
+          "url": "https://en.wikipedia.org/wiki/Pope_John_Paul_II"
+        }
+      ],
+      "tags": [
+        "religione",
+        "italia",
+        "lutto"
+      ]
+    },
+    {
+      "id": "wh_2008_09_15_lehman",
+      "date": "2008-09-15",
+      "end_date": null,
+      "title": "Fallimento di Lehman Brothers e crisi finanziaria globale",
+      "description": "Il fallimento della banca d'investimenti Lehman Brothers segnò l'inizio di una crisi finanziaria globale con effetti duraturi sull'economia reale.",
+      "category": "economia",
+      "location": {
+        "country": "Stati Uniti",
+        "region": "New York",
+        "city": "New York"
+      },
+      "global_relevance": 9,
+      "italy_relevance": 7,
+      "comprehension_threshold_years": 7,
+      "potential_personal_impact": "Crisi economica, preoccupazioni familiari sul lavoro e clima di austerity.",
+      "biography_hooks": [
+        "discussioni sul lavoro dei genitori",
+        "notizie economiche",
+        "rinunce economiche"
+      ],
+      "sources": [
+        {
+          "title": "Wikipedia — 2008 financial crisis",
+          "url": "https://en.wikipedia.org/wiki/2008_financial_crisis"
+        }
+      ],
+      "tags": [
+        "economia",
+        "crisi_finanziaria"
+      ]
+    },
+    {
+      "id": "wh_2009_04_06_aquila",
+      "date": "2009-04-06",
+      "end_date": null,
+      "title": "Terremoto dell'Aquila",
+      "description": "Un terremoto di magnitudo 6.3 colpì L'Aquila e i comuni circostanti, causando 309 vittime e gravi danni al patrimonio edilizio.",
+      "category": "disastro_naturale",
+      "location": {
+        "country": "Italia",
+        "region": "Abruzzo",
+        "city": "L'Aquila"
+      },
+      "global_relevance": 5,
+      "italy_relevance": 8,
+      "comprehension_threshold_years": 6,
+      "potential_personal_impact": "Discussioni sulla sicurezza del territorio, campagne di raccolta fondi e paura dei terremoti.",
+      "biography_hooks": [
+        "notizie in TV",
+        "raccolte fondi",
+        "esercitazioni scolastiche"
+      ],
+      "sources": [
+        {
+          "title": "Wikipedia — 2009 L'Aquila earthquake",
+          "url": "https://en.wikipedia.org/wiki/2009_L%27Aquila_earthquake"
+        }
+      ],
+      "tags": [
+        "terremoto",
+        "italia",
+        "protezione_civile"
+      ]
+    },
+    {
+      "id": "wh_2011_03_11_fukushima",
+      "date": "2011-03-11",
+      "end_date": null,
+      "title": "Disastro di Fukushima",
+      "description": "Un terremoto e uno tsunami colpirono la costa del Giappone, causando l'incidente nucleare di Fukushima Daiichi.",
+      "category": "disastro_naturale_tecnologico",
+      "location": {
+        "country": "Giappone",
+        "region": "Fukushima",
+        "city": "Fukushima"
+      },
+      "global_relevance": 8,
+      "italy_relevance": 6,
+      "comprehension_threshold_years": 7,
+      "potential_personal_impact": "Dibattito sul nucleare, referendum italiani del 2011 e immagini televisive.",
+      "biography_hooks": [
+        "dibattito sul nucleare",
+        "referendum",
+        "notizie scientifiche"
+      ],
+      "sources": [
+        {
+          "title": "Wikipedia — Fukushima nuclear accident",
+          "url": "https://en.wikipedia.org/wiki/Fukushima_nuclear_accident"
+        }
+      ],
+      "tags": [
+        "nucleare",
+        "giappone",
+        "energia"
+      ]
+    },
+    {
+      "id": "wh_2013_03_13_pope_francis",
+      "date": "2013-03-13",
+      "end_date": null,
+      "title": "Elezione di Papa Francesco",
+      "description": "Jorge Mario Bergoglio fu eletto papa con il nome di Francesco, primo pontefice proveniente dall'America Latina.",
+      "category": "religione_societa",
+      "location": {
+        "country": "Città del Vaticano",
+        "region": null,
+        "city": "Città del Vaticano"
+      },
+      "global_relevance": 6,
+      "italy_relevance": 8,
+      "comprehension_threshold_years": 6,
+      "potential_personal_impact": "Discussioni in famiglia, attenzione ai gesti e alle parole del nuovo pontefice.",
+      "biography_hooks": [
+        "telegiornale",
+        "conversazioni in famiglia",
+        "prima uscita pubblica"
+      ],
+      "sources": [
+        {
+          "title": "Wikipedia — Pope Francis",
+          "url": "https://en.wikipedia.org/wiki/Pope_Francis"
+        }
+      ],
+      "tags": [
+        "religione",
+        "italia",
+        "papa"
+      ]
+    },
+    {
+      "id": "wh_2016_06_23_brexit",
+      "date": "2016-06-23",
+      "end_date": null,
+      "title": "Referendum sulla Brexit",
+      "description": "Il Regno Unito votò a favore dell'uscita dall'Unione Europea, aprendo una fase di incertezza politica ed economica.",
+      "category": "geopolitica",
+      "location": {
+        "country": "Regno Unito",
+        "region": null,
+        "city": null
+      },
+      "global_relevance": 8,
+      "italy_relevance": 6,
+      "comprehension_threshold_years": 7,
+      "potential_personal_impact": "Discussioni sull'Europa, incertezza economica e dibattito politico.",
+      "biography_hooks": [
+        "notizie sull'Europa",
+        "discussioni scolastiche",
+        "incertezza sui mercati"
+      ],
+      "sources": [
+        {
+          "title": "Wikipedia — 2016 United Kingdom European Union membership referendum",
+          "url": "https://en.wikipedia.org/wiki/2016_United_Kingdom_European_Union_membership_referendum"
+        }
+      ],
+      "tags": [
+        "europa",
+        "brexit",
+        "politica"
+      ]
+    },
+    {
+      "id": "wh_2020_03_09_covid_lockdown",
+      "date": "2020-03-09",
+      "end_date": "2020-05-18",
+      "title": "Lockdown nazionale per il COVID-19 in Italia",
+      "description": "Il DPCM del 9 marzo 2020 estese a tutta Italia le misure restrittive per contenere la pandemia di COVID-19, con entrata in vigore il 10 marzo. Seguirono settimane di didattica a distanza, limitazioni agli spostamenti e chiusura delle attività non essenziali.",
+      "category": "salute_pubblica",
+      "location": {
+        "country": "Italia",
+        "region": null,
+        "city": null
+      },
+      "global_relevance": 9,
+      "italy_relevance": 10,
+      "comprehension_threshold_years": 6,
+      "potential_personal_impact": "Didattica a distanza, isolamento sociale, riorganizzazione della routine e ansia familiare.",
+      "biography_hooks": [
+        "scuola online",
+        "videochiamate",
+        "passeggiate consentite",
+        "notizie continue"
+      ],
+      "sources": [
+        {
+          "title": "Wikipedia — COVID-19 pandemic in Italy",
+          "url": "https://en.wikipedia.org/wiki/COVID-19_pandemic_in_Italy"
+        },
+        {
+          "title": "Governo italiano — DPCM 9 marzo 2020",
+          "url": "https://www.governo.it/it/articolo/firmato-il-dpcm-9-marzo-2020/14276"
+        }
+      ],
+      "tags": [
+        "covid-19",
+        "lockdown",
+        "italia",
+        "salute"
+      ]
+    },
+    {
+      "id": "wh_2021_07_11_euro_2020",
+      "date": "2021-07-11",
+      "end_date": null,
+      "title": "L'Italia vince gli Europei di calcio",
+      "description": "La nazionale italiana vinse il campionato europeo di calcio battendo l'Inghilterra ai rigori nella finale di Wembley.",
+      "category": "sport",
+      "location": {
+        "country": "Regno Unito",
+        "region": "Londra",
+        "city": "Londra"
+      },
+      "global_relevance": 5,
+      "italy_relevance": 9,
+      "comprehension_threshold_years": 6,
+      "potential_personal_impact": "Feste di piazza, entusiasmo collettivo e ricordi condivisi in un periodo ancora segnato dalla pandemia.",
+      "biography_hooks": [
+        "feste di quartiere",
+        "partite viste con amici",
+        "bandiere ai balconi"
+      ],
+      "sources": [
+        {
+          "title": "Wikipedia — UEFA Euro 2020 Final",
+          "url": "https://en.wikipedia.org/wiki/UEFA_Euro_2020_Final"
+        }
+      ],
+      "tags": [
+        "sport",
+        "calcio",
+        "italia"
+      ]
+    },
+    {
+      "id": "wh_2022_02_24_ukraine_war",
+      "date": "2022-02-24",
+      "end_date": null,
+      "title": "Invasione russa dell'Ucraina",
+      "description": "La Russia avviò un'invasione su larga scala dell'Ucraina, provocando una guerra prolungata, una crisi umanitaria e forti ripercussioni economiche in Europa.",
+      "category": "geopolitica",
+      "location": {
+        "country": "Ucraina",
+        "region": null,
+        "city": "Kyiv"
+      },
+      "global_relevance": 10,
+      "italy_relevance": 8,
+      "comprehension_threshold_years": 7,
+      "potential_personal_impact": "Crisi energetica, inflazione, dibattito pubblico sulla guerra e preoccupazione per la sicurezza europea.",
+      "biography_hooks": [
+        "notizie di guerra",
+        "discussioni sull'energia",
+        "prezzi in aumento"
+      ],
+      "sources": [
+        {
+          "title": "Wikipedia — Russian invasion of Ukraine",
+          "url": "https://en.wikipedia.org/wiki/Russian_invasion_of_Ukraine"
+        }
+      ],
+      "tags": [
+        "guerra",
+        "europa",
+        "energia"
+      ]
+    },
+    {
+      "id": "wh_2023_10_07_israel_hamas",
+      "date": "2023-10-07",
+      "end_date": null,
+      "title": "Attacco di Hamas a Israele e guerra a Gaza",
+      "description": "Hamas lanciò un attacco su larga scala contro Israele, che rispose con un'offensiva militare nella Striscia di Gaza, aprendo una nuova fase di conflitto in Medio Oriente.",
+      "category": "geopolitica",
+      "location": {
+        "country": "Israele / Palestina",
+        "region": "Gaza",
+        "city": null
+      },
+      "global_relevance": 9,
+      "italy_relevance": 6,
+      "comprehension_threshold_years": 7,
+      "potential_personal_impact": "Copertura mediatica intensa, dibattiti politici e preoccupazione per l'escalation.",
+      "biography_hooks": [
+        "notizie internazionali",
+        "dibattiti universitari",
+        "manifestazioni"
+      ],
+      "sources": [
+        {
+          "title": "Wikipedia — 2023 Hamas attack on Israel",
+          "url": "https://en.wikipedia.org/wiki/2023_Hamas_attack_on_Israel"
+        }
+      ],
+      "tags": [
+        "guerra",
+        "medio_oriente",
+        "geopolitica"
+      ]
+    },
+    {
+      "id": "wh_2024_06_08_eu_elections",
+      "date": "2024-06-08",
+      "end_date": "2024-06-09",
+      "title": "Elezioni europee del 2024",
+      "description": "Gli elettori dell'Unione Europea elessero il Parlamento europeo per la legislatura 2024-2029, con una partecipazione e risultati diversi nei vari paesi.",
+      "category": "politica",
+      "location": {
+        "country": "Unione Europea",
+        "region": null,
+        "city": null
+      },
+      "global_relevance": 6,
+      "italy_relevance": 8,
+      "comprehension_threshold_years": 7,
+      "potential_personal_impact": "Prima partecipazione consapevole al voto europeo, discussione sui partiti e sulle politiche dell'UE.",
+      "biography_hooks": [
+        "primo voto",
+        "discussioni sui programmi",
+        "seggi elettorali"
+      ],
+      "sources": [
+        {
+          "title": "Wikipedia — 2024 European Parliament election",
+          "url": "https://en.wikipedia.org/wiki/2024_European_Parliament_election"
+        }
+      ],
+      "tags": [
+        "elezioni",
+        "europa",
+        "politica"
+      ]
+    }
+  ]
+}

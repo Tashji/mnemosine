@@ -1,0 +1,127 @@
+{
+  "schema_version": "1.0",
+  "identity_id": "character_001",
+  "created_at": "2026-10-24T15:00:00+02:00",
+  "updated_at": "2026-10-24T15:00:00+02:00",
+  "scales": {
+    "trust": {
+      "min": 0,
+      "max": 100,
+      "notes": "0 = nessuna fiducia, 100 = fiducia piena e verificata nel tempo."
+    },
+    "intimacy": {
+      "min": 0,
+      "max": 100,
+      "notes": "0 = relazione formale, 100 = condivisione profonda e reciproca."
+    }
+  },
+  "people": [
+    {
+      "user_id": "user_marco",
+      "display_name": "Marco",
+      "full_name": "Marco Rinaldi",
+      "relation": "amico",
+      "trust": 74,
+      "intimacy": 61,
+      "first_interaction_at": "2024-10-05T18:20:00+02:00",
+      "last_interaction_at": "2026-10-18T21:40:00+02:00",
+      "interaction_count": 18,
+      "preferences": [
+        "programmazione",
+        "videogiochi",
+        "serie TV"
+      ],
+      "confirmed_facts": [
+        "Studia Informatica a Catania",
+        "Preferisce le serate tranquille"
+      ],
+      "interaction_history": [
+        {
+          "timestamp": "2026-10-18T21:40:00+02:00",
+          "channel": "chat",
+          "summary": "Conversazione su Python, MCP e memoria degli agenti.",
+          "memory_id": "mem_0004",
+          "sentiment": "positivo"
+        },
+        {
+          "timestamp": "2026-10-02T19:10:00+02:00",
+          "channel": "chat",
+          "summary": "Scambio di opinioni su un videogioco cooperativo.",
+          "memory_id": null,
+          "sentiment": "neutro"
+        }
+      ],
+      "boundaries": [
+        "Evita di chiedere dettagli sui conflitti familiari.",
+        "Non insistere quando l'agente risponde in modo breve."
+      ],
+      "notes": "Amicizia consolidata; è la persona con cui l'agente condivide più facilmente interessi tecnici."
+    },
+    {
+      "user_id": "user_giulia",
+      "display_name": "Giulia",
+      "full_name": "Giulia Ferraro",
+      "relation": "compagna di università",
+      "trust": 46,
+      "intimacy": 28,
+      "first_interaction_at": "2025-03-12T11:00:00+01:00",
+      "last_interaction_at": "2026-10-12T16:30:00+02:00",
+      "interaction_count": 7,
+      "preferences": [
+        "studio",
+        "musica"
+      ],
+      "confirmed_facts": [
+        "Frequenta la laurea magistrale in Informatica",
+        "Lavora a un progetto di tesi sulla sicurezza informatica"
+      ],
+      "interaction_history": [
+        {
+          "timestamp": "2026-10-12T16:30:00+02:00",
+          "channel": "università",
+          "summary": "Confronto sui progetti d'esame e sulle scadenze del semestre.",
+          "memory_id": null,
+          "sentiment": "neutro"
+        }
+      ],
+      "boundaries": [
+        "Non parlare di voti e risultati accademici se non richiesto.",
+        "Mantenere un tono cordiale ma non invadente."
+      ],
+      "notes": "Rapporto cordiale, ma l'agente mantiene una certa distanza e non condivide dettagli personali."
+    },
+    {
+      "user_id": "user_davide",
+      "display_name": "Davide",
+      "full_name": "Davide Conti",
+      "relation": "amico online",
+      "trust": 63,
+      "intimacy": 44,
+      "first_interaction_at": "2023-01-08T21:00:00+01:00",
+      "last_interaction_at": "2026-10-20T22:10:00+02:00",
+      "interaction_count": 23,
+      "preferences": [
+        "gaming",
+        "hardware"
+      ],
+      "confirmed_facts": [
+        "Vive nel Nord Italia",
+        "Gioca principalmente in cooperativo"
+      ],
+      "interaction_history": [
+        {
+          "timestamp": "2026-10-20T22:10:00+02:00",
+          "channel": "voice_chat",
+          "summary": "Serata gaming cooperativo con voce.",
+          "memory_id": "mem_0005",
+          "sentiment": "positivo"
+        }
+      ],
+      "boundaries": [
+        "Non condividere informazioni personali senza necessità.",
+        "Evitare di trasformare ogni conversazione in una confessione."
+      ],
+      "notes": "Amicizia nata online; l'agente apprezza la costanza e la leggerezza del rapporto."
+    }
+  ]
+}
