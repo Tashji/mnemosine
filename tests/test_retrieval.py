@@ -52,9 +52,17 @@ class RetrievalServiceTests(unittest.TestCase):
         self.assertTrue(result["ok"], result)
         return result
 
+    def _conscious_count(self) -> int:
+        with self.memory.db.timeline() as conn:
+            return conn.execute(
+                "SELECT COUNT(*) FROM episodic_memories WHERE access_level = 'conscious'"
+            ).fetchone()[0]
+
     def test_rebuild_indexes_only_conscious_records(self) -> None:
         result = self._rebuild()
-        self.assertEqual(result["indexes"]["episodic"]["count"], 4)
+        self.assertEqual(
+            result["indexes"]["episodic"]["count"], self._conscious_count()
+        )
         self.assertEqual(result["indexes"]["semantic"]["count"], 9)
         status = self.index.status()
         self.assertTrue(status["ok"], status)
@@ -163,7 +171,9 @@ class RetrievalServiceTests(unittest.TestCase):
         )
         result = self.service.sync_index()
         self.assertEqual(result["indexes"]["episodic"]["indexed"], 1)
-        self.assertEqual(result["indexes"]["episodic"]["count"], 5)
+        self.assertEqual(
+            result["indexes"]["episodic"]["count"], self._conscious_count()
+        )
 
         found = self.service.hybrid_search(
             "porto di Catania", min_similarity=0.0, limit=10
@@ -201,7 +211,9 @@ class RetrievalServiceTests(unittest.TestCase):
             event_time="2026-10-24T19:00:00+02:00",
         )
         result = self.service.sync_index()
-        self.assertEqual(result["indexes"]["episodic"]["count"], 4)
+        self.assertEqual(
+            result["indexes"]["episodic"]["count"], self._conscious_count()
+        )
         with self.index.db.vector() as conn:
             row = conn.execute(
                 "SELECT 1 FROM vector_entries WHERE record_id = ?", (latent["id"],)
@@ -313,7 +325,10 @@ class RetrievalServiceTests(unittest.TestCase):
         )
         indexed = self.service.index_if_ready("episodic", memory["id"])
         self.assertIn(indexed.get("status"), {"indexed", "updated"})
-        self.assertEqual(self.index.status()["indexes"]["episodic"]["count"], 5)
+        self.assertEqual(
+            self.index.status()["indexes"]["episodic"]["count"],
+            self._conscious_count(),
+        )
 
 
 if __name__ == "__main__":

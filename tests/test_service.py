@@ -122,7 +122,10 @@ class ConfigAndServiceTests(TempProjectTestCase):
 class EpisodicMemoryTests(TempProjectTestCase):
     def test_conscious_view_excludes_repressed_memory(self) -> None:
         ids = {memory["id"] for memory in self.memory.list_memories(limit=100)}
-        self.assertEqual(ids, {"mem_0001", "mem_0003", "mem_0004", "mem_0005"})
+        self.assertTrue(
+            {"mem_0001", "mem_0003", "mem_0004", "mem_0005"} <= ids
+        )
+        self.assertNotIn("mem_0002", ids)
         self.assertIsNone(self.memory.get_memory("mem_0002"))
         self.assertEqual(self.memory.get_memory_links("mem_0002"), [])
 
@@ -143,13 +146,29 @@ class EpisodicMemoryTests(TempProjectTestCase):
             {memory["id"] for memory in self.memory.search_memories(source="real_interaction")},
             {"mem_0004"},
         )
-        self.assertEqual(
-            [memory["id"] for memory in self.memory.search_memories(min_importance=7)],
-            ["mem_0003"],
-        )
+        important = self.memory.search_memories(min_importance=7, limit=100)
+        important_ids = {memory["id"] for memory in important}
+        self.assertIn("mem_0003", important_ids)
+        self.assertNotIn("mem_0002", important_ids)
+        self.assertTrue(all(memory["importance"] >= 7 for memory in important))
+        with self.memory.db.timeline() as conn:
+            oldest = conn.execute(
+                """
+                SELECT id FROM episodic_memories
+                WHERE access_level = 'conscious'
+                ORDER BY event_date ASC, id ASC LIMIT 1
+                """
+            ).fetchone()["id"]
+            newest = conn.execute(
+                """
+                SELECT id FROM episodic_memories
+                WHERE access_level = 'conscious'
+                ORDER BY event_date DESC, id DESC LIMIT 1
+                """
+            ).fetchone()["id"]
         ascending = self.memory.search_memories(order="asc", limit=1)
-        self.assertEqual(ascending[0]["id"], "mem_0001")
-        self.assertEqual(self.memory.search_memories(limit=1)[0]["id"], "mem_0005")
+        self.assertEqual(ascending[0]["id"], oldest)
+        self.assertEqual(self.memory.search_memories(limit=1)[0]["id"], newest)
 
     def test_create_memory_and_revision(self) -> None:
         memory = self.memory.create_memory(

@@ -24,15 +24,15 @@ from .semantic import SemanticService
 from .service import MemoryService, ShadowService
 from .vector_index import VectorIndexManager
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = [
+    "DEFAULT_MODEL",
     "AccessDeniedError",
     "AgentMemoryError",
     "ConfigError",
     "ConfigStore",
     "ConflictError",
-    "DEFAULT_MODEL",
     "Database",
     "DatabaseUnavailable",
     "EmbeddingUnavailable",
