@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-191%20passing-2ea043?logo=githubactions&logoColor=white" alt="191 test superati"></a>
+  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-218%20passing-2ea043?logo=githubactions&logoColor=white" alt="218 test superati"></a>
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12">
   <img src="https://img.shields.io/badge/MCP-Model%20Context%20Protocol-6ee7d8" alt="Model Context Protocol">
   <img src="https://img.shields.io/badge/storage-SQLite%20%2B%20FAISS-0b1422" alt="SQLite e FAISS">
@@ -32,7 +32,7 @@ Mnemosine è un sistema di memoria e un'architettura cognitiva simulata per agen
 
 L'obiettivo è un agente coerente nel tempo, capace di distinguere ciò che ha vissuto da ciò che sa, di recuperare il passato quando serve e di mantenere un comportamento stabile anche quando non sta interagendo.
 
-Il progetto ruota attorno al Model Context Protocol: il server espone la memoria all'LLM, mentre i dati restano in file JSON e database SQLite nella directory del profilo.
+Il progetto ruota attorno al Model Context Protocol: il server espone all'LLM la memoria, un browser controllato da whitelist e una cartella di lavoro per i file, mentre i dati restano in file JSON e database SQLite nella directory del profilo.
 
 <a id="funzionalita" name="funzionalita"></a>
 
@@ -47,6 +47,8 @@ Il progetto ruota attorno al Model Context Protocol: il server espone la memoria
 | **Biografia procedurale** | Un passato coerente, generato da età, epoche ed eventi reali. |
 | **Ciclo di vita** | Routine, carico cognitivo, consolidamento e iniziativa autonoma. |
 | **Relazioni** | Fiducia, intimità e storia sintetica delle persone importanti. |
+| **Browser controllato** | Navigazione con Playwright confinata a origini HTTPS in whitelist, con indice numerato dei link per i modelli piccoli. |
+| **File locali** | Sandbox `files/` del profilo per leggere e scrivere testo, senza uscire dalla cartella e senza symlink. |
 | **Dashboard locale** | Consultazione e prima configurazione da browser, con login e HTTPS. |
 | **Sicurezza** | Separazione tra contenuti consci e latenti, filtri temporali e limiti operativi. |
 
@@ -848,9 +850,46 @@ python -m agent_memory.browser --open https://it.wikipedia.org --text
 
 # Salva anche uno screenshot
 python -m agent_memory.browser --open https://it.wikipedia.org --screenshot artifacts/browser.png
+
+# Stampa l'indice numerato dei link consentiti
+python -m agent_memory.browser --open https://it.wikipedia.org --links
 ```
 
-Il server MCP espone `browser_status`, `browser_open`, `browser_read`, `browser_click`, `browser_fill` e `browser_close`. `browser_click` e `browser_fill` richiedono `interaction_enabled`.
+Il server MCP espone `browser_status`, `browser_open`, `browser_read`, `browser_links`, `browser_open_link`, `browser_back`, `browser_click`, `browser_fill` e `browser_close`. `browser_click` e `browser_fill` richiedono `interaction_enabled`.
+
+### 14.7. File locali dell'agente
+
+Il server non è un agente: fornisce capacità a un agente che vive altrove. Oltre alla memoria e al browser espone quindi tre tool sui file, `list_files`, `read_file` e `write_file`, confinati alla cartella `files/` del profilo (`profiles/<nome>/files`).
+
+- Nessun percorso assoluto, nessun `..`, nessun `~`, nessuna lettera di unità e nessun carattere di controllo nel nome.
+
+- Nessun symlink, né sul file né sulle cartelle intermedie: un collegamento che punta fuori dalla sandbox viene rifiutato prima di qualsiasi lettura o scrittura.
+
+- Lettura solo di testo UTF-8 fino a 1 MiB, scrittura fino a 256 KiB, elenchi fino a 200 voci: i file binari e i file troppo grandi vengono rifiutati con un messaggio esplicito, non troncati in silenzio.
+
+- `config/` e `data/` restano fuori portata per costruzione, perché la sandbox è una radice separata e non un filtro applicato al progetto.
+
+- `write_file` non sovrascrive un file esistente senza `overwrite=True` e scrive in modo atomico (file temporaneo e `os.replace`).
+
+Restano volutamente fuori: l'esecuzione di comandi shell, che annullerebbe whitelist e sandbox, e la ricerca web, che richiede un servizio esterno con chiave API. I download passano dal browser, quindi solo da origini in whitelist.
+
+### 14.8. Navigazione pensata per modelli piccoli
+
+Il server MCP può essere collegato a qualunque client e a qualunque modello, compresi i modelli locali da pochi miliardi di parametri. La whitelist non cambia mai — è codice, non buona volontà del modello — ma l'ergonomia dei tool deve reggere anche un contesto piccolo e una pianificazione debole:
+
+- `browser_links` restituisce i link della pagina come **indice numerato** (`1`, `2`, `3`...) e contiene soltanto i link che la whitelist autorizza; `blocked_count` dice quanti sono stati esclusi. Il modello non deve indovinare selettori CSS né scoprire a proprie spese un dominio vietato.
+
+- `browser_open_link` apre un link per numero. È un passo unico e deterministico, al posto di `click` con un selettore inventato.
+
+- `browser_back` torna alla pagina precedente usando una cronologia tenuta dal server, non dal contesto del modello, che due turni dopo non ricorda più dove era.
+
+- Una nuova navigazione invalida l'elenco dei link: un numero non può riferirsi per errore a un'altra pagina.
+
+- `browser_status` riporta `current_url`, `history_count`, `can_go_back` e `links_count`: il modello sa dove si trova senza doverlo dedurre.
+
+- Gli errori insegnano: un URL bloccato elenca le origini consentite, un click fallito rimanda a `browser_links`, e un indice fuori intervallo dice quanti link aveva l'ultimo elenco.
+
+Nessun ramo del codice dipende dal modello usato: sono i client MCP a variare (alcuni troncano i risultati, altri non mostrano il contenuto strutturato), quindi la regola è tenere stato e sicurezza sul server e output prevedibili.
 
 ---
 
@@ -1053,6 +1092,8 @@ La prima tranche è implementata in `agent_memory/routine.py`: genera il piano g
 ### Fase 7 — Relazioni e autonomia web
 
 Integrare il grafo delle relazioni, il recupero dei ricordi relativi ai singoli utenti e l'iniziativa autonoma tramite WhatsApp Web e browser, con contatti e siti in whitelist.
+
+La parte web è implementata: `agent_memory/browser.py` applica la whitelist, la cronologia e l'indice numerato dei link, mentre `agent_memory/files.py` dà all'agente una cartella di lavoro isolata. Restano da implementare WhatsApp Web e il ciclo di iniziativa completo che sceglie tra le due integrazioni.
 
 ### Fase 8 — Sicurezza e affidabilità
 

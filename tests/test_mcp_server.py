@@ -53,6 +53,12 @@ class McpServerTests(unittest.TestCase):
         self.assertIn("create_memory", names)
         self.assertIn("browser_status", names)
         self.assertIn("browser_open", names)
+        self.assertIn("browser_links", names)
+        self.assertIn("browser_open_link", names)
+        self.assertIn("browser_back", names)
+        self.assertIn("list_files", names)
+        self.assertIn("read_file", names)
+        self.assertIn("write_file", names)
         self.assertFalse(any("shadow" in name for name in names))
         self.assertNotIn("get_shadow_traits", names)
         self.assertNotIn("list_shadow_entries", names)
@@ -166,6 +172,12 @@ class McpServerTests(unittest.TestCase):
             def fill(self, selector: str, value: str) -> None:
                 self.url = f"{self.url}#{selector}"
 
+            def links(self) -> list[dict[str, str]]:
+                return [
+                    {"text": "Forum", "url": "https://example.com/forum"},
+                    {"text": "Altrove", "url": "https://evil.test/"},
+                ]
+
             def screenshot(self, path: Path) -> None:
                 path.write_bytes(b"png")
 
@@ -194,6 +206,18 @@ class McpServerTests(unittest.TestCase):
         self.assertEqual(opened["text"], "Test")
         self.assertTrue(opened["truncated"])
 
+        links = call_tool(mcp, "browser_links", {})
+        self.assertEqual(links["count"], 1)
+        self.assertEqual(links["blocked_count"], 1)
+        self.assertEqual(links["links"][0]["index"], 1)
+
+        moved = call_tool(mcp, "browser_open_link", {"index": 1})
+        self.assertEqual(moved["url"], "https://example.com/forum")
+
+        previous = call_tool(mcp, "browser_back", {})
+        self.assertEqual(previous["url"], "https://example.com")
+        self.assertFalse(call_tool(mcp, "browser_status", {})["can_go_back"])
+
         with self.assertRaises(ToolError):
             call_tool(mcp, "browser_click", {"selector": "#send"})
         call_tool(mcp, "browser_close", {})
@@ -209,6 +233,28 @@ class McpServerTests(unittest.TestCase):
                 self.mcp,
                 "browser_open",
                 {"url": "https://example.com"},
+            )
+
+    def test_file_tools_are_sandboxed(self) -> None:
+        created = call_tool(
+            self.mcp, "write_file", {"path": "note/diario.txt", "content": "ciao"}
+        )
+        self.assertEqual(created["path"], "note/diario.txt")
+        self.assertTrue(created["created"])
+
+        read = call_tool(self.mcp, "read_file", {"path": "note/diario.txt"})
+        self.assertEqual(read["text"], "ciao")
+
+        listing = call_tool(self.mcp, "list_files", {})
+        self.assertEqual([entry["name"] for entry in listing["entries"]], ["note"])
+
+        with self.assertRaises(ToolError):
+            call_tool(self.mcp, "read_file", {"path": "../config/identity.json"})
+        with self.assertRaises(ToolError):
+            call_tool(self.mcp, "read_file", {"path": "/etc/passwd"})
+        with self.assertRaises(ToolError):
+            call_tool(
+                self.mcp, "write_file", {"path": "note/diario.txt", "content": "x"}
             )
 
     def test_status_contains_no_shadow_content(self) -> None:

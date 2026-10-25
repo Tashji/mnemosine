@@ -14,6 +14,7 @@ from agent_memory.browser import (
 )
 from agent_memory.errors import (
     BrowserBlockedError,
+    BrowserError,
     BrowserUnavailableError,
     ConfigError,
     ValidationError,
@@ -33,10 +34,14 @@ class FakeBackend:
         final_url: str | None = None,
         title: str = "Pagina di prova",
         text: str = "Contenuto della pagina",
+        links: list[dict[str, str]] | None = None,
+        click_error: Exception | None = None,
     ) -> None:
         self.final_url = final_url
         self.title_text = title
         self.page_text = text
+        self.link_items = links or []
+        self.click_error = click_error
         self.url = ""
         self.opened: list[str] = []
         self.clicked: list[str] = []
@@ -54,10 +59,15 @@ class FakeBackend:
         return self.page_text
 
     def click(self, selector: str) -> None:
+        if self.click_error is not None:
+            raise self.click_error
         self.clicked.append(selector)
 
     def fill(self, selector: str, value: str) -> None:
         self.filled.append((selector, value))
+
+    def links(self) -> list[dict[str, str]]:
+        return list(self.link_items)
 
     def screenshot(self, path: Path) -> None:
         path.write_bytes(b"png")
@@ -283,6 +293,123 @@ class BrowserControllerTests(unittest.TestCase):
             controller.fill("#message", "x" * 4001)
         with self.assertRaises(ValidationError):
             controller.snapshot(max_chars=0)
+
+    def test_blocked_error_lists_allowed_origins(self) -> None:
+        policy = make_policy(["https://example.com", "https://forum.example.org"])
+        with self.assertRaises(BrowserBlockedError) as caught:
+            policy.assert_allowed("https://evil.test")
+        message = str(caught.exception)
+        self.assertIn("Origini consentite", message)
+        self.assertIn("https://example.com", message)
+        self.assertIn("https://forum.example.org", message)
+
+        empty = make_policy([])
+        with self.assertRaises(BrowserBlockedError) as caught_empty:
+            empty.assert_allowed("https://example.com")
+        self.assertIn("Nessuna origine", str(caught_empty.exception))
+
+    def test_links_keep_only_allowed_hosts_and_are_numbered(self) -> None:
+        backend = FakeBackend(
+            links=[
+                {"text": "Forum", "url": "https://example.com/forum"},
+                {"text": "Tracciante", "url": "https://evil.test/pixel"},
+                {"text": "  Duplicato  ", "url": "https://example.com/forum#inizio"},
+                {"text": "", "url": "https://example.com/documenti"},
+            ]
+        )
+        controller = BrowserController(policy=make_policy(), backend=backend)
+        controller.open("https://example.com")
+        result = controller.links()
+        self.assertEqual(result["count"], 2)
+        self.assertEqual(result["blocked_count"], 1)
+        self.assertFalse(result["truncated"])
+        self.assertEqual(
+            [link["index"] for link in result["links"]], [1, 2]
+        )
+        self.assertEqual(result["links"][0]["text"], "Forum")
+        self.assertEqual(result["links"][1]["text"], "https://example.com/documenti")
+
+    def test_links_require_an_open_page(self) -> None:
+        controller = BrowserController(policy=make_policy(), backend=FakeBackend())
+        with self.assertRaises(BrowserUnavailableError):
+            controller.links()
+        with self.assertRaises(ValidationError):
+            controller.links(limit=0)
+
+    def test_open_link_requires_links_first(self) -> None:
+        controller = BrowserController(policy=make_policy(), backend=FakeBackend())
+        controller.open("https://example.com")
+        with self.assertRaises(BrowserUnavailableError) as caught:
+            controller.open_link(1)
+        self.assertIn("browser_links", str(caught.exception))
+
+    def test_open_link_validates_index(self) -> None:
+        backend = FakeBackend(
+            links=[{"text": "Uno", "url": "https://example.com/uno"}]
+        )
+        controller = BrowserController(policy=make_policy(), backend=backend)
+        controller.open("https://example.com")
+        controller.links()
+        with self.assertRaises(ValidationError) as caught:
+            controller.open_link(2)
+        self.assertIn("1 link", str(caught.exception))
+        with self.assertRaises(ValidationError):
+            controller.open_link(True)  # type: ignore[arg-type]
+
+    def test_open_link_navigates_and_updates_history(self) -> None:
+        backend = FakeBackend(
+            links=[{"text": "Forum", "url": "https://example.com/forum"}]
+        )
+        controller = BrowserController(policy=make_policy(), backend=backend)
+        controller.open("https://example.com")
+        controller.links()
+        page = controller.open_link(1, max_chars=4)
+        self.assertEqual(page["text"], "Cont")
+        self.assertEqual(backend.opened, ["https://example.com", "https://example.com/forum"])
+        self.assertEqual(controller.current_url, "https://example.com/forum")
+        self.assertTrue(controller.status()["can_go_back"])
+
+    def test_navigation_invalidates_previous_links(self) -> None:
+        backend = FakeBackend(
+            links=[{"text": "Forum", "url": "https://example.com/forum"}]
+        )
+        controller = BrowserController(policy=make_policy(), backend=backend)
+        controller.open("https://example.com")
+        controller.links()
+        controller.open("https://example.com/altra")
+        with self.assertRaises(BrowserUnavailableError) as caught:
+            controller.open_link(1)
+        self.assertIn("browser_links", str(caught.exception))
+
+    def test_back_returns_to_previous_page(self) -> None:
+        backend = FakeBackend()
+        controller = BrowserController(policy=make_policy(), backend=backend)
+        controller.open("https://example.com")
+        controller.open("https://example.com/forum")
+        page = controller.back()
+        self.assertEqual(page["url"], "https://example.com")
+        self.assertEqual(
+            backend.opened,
+            ["https://example.com", "https://example.com/forum", "https://example.com"],
+        )
+        self.assertFalse(controller.status()["can_go_back"])
+
+    def test_back_without_history_is_explained(self) -> None:
+        controller = BrowserController(policy=make_policy(), backend=FakeBackend())
+        controller.open("https://example.com")
+        with self.assertRaises(BrowserUnavailableError) as caught:
+            controller.back()
+        self.assertIn("browser_open", str(caught.exception))
+
+    def test_click_failure_suggests_links(self) -> None:
+        backend = FakeBackend(click_error=BrowserError("Click non riuscito: timeout"))
+        controller = BrowserController(
+            policy=make_policy(interaction=True), backend=backend
+        )
+        controller.open("https://example.com")
+        with self.assertRaises(BrowserError) as caught:
+            controller.click("a.forum")
+        self.assertIn("browser_links", str(caught.exception))
 
     def test_close_releases_backend(self) -> None:
         backend = FakeBackend()

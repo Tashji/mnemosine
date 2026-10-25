@@ -26,6 +26,7 @@ from mcp.server.fastmcp.exceptions import ToolError
 from .browser import BrowserController
 from .embeddings import Embedder
 from .errors import AgentMemoryError
+from .files import FileSandbox
 from .retrieval import RetrievalService
 from .semantic import SemanticService
 from .service import MemoryService, ShadowService
@@ -44,6 +45,7 @@ def create_server(
     """Costruisce il server MCP con i tool della memoria conscia."""
 
     browser_controller = browser or BrowserController(root)
+    files = FileSandbox(root)
     service = MemoryService(root)
     semantic = SemanticService(root)
     retrieval = RetrievalService(
@@ -57,7 +59,9 @@ def create_server(
             "conoscenze semantiche attive. La ricerca ibrida combina corrispondenze "
             "lessicali e vettoriali. Non esistono tool per leggere o scrivere i "
             "tratti latenti o il diario dell'ombra: quei contenuti sono mediati "
-            "dal motore dell'ombra."
+            "dal motore dell'ombra. Sono disponibili anche i tool ``browser_*`` "
+            "per le origini HTTPS in whitelist e i tool ``list_files``, "
+            "``read_file`` e ``write_file`` per la cartella di lavoro del profilo."
         ),
         host=host,
         port=port,
@@ -480,6 +484,37 @@ def create_server(
             raise ToolError(str(exc)) from exc
 
     @mcp.tool()
+    def browser_links(limit: int = 50) -> dict[str, Any]:
+        """Elenca i link della pagina corrente come indice numerato.
+
+        Contiene solo i link che la whitelist autorizza. Usalo al posto dei
+        selettori CSS: poi apri un link con ``browser_open_link``.
+        """
+
+        try:
+            return browser_controller.links(limit=limit)
+        except AgentMemoryError as exc:
+            raise ToolError(str(exc)) from exc
+
+    @mcp.tool()
+    def browser_open_link(index: int, max_chars: int = 6000) -> dict[str, Any]:
+        """Apre il link numero ``index`` restituito dall'ultimo ``browser_links``."""
+
+        try:
+            return browser_controller.open_link(index, max_chars=max_chars)
+        except AgentMemoryError as exc:
+            raise ToolError(str(exc)) from exc
+
+    @mcp.tool()
+    def browser_back(max_chars: int = 6000) -> dict[str, Any]:
+        """Torna alla pagina precedente della sessione e la restituisce."""
+
+        try:
+            return browser_controller.back(max_chars=max_chars)
+        except AgentMemoryError as exc:
+            raise ToolError(str(exc)) from exc
+
+    @mcp.tool()
     def browser_click(selector: str) -> dict[str, Any]:
         """Clicca un elemento della pagina corrente, se le interazioni sono abilitate."""
 
@@ -505,6 +540,43 @@ def create_server(
         return browser_controller.status()
 
     @mcp.tool()
+    def list_files(path: str = "", limit: int = 200) -> dict[str, Any]:
+        """Elenca file e cartelle nella sandbox dei file dell'agente.
+
+        La sandbox è la cartella ``files`` del profilo: non contiene né la
+        configurazione né i database dell'agente.
+        """
+
+        try:
+            return files.list_files(path, limit=limit)
+        except AgentMemoryError as exc:
+            raise ToolError(str(exc)) from exc
+
+    @mcp.tool()
+    def read_file(path: str, max_chars: int = 20000) -> dict[str, Any]:
+        """Legge un file di testo UTF-8 dalla sandbox dei file dell'agente."""
+
+        try:
+            return files.read_file(path, max_chars=max_chars)
+        except AgentMemoryError as exc:
+            raise ToolError(str(exc)) from exc
+
+    @mcp.tool()
+    def write_file(
+        path: str, content: str, overwrite: bool = False
+    ) -> dict[str, Any]:
+        """Scrive un file di testo nella sandbox dei file dell'agente.
+
+        Non sovrascrive un file esistente senza ``overwrite=True`` e non può
+        uscire dalla sandbox con percorsi assoluti, ``..`` o symlink.
+        """
+
+        try:
+            return files.write_file(path, content, overwrite=overwrite)
+        except AgentMemoryError as exc:
+            raise ToolError(str(exc)) from exc
+
+    @mcp.tool()
     def get_status() -> dict[str, Any]:
         """Restituisce lo stato di configurazione e database, senza contenuti latenti."""
 
@@ -518,6 +590,7 @@ def create_server(
             }
         except AgentMemoryError as exc:
             health["shadow_policy"] = {"ok": False, "error": str(exc)}
+        health["files"] = files.status()
         return health
 
     return mcp

@@ -45,6 +45,9 @@ DEFAULT_TIMEOUT_SECONDS = 30
 MAX_TEXT_CHARS = 50_000
 MAX_SELECTOR_CHARS = 500
 MAX_FILL_CHARS = 4_000
+MAX_HISTORY = 50
+MAX_LINKS = 100
+MAX_LINK_TEXT = 120
 _LOCAL_SUFFIXES = (
     ".localhost",
     ".local",
@@ -300,17 +303,31 @@ class BrowserPolicy:
                 return False
         return True
 
-    def assert_allowed(self, url: str) -> str:
+    def require_enabled(self) -> None:
+        """Errore esplicito quando il browser non è abilitato nella policy."""
+
         if not self.enabled:
             raise BrowserUnavailableError(
                 "Browser disabilitato: abilita browser.enabled e configura "
                 "la whitelist in config/integrations.json."
             )
+
+    def assert_allowed(self, url: str) -> str:
+        self.require_enabled()
         if not self.is_allowed(url):
             raise BrowserBlockedError(
-                "URL non consentito dalla whitelist del browser."
+                "URL non consentito dalla whitelist del browser. "
+                f"{self.allowed_origins_hint()}"
             )
         return url
+
+    def allowed_origins_hint(self) -> str:
+        """Frase pronta con le origini consentite, per messaggi di errore utili."""
+
+        origins = list(self.allowed_origins)
+        if not origins:
+            return "Nessuna origine è configurata in browser.allowed_origins."
+        return "Origini consentite: " + ", ".join(origins) + "."
 
     def is_allowed_websocket(self, url: str) -> bool:
         """Consente solo ``wss://`` verso un host già presente in whitelist."""
@@ -347,6 +364,8 @@ class BrowserBackend(Protocol):
     def click(self, selector: str) -> None: ...
 
     def fill(self, selector: str, value: str) -> None: ...
+
+    def links(self) -> list[dict[str, str]]: ...
 
     def screenshot(self, path: Path) -> None: ...
 
@@ -486,6 +505,27 @@ class PlaywrightBackend:
             raise BrowserError(f"Compilazione non riuscita: {exc}") from exc
         self.url = page.url
 
+    def links(self) -> list[dict[str, str]]:
+        page = self._require_page()
+        try:
+            raw = page.eval_on_selector_all(
+                "a[href]",
+                """els => els.map(el => ({
+                    text: (el.innerText || el.getAttribute('aria-label') || '').trim(),
+                    url: el.href,
+                }))""",
+            )
+        except Exception as exc:
+            raise BrowserError(f"Link non leggibili: {exc}") from exc
+        return [
+            {
+                "text": str(item.get("text") or ""),
+                "url": str(item.get("url") or ""),
+            }
+            for item in raw
+            if isinstance(item, dict)
+        ]
+
     def screenshot(self, path: Path) -> None:
         page = self._require_page()
         try:
@@ -527,12 +567,25 @@ class BrowserController:
         self.root = Path(root).expanduser().resolve() if root else project_root()
         self.policy = policy or BrowserPolicy.from_root(self.root)
         self._backend = backend
+        self._history: list[str] = []
+        self._links: list[str] = []
 
     @property
     def current_url(self) -> str | None:
         if self._backend is None or not self._backend.url:
             return None
         return self._backend.url
+
+    def _active_backend(self) -> BrowserBackend:
+        """Restituisce il backend aperto, o un errore utile per il modello."""
+
+        self.policy.require_enabled()
+        backend = self._backend
+        if backend is None or not backend.url:
+            raise BrowserUnavailableError(
+                "Nessuna pagina aperta: usa prima browser_open."
+            )
+        return backend
 
     def _ensure_backend(self) -> BrowserBackend:
         if self._backend is None:
@@ -559,21 +612,113 @@ class BrowserController:
             )
         return value
 
-    def open(self, url: str, *, max_chars: int = 6_000) -> dict[str, Any]:
-        max_chars = self._max_chars(max_chars)
+    def _remember(self, url: str) -> None:
+        if not url:
+            return
+        if self._history and self._history[-1] == url:
+            return
+        self._history.append(url)
+        if len(self._history) > MAX_HISTORY:
+            del self._history[: len(self._history) - MAX_HISTORY]
+        # Una nuova pagina invalida l'elenco dei link della precedente.
+        self._links = []
+
+    def _navigate(self, url: str, *, max_chars: int, remember: bool = True) -> dict[str, Any]:
         self.policy.assert_allowed(url)
         backend = self._ensure_backend()
         backend.open(url)
         self.policy.assert_allowed(backend.url)
+        if remember:
+            self._remember(backend.url)
         return self.snapshot(max_chars=max_chars)
+
+    def open(self, url: str, *, max_chars: int = 6_000) -> dict[str, Any]:
+        max_chars = self._max_chars(max_chars)
+        return self._navigate(url, max_chars=max_chars)
+
+    def links(self, *, limit: int = 50) -> dict[str, Any]:
+        """Elenca i link della pagina corrente come indice numerato.
+
+        Restano solo i link che la whitelist autorizza: il modello non deve
+        indovinare selettori CSS né scoprire a proprie spese un dominio vietato.
+        """
+
+        if isinstance(limit, bool) or not isinstance(limit, int):
+            raise ValidationError("limit deve essere un intero.")
+        if not 1 <= limit <= MAX_LINKS:
+            raise ValidationError(f"limit deve essere tra 1 e {MAX_LINKS}.")
+        backend = self._active_backend()
+        self.policy.assert_allowed(backend.url)
+
+        seen: set[str] = set()
+        collected: list[dict[str, Any]] = []
+        blocked = 0
+        for link in backend.links():
+            url = str(link.get("url", "")).split("#", 1)[0]
+            if not url or url in seen:
+                continue
+            seen.add(url)
+            if not self.policy.is_allowed(url):
+                blocked += 1
+                continue
+            label = " ".join(str(link.get("text", "")).split())
+            if len(label) > MAX_LINK_TEXT:
+                label = label[: MAX_LINK_TEXT - 1].rstrip() + "…"
+            collected.append(
+                {
+                    "index": len(collected) + 1,
+                    "text": label or url,
+                    "url": url,
+                }
+            )
+        truncated = len(collected) > limit
+        collected = collected[:limit]
+        self._links = [item["url"] for item in collected]
+        return {
+            "url": backend.url,
+            "count": len(collected),
+            "truncated": truncated,
+            "blocked_count": blocked,
+            "links": collected,
+        }
+
+    def open_link(self, index: int, *, max_chars: int = 6_000) -> dict[str, Any]:
+        """Apre il link numero ``index`` restituito da ``browser_links``."""
+
+        max_chars = self._max_chars(max_chars)
+        self.policy.require_enabled()
+        if isinstance(index, bool) or not isinstance(index, int):
+            raise ValidationError("index deve essere un intero.")
+        if not self._links:
+            raise BrowserUnavailableError(
+                "Nessun link da aprire: chiama browser_links; se l'elenco è vuoto, "
+                "usa browser_open con un altro URL consentito."
+            )
+        if not 1 <= index <= len(self._links):
+            raise ValidationError(
+                f"index fuori intervallo: l'ultimo browser_links ha "
+                f"{len(self._links)} link (da 1 a {len(self._links)})."
+            )
+        return self._navigate(self._links[index - 1], max_chars=max_chars)
+
+    def back(self, *, max_chars: int = 6_000) -> dict[str, Any]:
+        """Torna alla pagina precedente della sessione, con la stessa policy."""
+
+        max_chars = self._max_chars(max_chars)
+        self.policy.require_enabled()
+        if len(self._history) < 2:
+            raise BrowserUnavailableError(
+                "Nessuna pagina precedente nella sessione: apri una pagina con "
+                "browser_open."
+            )
+        previous = self._history[-2]
+        self._history.pop()
+        self._links = []
+        return self._navigate(previous, max_chars=max_chars, remember=False)
 
     def snapshot(self, *, max_chars: int = 6_000) -> dict[str, Any]:
         max_chars = self._max_chars(max_chars)
-        backend = self._backend
-        if backend is None or not backend.url:
-            raise BrowserUnavailableError(
-                "Nessuna pagina aperta: usa prima browser_open."
-            )
+        backend = self._active_backend()
         self.policy.assert_allowed(backend.url)
         full_text = backend.text()
         truncated = len(full_text) > max_chars
@@ -585,23 +730,22 @@ class BrowserController:
         }
 
     def click(self, selector: str) -> dict[str, Any]:
-        backend = self._backend
-        if backend is None or not backend.url:
-            raise BrowserUnavailableError(
-                "Nessuna pagina aperta: usa prima browser_open."
-            )
+        backend = self._active_backend()
         selector = self._selector(selector)
         self.policy.assert_interaction_allowed(backend.url)
-        backend.click(selector)
+        try:
+            backend.click(selector)
+        except BrowserError as exc:
+            raise BrowserError(
+                f"{exc} Se non conosci il selettore, usa browser_links e poi "
+                "browser_open_link."
+            ) from exc
         self.policy.assert_allowed(backend.url)
+        self._remember(backend.url)
         return self._page_info()
 
     def fill(self, selector: str, value: str) -> dict[str, Any]:
-        backend = self._backend
-        if backend is None or not backend.url:
-            raise BrowserUnavailableError(
-                "Nessuna pagina aperta: usa prima browser_open."
-            )
+        backend = self._active_backend()
         selector = self._selector(selector)
         if not isinstance(value, str):
             raise ValidationError("Il valore da inserire deve essere testo.")
@@ -615,11 +759,7 @@ class BrowserController:
         return self._page_info()
 
     def screenshot(self, path: str | Path) -> str:
-        backend = self._backend
-        if backend is None or not backend.url:
-            raise BrowserUnavailableError(
-                "Nessuna pagina aperta: usa prima browser_open."
-            )
+        backend = self._active_backend()
         self.policy.assert_allowed(backend.url)
         target = Path(path).expanduser()
         backend.screenshot(target)
@@ -638,6 +778,8 @@ class BrowserController:
         if self._backend is not None:
             self._backend.close()
             self._backend = None
+        self._history = []
+        self._links = []
 
     def status(self) -> dict[str, Any]:
         return {
@@ -647,6 +789,9 @@ class BrowserController:
             "navigation_timeout_seconds": self.policy.timeout_seconds,
             "playwright_available": _playwright_available(),
             "current_url": self.current_url,
+            "history_count": len(self._history),
+            "can_go_back": len(self._history) > 1,
+            "links_count": len(self._links),
         }
 
 
@@ -681,6 +826,11 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="FILE",
         help="Con --open, salva uno screenshot completo della pagina.",
     )
+    parser.add_argument(
+        "--links",
+        action="store_true",
+        help="Con --open, stampa l'indice numerato dei link consentiti.",
+    )
     return parser
 
 
@@ -700,6 +850,8 @@ def main(argv: list[str] | None = None) -> int:
             print(result["text"])
         else:
             print(json.dumps(result, ensure_ascii=False, indent=2))
+        if args.links:
+            print(json.dumps(controller.links(), ensure_ascii=False, indent=2))
         if args.screenshot:
             print(controller.screenshot(args.screenshot))
         return 0

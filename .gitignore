@@ -12,3 +12,7 @@ data/indexes/*.tmp
 
 # Certificato e chiave privata della dashboard locale.
 data/dashboard_tls/
+
+# File scritti dall'agente nella sandbox del profilo.
+files/
+profiles/*/files/

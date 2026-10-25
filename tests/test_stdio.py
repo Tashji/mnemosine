@@ -120,6 +120,38 @@ class StdioTransportTests(unittest.TestCase):
                     "Ricordo creato via stdio",
                 )
 
+                write_result = await session.call_tool(
+                    "write_file", {"path": "appunti/nota.txt", "content": "ciao agente"}
+                )
+                self.assertFalse(write_result.isError)
+                self.assertEqual(
+                    json.loads(write_result.content[0].text)["path"],
+                    "appunti/nota.txt",
+                )
+
+                note_result = await session.call_tool(
+                    "read_file", {"path": "appunti/nota.txt"}
+                )
+                self.assertFalse(note_result.isError)
+                self.assertEqual(
+                    json.loads(note_result.content[0].text)["text"], "ciao agente"
+                )
+
+                escape_result = await session.call_tool(
+                    "read_file", {"path": "../../config/identity.json"}
+                )
+                self.assertTrue(escape_result.isError)
+
+                links_result = await session.call_tool("browser_links", {})
+                self.assertTrue(links_result.isError)
+                self.assertIn("disabilitato", links_result.content[0].text.lower())
+
+                listing_result = await session.call_tool("list_files", {"path": "appunti"})
+                self.assertFalse(listing_result.isError)
+                self.assertEqual(
+                    json.loads(listing_result.content[0].text)["count"], 1
+                )
+
                 status_result = await session.call_tool("get_status", {})
                 self.assertFalse(status_result.isError)
                 status = json.loads(status_result.content[0].text)
