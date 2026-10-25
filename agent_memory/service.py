@@ -25,7 +25,6 @@ from .errors import (
     ValidationError,
 )
 
-
 MEMORY_SOURCES = {
     "real_interaction",
     "generated",
@@ -119,7 +118,7 @@ def _require_datetime(value: Any, field: str) -> str:
             f"{field}: atteso un timestamp ISO 8601 completo di data e ora."
         )
     try:
-        datetime.fromisoformat(value.replace("Z", "+00:00"))
+        datetime.fromisoformat(value)
     except ValueError as exc:
         raise ValidationError(f"{field}: timestamp non valido '{value}'.") from exc
     return value
@@ -130,7 +129,7 @@ def _require_date_bound(value: Any, field: str) -> str:
         raise ValidationError(f"{field}: attesa una data o un timestamp ISO 8601.")
     try:
         if "T" in value:
-            datetime.fromisoformat(value.replace("Z", "+00:00"))
+            datetime.fromisoformat(value)
         else:
             date.fromisoformat(value)
     except ValueError as exc:

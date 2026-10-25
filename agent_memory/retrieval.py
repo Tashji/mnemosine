@@ -31,7 +31,6 @@ from .semantic import SemanticService
 from .service import MemoryService, _clamp_limit, _require_str
 from .vector_index import VectorIndexManager
 
-
 RRF_K = 60
 MAX_SEARCH_LIMIT = 50
 

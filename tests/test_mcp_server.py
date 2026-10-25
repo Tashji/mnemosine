@@ -14,7 +14,6 @@ from mcp.server.fastmcp.exceptions import ToolError
 
 from agent_memory.server import create_server
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import sqlite3
 import shutil
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -12,7 +12,6 @@ from agent_memory.embeddings import DeterministicEmbedder
 from agent_memory.errors import AccessDeniedError, VectorIndexError
 from agent_memory.retrieval import RetrievalService
 from agent_memory.service import ShadowService
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -223,22 +222,24 @@ class RetrievalServiceTests(unittest.TestCase):
         with self.assertRaises(AccessDeniedError):
             self.index.index_one("episodic", "mem_0002", "testo latente")
 
-        with self.assertRaises(sqlite3.IntegrityError):
-            with self.index.db.vector() as conn:
-                with conn:
-                    conn.execute(
-                        """
-                        INSERT INTO vector_entries (
-                            kind, record_id, access_level, text_hash, model,
-                            dimension, indexed_at, updated_at
-                        ) VALUES ('episodic', 'latent_probe', 'latent', 'x',
-                                  'deterministic-test-v1', 128, ?, ?)
-                        """,
-                        (
-                            "2026-10-24T15:00:00+02:00",
-                            "2026-10-24T15:00:00+02:00",
-                        ),
-                    )
+        with (
+            self.assertRaises(sqlite3.IntegrityError),
+            self.index.db.vector() as conn,
+            conn,
+        ):
+            conn.execute(
+                """
+                INSERT INTO vector_entries (
+                    kind, record_id, access_level, text_hash, model,
+                    dimension, indexed_at, updated_at
+                ) VALUES ('episodic', 'latent_probe', 'latent', 'x',
+                          'deterministic-test-v1', 128, ?, ?)
+                """,
+                (
+                    "2026-10-24T15:00:00+02:00",
+                    "2026-10-24T15:00:00+02:00",
+                ),
+            )
 
         results = self.service.hybrid_search(
             "presentazione", min_similarity=0.0, limit=10
@@ -270,12 +271,11 @@ class RetrievalServiceTests(unittest.TestCase):
 
         # Anche un ricordo che diventa latente non deve riemergere da un
         # vettore residuo: la fonte di verità è la vista conscia.
-        with self.index.db.timeline() as conn:
-            with conn:
-                conn.execute(
-                    "UPDATE episodic_memories SET access_level = 'latent' "
-                    "WHERE id = 'mem_0004'"
-                )
+        with self.index.db.timeline() as conn, conn:
+            conn.execute(
+                "UPDATE episodic_memories SET access_level = 'latent' "
+                "WHERE id = 'mem_0004'"
+            )
         with self.index.db.vector() as conn:
             row = conn.execute(
                 "SELECT 1 FROM vector_entries WHERE kind = 'episodic' "

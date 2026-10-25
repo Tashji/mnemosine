@@ -16,13 +16,12 @@ import copy
 import json
 import os
 import threading
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .errors import ConfigError, ValidationError
-
 
 CONFIG_FILENAMES: dict[str, str] = {
     "identity": "identity.json",
@@ -54,7 +53,7 @@ def now_iso(timezone_name: str = DEFAULT_TIMEZONE) -> str:
     try:
         tz = ZoneInfo(timezone_name)
     except (ZoneInfoNotFoundError, ValueError):
-        tz = timezone.utc
+        tz = UTC
     return datetime.now(tz).replace(microsecond=0).isoformat()
 
 
@@ -101,7 +100,7 @@ def _require_iso_datetime(value: Any, path: str) -> None:
     if not isinstance(value, str):
         raise ConfigError(f"{path}: atteso un timestamp ISO 8601 come stringa.")
     try:
-        datetime.fromisoformat(value.replace("Z", "+00:00"))
+        datetime.fromisoformat(value)
     except ValueError as exc:
         raise ConfigError(f"{path}: timestamp non valido '{value}'.") from exc
 
@@ -454,11 +453,12 @@ class ConfigStore:
                 raise ValidationError("identity_id non può essere modificato dallo stato corrente.")
 
             flags_patch = patch.get("flags")
-            if isinstance(flags_patch, dict):
-                if flags_patch.get("shadow_direct_read_enabled") not in (None, False):
-                    raise ValidationError(
-                        "shadow_direct_read_enabled non può essere abilitato dal server."
-                    )
+            if isinstance(flags_patch, dict) and flags_patch.get(
+                "shadow_direct_read_enabled"
+            ) not in (None, False):
+                raise ValidationError(
+                    "shadow_direct_read_enabled non può essere abilitato dal server."
+                )
 
             _deep_merge(state, patch)
             state["identity_id"] = configs["identity"]["identity_id"]

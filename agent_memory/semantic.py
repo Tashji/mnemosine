@@ -34,7 +34,6 @@ from .service import (
     _string_list,
 )
 
-
 KNOWLEDGE_TYPES = {
     "verified_fact",
     "user_provided",
@@ -97,7 +96,7 @@ def _validate_date_or_datetime(value: Any, field: str) -> str | None:
         raise ValidationError(f"{field}: attesa una data o un timestamp ISO 8601.")
     try:
         if "T" in value:
-            datetime.fromisoformat(value.replace("Z", "+00:00"))
+            datetime.fromisoformat(value)
         else:
             date.fromisoformat(value)
     except ValueError as exc:
@@ -471,29 +470,28 @@ class SemanticService:
             f"VALUES ({', '.join('?' for _ in columns)})"
         )
         try:
-            with self.db.semantic() as conn:
-                with conn:
-                    conn.execute(sql, tuple(row[column] for column in columns))
-                    conn.execute(
-                        """
+            with self.db.semantic() as conn, conn:
+                conn.execute(sql, tuple(row[column] for column in columns))
+                conn.execute(
+                    """
                         INSERT INTO semantic_revisions (
                             item_id, revision_number, changed_at, changed_by,
                             change_reason, previous_snapshot_json,
                             new_snapshot_json, cascade_id
                         ) VALUES (?, 1, ?, ?, ?, NULL, ?, ?)
                         """,
-                        (
-                            item_id,
-                            timestamp,
-                            changed_by,
-                            change_reason,
-                            _snapshot(row),
-                            cascade_id,
-                        ),
-                    )
-                    inserted = conn.execute(
-                        "SELECT * FROM semantic_items WHERE id = ?", (item_id,)
-                    ).fetchone()
+                    (
+                        item_id,
+                        timestamp,
+                        changed_by,
+                        change_reason,
+                        _snapshot(row),
+                        cascade_id,
+                    ),
+                )
+                inserted = conn.execute(
+                    "SELECT * FROM semantic_items WHERE id = ?", (item_id,)
+                ).fetchone()
         except sqlite3.IntegrityError as exc:
             raise ConflictError(
                 f"Impossibile creare la conoscenza '{item_id}': {exc}"

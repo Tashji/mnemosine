@@ -29,7 +29,6 @@ from .retrieval import RetrievalService
 from .semantic import SemanticService
 from .service import MemoryService, ShadowService
 
-
 SERVER_NAME = "agent-memory"
 
 

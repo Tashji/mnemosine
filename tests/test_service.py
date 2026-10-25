@@ -12,9 +12,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from agent_memory.errors import AgentMemoryError, ConfigError, NotFoundError, ValidationError
+from agent_memory.errors import (
+    AgentMemoryError,
+    ConfigError,
+    NotFoundError,
+    ValidationError,
+)
 from agent_memory.service import MemoryService, ShadowService
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 

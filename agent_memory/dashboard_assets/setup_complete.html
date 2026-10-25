@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Profilo creato · Mnemosine</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body class="setup-page">
+    <main class="setup-shell setup-shell-wide">
+      <div class="login-brand">
+        <span class="brand-mark" aria-hidden="true">M</span>
+        <div>
+          <strong>Mnemosine</strong>
+          <span>Prima configurazione</span>
+        </div>
+      </div>
+
+      <section class="login-card setup-card setup-complete" aria-labelledby="complete-title">
+        <p class="eyebrow">Profilo creato</p>
+        <h1 id="complete-title">La memoria può iniziare</h1>
+        <p class="login-intro">
+          I cinque file di configurazione e i quattro database sono pronti.
+          Biografia e indice vengono eseguiti in background: questa pagina
+          mostra l’avanzamento e si aggiorna automaticamente.
+        </p>
+
+        <p class="setup-root">
+          Directory del profilo
+          <code>{{root}}</code>
+        </p>
+
+        <p class="login-error" role="alert">{{error}}</p>
+
+        <div id="finalize-job" data-running="{{job_running}}" data-status-url="{{job_status_url}}" hidden></div>
+
+        <section class="setup-progress {{job_class}}" id="finalize-progress" {{job_hidden}} aria-live="polite" aria-busy="{{job_busy}}">
+          <div class="setup-progress-head">
+            <p class="eyebrow">Completamento</p>
+            <span class="setup-progress-state" id="finalize-progress-state">{{job_state_label}}</span>
+          </div>
+          <div
+            class="setup-progress-track"
+            id="finalize-progress-track"
+            role="progressbar"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="{{job_progress}}"
+          >
+            <span class="setup-progress-bar" id="finalize-progress-bar" style="width: {{job_progress}}%"></span>
+          </div>
+          <div class="setup-progress-meta">
+            <p class="setup-progress-summary" id="finalize-progress-summary">{{job_summary}}</p>
+            <span class="setup-progress-percent" id="finalize-progress-percent">{{job_progress}}%</span>
+          </div>
+          <p class="setup-progress-detail" id="finalize-progress-detail">{{job_detail}}</p>
+        </section>
+        <noscript>
+          <p class="setup-noscript">
+            Senza JavaScript non puoi seguire l’avanzamento in tempo reale.
+            Ricarica la pagina per aggiornare lo stato.
+          </p>
+        </noscript>
+
+        <div class="setup-complete-grid">
+          <article class="setup-complete-item {{biography_state}}" data-finalize-step="biography">
+            <p class="eyebrow">Passo 1</p>
+            <h2>Biografia</h2>
+            <p class="setup-complete-text" id="finalize-biography-text" aria-live="polite">{{biography_text}}</p>
+            <p class="setup-hint">
+              Genera i ricordi proceduali dalla nascita a oggi, usando identità,
+              famiglia, formazione, lavoro e contesto storico.
+            </p>
+            <form method="post" action="/setup/finalize" data-finalize-form>
+              <input type="hidden" name="csrf" value="{{csrf_biography}}">
+              <input type="hidden" name="action" value="biography">
+              <button class="login-submit" type="submit" id="finalize-biography-button" {{biography_disabled}}>{{biography_button}}</button>
+            </form>
+          </article>
+
+          <article class="setup-complete-item {{index_state}}" data-finalize-step="index">
+            <p class="eyebrow">Passo 2</p>
+            <h2>Indice vettoriale</h2>
+            <p class="setup-complete-text" id="finalize-index-text" aria-live="polite">{{index_text}}</p>
+            <p class="setup-hint">
+              Costruisce gli indici FAISS dei ricordi e delle conoscenze attive.
+              La prima esecuzione può caricare il modello di embedding locale.
+            </p>
+            <form method="post" action="/setup/finalize" data-finalize-form>
+              <input type="hidden" name="csrf" value="{{csrf_index}}">
+              <input type="hidden" name="action" value="index">
+              <button class="login-submit" type="submit" id="finalize-index-button" {{index_disabled}}>{{index_button}}</button>
+            </form>
+          </article>
+        </div>
+
+        <div class="setup-complete-actions">
+          <a class="button button-quiet" href="/setup/finalize">Ricarica stato</a>
+          <a class="button" href="/">Apri la dashboard</a>
+        </div>
+
+        <p class="login-note">
+          La biografia crea ricordi simulati e non sovrascrive quelli esistenti.
+          L’indice può essere ricostruito in qualsiasi momento dai testi in
+          SQLite. Se un passaggio fallisce, il profilo resta valido e puoi
+          riprovare da questa pagina.
+        </p>
+      </section>
+
+      <p class="login-footer">Mnemosine · profilo pronto</p>
+    </main>
+    <script src="/static/setup_complete.js" defer></script>
+  </body>
+</html>

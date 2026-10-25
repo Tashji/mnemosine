@@ -13,10 +13,13 @@ un indice vettoriale in questa fase.
 
 from __future__ import annotations
 
+import logging
 import os
+import sqlite3
 import threading
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any
 
 import numpy as np
 
@@ -26,12 +29,13 @@ from .embeddings import DEFAULT_DIMENSION, Embedder, FastEmbedder, embedding_tex
 from .errors import (
     AccessDeniedError,
     DatabaseUnavailable,
-    VectorIndexError,
     ValidationError,
+    VectorIndexError,
 )
 
-
 INDEX_KINDS = {"episodic", "semantic"}
+
+logger = logging.getLogger(__name__)
 
 
 def _import_faiss() -> Any:
@@ -129,10 +133,9 @@ class VectorIndexManager:
         error: str | None = None,
     ) -> None:
         timestamp = now_iso(self.config.timezone_name())
-        with self.db.vector() as conn:
-            with conn:
-                conn.execute(
-                    """
+        with self.db.vector() as conn, conn:
+            conn.execute(
+                """
                     INSERT INTO index_meta (
                         kind, model, dimension, metric, count, status,
                         last_error, updated_at
@@ -145,30 +148,29 @@ class VectorIndexManager:
                         last_error = excluded.last_error,
                         updated_at = excluded.updated_at
                     """,
-                    (
-                        kind,
-                        model,
-                        dimension,
-                        count,
-                        status,
-                        error,
-                        timestamp,
-                    ),
-                )
+                (
+                    kind,
+                    model,
+                    dimension,
+                    count,
+                    status,
+                    error,
+                    timestamp,
+                ),
+            )
 
     def _mark_inconsistent(self, kind: str, error: str) -> None:
         try:
             meta = self._meta(kind)
-            with self.db.vector() as conn:
-                with conn:
-                    conn.execute(
-                        """
+            with self.db.vector() as conn, conn:
+                conn.execute(
+                    """
                         UPDATE index_meta
                         SET status = 'inconsistent', last_error = ?, updated_at = ?
                         WHERE kind = ?
                         """,
-                        (error[:1000], now_iso(self.config.timezone_name()), kind),
-                    )
+                    (error[:1000], now_iso(self.config.timezone_name()), kind),
+                )
             if meta is None:
                 # Non c'era uno stato precedente: registra almeno il guasto.
                 self._set_meta(
@@ -179,8 +181,12 @@ class VectorIndexManager:
                     status="inconsistent",
                     error=error,
                 )
-        except Exception:
-            pass
+        except (DatabaseUnavailable, sqlite3.Error) as exc:
+            logger.debug(
+                "Impossibile registrare lo stato inconsistente per l'indice %s.",
+                kind,
+                exc_info=exc,
+            )
 
     # -- caricamento e persistenza -----------------------------------------
 
@@ -312,63 +318,65 @@ class VectorIndexManager:
         dimension: int,
     ) -> int:
         timestamp = now_iso(self.config.timezone_name())
-        with self.db.vector() as conn:
-            with conn:
-                row = conn.execute(
-                    "SELECT faiss_id FROM vector_entries WHERE kind = ? AND record_id = ?",
-                    (kind, record_id),
-                ).fetchone()
-                if row is not None:
-                    conn.execute(
-                        """
+        with self.db.vector() as conn, conn:
+            row = conn.execute(
+                "SELECT faiss_id FROM vector_entries WHERE kind = ? AND record_id = ?",
+                (kind, record_id),
+            ).fetchone()
+            if row is not None:
+                conn.execute(
+                    """
                         UPDATE vector_entries
                         SET text_hash = ?, model = ?, dimension = ?, updated_at = ?
                         WHERE kind = ? AND record_id = ?
                         """,
-                        (
-                            text_hash,
-                            model,
-                            dimension,
-                            timestamp,
-                            kind,
-                            record_id,
-                        ),
-                    )
-                    return int(row["faiss_id"])
-                cursor = conn.execute(
-                    """
+                    (
+                        text_hash,
+                        model,
+                        dimension,
+                        timestamp,
+                        kind,
+                        record_id,
+                    ),
+                )
+                return int(row["faiss_id"])
+            cursor = conn.execute(
+                """
                     INSERT INTO vector_entries (
                         kind, record_id, access_level, text_hash, model,
                         dimension, indexed_at, updated_at
                     ) VALUES (?, ?, 'conscious', ?, ?, ?, ?, ?)
                     """,
-                    (
-                        kind,
-                        record_id,
-                        text_hash,
-                        model,
-                        dimension,
-                        timestamp,
-                        timestamp,
-                    ),
-                )
-                return int(cursor.lastrowid)
+                (
+                    kind,
+                    record_id,
+                    text_hash,
+                    model,
+                    dimension,
+                    timestamp,
+                    timestamp,
+                ),
+            )
+            return int(cursor.lastrowid)
 
     def _delete_entry(self, kind: str, record_id: str) -> None:
-        with self.db.vector() as conn:
-            with conn:
-                conn.execute(
-                    "DELETE FROM vector_entries WHERE kind = ? AND record_id = ?",
-                    (kind, record_id),
-                )
+        with self.db.vector() as conn, conn:
+            conn.execute(
+                "DELETE FROM vector_entries WHERE kind = ? AND record_id = ?",
+                (kind, record_id),
+            )
 
     def _remove_vector(self, index: Any, faiss_id: int) -> None:
         try:
             index.remove_ids(np.asarray([faiss_id], dtype=np.int64))
-        except Exception:
+        except (RuntimeError, TypeError, ValueError) as exc:
             # Se l'ID non è presente, non è un errore: l'indice può essere
             # già parzialmente ricostruito.
-            pass
+            logger.debug(
+                "Rimozione del vettore FAISS %s non riuscita.",
+                faiss_id,
+                exc_info=exc,
+            )
 
     def sync(
         self,
@@ -420,11 +428,10 @@ class VectorIndexManager:
                 dimension = self.embedder.dimension
                 index = self._new_index(dimension)
                 if meta is not None:
-                    with self.db.vector() as conn:
-                        with conn:
-                            conn.execute(
-                                "DELETE FROM vector_entries WHERE kind = ?", (kind,)
-                            )
+                    with self.db.vector() as conn, conn:
+                        conn.execute(
+                            "DELETE FROM vector_entries WHERE kind = ?", (kind,)
+                        )
                 self._invalidate(kind)
                 existing: dict[str, dict[str, Any]] = {}
             else:
@@ -503,25 +510,24 @@ class VectorIndexManager:
                     if entry is not None:
                         self._remove_vector(index, int(entry["faiss_id"]))
                         faiss_id = int(entry["faiss_id"])
-                        with self.db.vector() as conn:
-                            with conn:
-                                conn.execute(
-                                    """
+                        with self.db.vector() as conn, conn:
+                            conn.execute(
+                                """
                                     UPDATE vector_entries
                                     SET text_hash = ?, model = ?, dimension = ?,
                                         indexed_at = ?, updated_at = ?
                                     WHERE kind = ? AND record_id = ?
                                     """,
-                                    (
-                                        text_hash,
-                                        model,
-                                        dimension,
-                                        now_iso(self.config.timezone_name()),
-                                        now_iso(self.config.timezone_name()),
-                                        kind,
-                                        record_id,
-                                    ),
-                                )
+                                (
+                                    text_hash,
+                                    model,
+                                    dimension,
+                                    now_iso(self.config.timezone_name()),
+                                    now_iso(self.config.timezone_name()),
+                                    kind,
+                                    record_id,
+                                ),
+                            )
                         updated += 1
                     else:
                         faiss_id = self._allocate_entry(
@@ -615,25 +621,24 @@ class VectorIndexManager:
                 if entry is not None:
                     self._remove_vector(index, int(entry["faiss_id"]))
                     faiss_id = int(entry["faiss_id"])
-                    with self.db.vector() as conn:
-                        with conn:
-                            conn.execute(
-                                """
+                    with self.db.vector() as conn, conn:
+                        conn.execute(
+                            """
                                 UPDATE vector_entries
                                 SET text_hash = ?, model = ?, dimension = ?,
                                     indexed_at = ?, updated_at = ?
                                 WHERE kind = ? AND record_id = ?
                                 """,
-                                (
-                                    text_hash,
-                                    self.embedder.model_name,
-                                    dimension,
-                                    now_iso(self.config.timezone_name()),
-                                    now_iso(self.config.timezone_name()),
-                                    kind,
-                                    record_id,
-                                ),
-                            )
+                            (
+                                text_hash,
+                                self.embedder.model_name,
+                                dimension,
+                                now_iso(self.config.timezone_name()),
+                                now_iso(self.config.timezone_name()),
+                                kind,
+                                record_id,
+                            ),
+                        )
                 else:
                     faiss_id = self._allocate_entry(
                         kind,
@@ -722,7 +727,12 @@ class VectorIndexManager:
                             index.reconstruct(int(entry["faiss_id"])),
                             dtype=np.float32,
                         ).reshape(-1)
-                    except Exception:
+                    except (RuntimeError, TypeError, ValueError) as exc:
+                        logger.debug(
+                            "Vettore FAISS %s non ricostruibile.",
+                            entry["faiss_id"],
+                            exc_info=exc,
+                        )
                         continue
                     if vector.shape[0] != dimension:
                         continue
@@ -801,8 +811,10 @@ class VectorIndexManager:
                     )
                     if not path_exists:
                         item["issues"] = [
-                            "Indice non costruito: esegui "
-                            "`python -m agent_memory.index --rebuild`."
+                            (
+                                "Indice non costruito: esegui "
+                                "`python -m agent_memory.index --rebuild`."
+                            )
                         ]
                         result["indexes"][kind] = item
                         result["ok"] = False
@@ -874,7 +886,7 @@ class VectorIndexManager:
                             index.reconstruct(int(entry["faiss_id"])),
                             dtype=np.float32,
                         )
-                    except Exception:
+                    except (RuntimeError, TypeError, ValueError):
                         item["issues"].append(
                             f"Vettore mancante per {entry['record_id']} "
                             f"(faiss_id {entry['faiss_id']})."

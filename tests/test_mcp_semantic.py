@@ -17,7 +17,6 @@ from agent_memory.embeddings import DeterministicEmbedder
 from agent_memory.retrieval import RetrievalService
 from agent_memory.server import create_server
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 

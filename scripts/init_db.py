@@ -25,7 +25,6 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG_DIR = ROOT / "config"
 SCHEMA_DIR = ROOT / "schemas"
@@ -107,7 +106,7 @@ def require_iso_datetime(value: Any, path: str) -> None:
     if not isinstance(value, str):
         raise ValidationError(f"{path}: atteso un timestamp ISO 8601 come stringa.")
     try:
-        datetime.fromisoformat(value.replace("Z", "+00:00"))
+        datetime.fromisoformat(value)
     except ValueError as exc:
         raise ValidationError(f"{path}: timestamp non valido '{value}'.") from exc
 

@@ -10,7 +10,6 @@ from pathlib import Path
 from agent_memory.errors import ConflictError, NotFoundError, ValidationError
 from agent_memory.semantic import SemanticService
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -155,12 +154,11 @@ class SemanticServiceTests(unittest.TestCase):
 
         # Un collegamento residuo verso un ricordo diventato latente non
         # deve rivelarne l'esistenza attraverso la superficie semantica.
-        with self.semantic.db.timeline() as conn:
-            with conn:
-                conn.execute(
-                    "UPDATE episodic_memories SET access_level = 'latent' "
-                    "WHERE id = 'mem_0001'"
-                )
+        with self.semantic.db.timeline() as conn, conn:
+            conn.execute(
+                "UPDATE episodic_memories SET access_level = 'latent' "
+                "WHERE id = 'mem_0001'"
+            )
         after_hiding = self.semantic.get_links("sem_0002")["episodic_links"]
         self.assertNotIn("mem_0001", {entry["memory_id"] for entry in after_hiding})
         self.assertIn("mem_0004", {entry["memory_id"] for entry in after_hiding})

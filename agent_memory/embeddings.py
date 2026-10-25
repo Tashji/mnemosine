@@ -15,13 +15,13 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Protocol, Sequence
+from typing import Protocol
 
 import numpy as np
 
 from .errors import EmbeddingUnavailable
-
 
 DEFAULT_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 DEFAULT_DIMENSION = 384
@@ -40,7 +40,7 @@ def _normalize(vectors: np.ndarray) -> np.ndarray:
 def embedding_text_hash(model_name: str, text: str) -> str:
     """Hash stabile del testo e del modello, per evitare re-embedding inutili."""
 
-    payload = f"{model_name}\n{text}".encode("utf-8")
+    payload = f"{model_name}\n{text}".encode()
     return hashlib.sha256(payload).hexdigest()
 
 
@@ -105,7 +105,7 @@ class FastEmbedder:
                     self._dimension = int(entry["dim"])
                     break
             if self._dimension is None:
-                probe = list(self._model.query_embed(["dimension probe"]))[0]
+                probe = next(iter(self._model.query_embed(["dimension probe"])))
                 self._dimension = int(np.asarray(probe).shape[0])
         except Exception as exc:  # fastembed/onnx/huggingface errors
             self._model = None
@@ -146,7 +146,7 @@ class FastEmbedder:
         self._ensure_model()
         assert self._model is not None
         try:
-            vector = list(self._model.query_embed([text]))[0]
+            vector = next(iter(self._model.query_embed([text])))
         except Exception as exc:
             raise EmbeddingUnavailable(
                 f"Generazione dell'embedding della query fallita: {exc}"

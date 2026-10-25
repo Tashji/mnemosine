@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Prima configurazione · Mnemosine</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body class="setup-page">
+    <main class="setup-shell setup-shell-wide">
+      <div class="login-brand">
+        <span class="brand-mark" aria-hidden="true">M</span>
+        <div>
+          <strong>Mnemosine</strong>
+          <span>Prima configurazione</span>
+        </div>
+      </div>
+
+      <section class="login-card setup-card setup-wizard" aria-labelledby="setup-title">
+        <p class="eyebrow">Profilo vuoto</p>
+        <h1 id="setup-title">Crea il primo profilo</h1>
+        <p class="login-intro">
+          Quattro passaggi per definire identità, carattere, relazioni e storia.
+          I dati creano i cinque file di configurazione e i quattro database
+          nella directory indicata. Non vengono inseriti ricordi demo.
+        </p>
+
+        <p class="setup-root">
+          Directory del profilo
+          <code>{{root}}</code>
+        </p>
+
+        <p class="login-error" role="alert">{{error}}</p>
+
+        <form method="post" action="/setup" id="setup-form" novalidate {{form_hidden}}>
+          <input type="hidden" name="csrf" value="{{csrf}}">
+
+          <ol class="wizard-progress" aria-label="Passaggi del profilo">
+            <li>
+              <button type="button" class="wizard-progress-step is-active" data-step-target="1" aria-current="step">
+                <span class="wizard-progress-number">01</span>
+                <span>Identità</span>
+              </button>
+            </li>
+            <li>
+              <button type="button" class="wizard-progress-step" data-step-target="2">
+                <span class="wizard-progress-number">02</span>
+                <span>Carattere</span>
+              </button>
+            </li>
+            <li>
+              <button type="button" class="wizard-progress-step" data-step-target="3">
+                <span class="wizard-progress-number">03</span>
+                <span>Relazioni</span>
+              </button>
+            </li>
+            <li>
+              <button type="button" class="wizard-progress-step" data-step-target="4">
+                <span class="wizard-progress-number">04</span>
+                <span>Storia</span>
+              </button>
+            </li>
+            <li>
+              <button type="button" class="wizard-progress-step" data-step-target="5">
+                <span class="wizard-progress-number">05</span>
+                <span>Riepilogo</span>
+              </button>
+            </li>
+            <li>
+              <button type="button" class="wizard-progress-step" data-step-target="6">
+                <span class="wizard-progress-number">06</span>
+                <span>Completamento</span>
+              </button>
+            </li>
+          </ol>
+
+          <section class="wizard-step is-active" data-step="1" aria-labelledby="step-identity-title">
+            <div class="setup-section-head">
+              <p class="eyebrow">Passaggio 1 di 6</p>
+              <h2 id="step-identity-title">Identità e contesto</h2>
+              <p class="setup-hint">
+                Nome, cognome, data e città di nascita sono obbligatori. Il resto
+                definisce il contesto in cui l’agente è cresciuto.
+              </p>
+            </div>
+
+            <fieldset class="setup-section">
+              <legend>Anagrafica</legend>
+              <div class="setup-grid">
+                <label class="login-field">
+                  <span>Nome</span>
+                  <input name="first_name" maxlength="80" data-required autocomplete="given-name">
+                </label>
+                <label class="login-field">
+                  <span>Cognome</span>
+                  <input name="last_name" maxlength="80" data-required autocomplete="family-name">
+                </label>
+                <label class="login-field">
+                  <span>Data di nascita</span>
+                  <input type="date" name="birth_date" data-required autocomplete="bday">
+                </label>
+                <label class="login-field">
+                  <span>Genere</span>
+                  <select name="gender">{{gender_options}}</select>
+                </label>
+                <label class="login-field">
+                  <span>Pronomi</span>
+                  <select name="pronouns">{{pronoun_options}}</select>
+                </label>
+                <label class="login-field">
+                  <span>Timezone IANA</span>
+                  <select name="timezone" data-required>{{timezone_options}}</select>
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset class="setup-section">
+              <legend>Nascita</legend>
+              <p class="setup-hint">
+                Scegli il paese dall’elenco: il codice ISO viene ricavato
+                automaticamente. Province e regioni sono quelle italiane; per
+                una località estera lascia “Non indicata”.
+              </p>
+              <div class="setup-grid">
+                <label class="login-field">
+                  <span>Città di nascita</span>
+                  <input name="birth_city" maxlength="120" data-required>
+                </label>
+                <label class="login-field">
+                  <span>Paese</span>
+                  <select name="birth_country" data-required>{{birth_country_options}}</select>
+                </label>
+                <label class="login-field">
+                  <span>Regione</span>
+                  <select name="birth_region" data-region-select="birth" data-strict>{{birth_region_options}}</select>
+                </label>
+                <label class="login-field">
+                  <span>Provincia</span>
+                  <select name="birth_province" data-province-select="birth" data-strict>{{birth_province_options}}</select>
+                </label>
+                <label class="login-field">
+                  <span>Cittadinanza (paese)</span>
+                  <select name="citizenship">{{citizenship_options}}</select>
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset class="setup-section">
+              <legend>Residenza</legend>
+              <p class="setup-hint">
+                Se la città resta vuota viene usata quella di nascita. Province e
+                regioni sono quelle italiane; per una località estera lascia
+                “Non indicata”.
+              </p>
+              <div class="setup-grid">
+                <label class="login-field">
+                  <span>Città</span>
+                  <input name="residence_city" maxlength="120">
+                </label>
+                <label class="login-field">
+                  <span>Paese</span>
+                  <select name="residence_country">{{residence_country_options}}</select>
+                </label>
+                <label class="login-field">
+                  <span>Regione</span>
+                  <select name="residence_region" data-region-select="residence" data-strict>{{residence_region_options}}</select>
+                </label>
+                <label class="login-field">
+                  <span>Provincia</span>
+                  <select name="residence_province" data-province-select="residence" data-strict>{{residence_province_options}}</select>
+                </label>
+                <label class="login-field">
+                  <span>Residente dal</span>
+                  <input type="date" name="residence_since">
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset class="setup-section">
+              <legend>Lingue</legend>
+              <p class="setup-hint">Almeno una lingua. Aggiungi le altre con il pulsante.</p>
+              <div class="setup-rows" id="languages-rows"></div>
+              <button class="setup-add" type="button" data-add-row="language">+ Aggiungi lingua</button>
+            </fieldset>
+          </section>
+
+          <section class="wizard-step" data-step="2" aria-labelledby="step-character-title" hidden>
+            <div class="setup-section-head">
+              <p class="eyebrow">Passaggio 2 di 6</p>
+              <h2 id="step-character-title">Carattere</h2>
+              <p class="setup-hint">
+                I quattro assi vanno da 1 a 10. Il valore descrive il punto di
+                equilibrio, non un giudizio. Interessi, valori e abitudini
+                rendono il profilo riconoscibile.
+              </p>
+            </div>
+
+            <fieldset class="setup-section">
+              <legend>Assi della personalità</legend>
+              <div class="setup-sliders">
+                <div class="setup-slider">
+                  <div class="setup-slider-head">
+                    <label for="trait-introversion-extraversion">Introversione ↔ Estroversione</label>
+                    <output for="trait-introversion-extraversion">5</output>
+                  </div>
+                  <input id="trait-introversion-extraversion" type="range" name="trait_introversion_extraversion" min="1" max="10" step="1" value="5" data-trait>
+                  <div class="setup-slider-scale"><span>Introversione</span><span>Estroversione</span></div>
+                  <label class="login-field">
+                    <span>Nota facoltativa</span>
+                    <textarea name="trait_introversion_extraversion_note" maxlength="500" rows="2" placeholder="Come si manifesta questo tratto?"></textarea>
+                  </label>
+                </div>
+
+                <div class="setup-slider">
+                  <div class="setup-slider-head">
+                    <label for="trait-empathy-detachment">Empatia ↔ Distacco</label>
+                    <output for="trait-empathy-detachment">5</output>
+                  </div>
+                  <input id="trait-empathy-detachment" type="range" name="trait_empathy_detachment" min="1" max="10" step="1" value="5" data-trait>
+                  <div class="setup-slider-scale"><span>Empatia</span><span>Distacco</span></div>
+                  <label class="login-field">
+                    <span>Nota facoltativa</span>
+                    <textarea name="trait_empathy_detachment_note" maxlength="500" rows="2" placeholder="Come si manifesta questo tratto?"></textarea>
+                  </label>
+                </div>
+
+                <div class="setup-slider">
+                  <div class="setup-slider-head">
+                    <label for="trait-logic-impulsivity">Logica ↔ Impulsività</label>
+                    <output for="trait-logic-impulsivity">5</output>
+                  </div>
+                  <input id="trait-logic-impulsivity" type="range" name="trait_logic_impulsivity" min="1" max="10" step="1" value="5" data-trait>
+                  <div class="setup-slider-scale"><span>Logica</span><span>Impulsività</span></div>
+                  <label class="login-field">
+                    <span>Nota facoltativa</span>
+                    <textarea name="trait_logic_impulsivity_note" maxlength="500" rows="2" placeholder="Come si manifesta questo tratto?"></textarea>
+                  </label>
+                </div>
+
+                <div class="setup-slider">
+                  <div class="setup-slider-head">
+                    <label for="trait-resilience-sensitivity">Resilienza ↔ Sensibilità</label>
+                    <output for="trait-resilience-sensitivity">5</output>
+                  </div>
+                  <input id="trait-resilience-sensitivity" type="range" name="trait_resilience_sensitivity" min="1" max="10" step="1" value="5" data-trait>
+                  <div class="setup-slider-scale"><span>Resilienza</span><span>Sensibilità</span></div>
+                  <label class="login-field">
+                    <span>Nota facoltativa</span>
+                    <textarea name="trait_resilience_sensitivity_note" maxlength="500" rows="2" placeholder="Come si manifesta questo tratto?"></textarea>
+                  </label>
+                </div>
+              </div>
+            </fieldset>
+
+            <fieldset class="setup-section">
+              <legend>Interessi, valori, abitudini</legend>
+              <div class="setup-grid">
+                <label class="login-field setup-field-wide">
+                  <span>Interessi</span>
+                  <textarea name="interests" rows="4" maxlength="2000" placeholder="Una voce per riga, oppure separate da virgola. Es. fotografia, programmazione, cinema"></textarea>
+                </label>
+                <label class="login-field setup-field-wide">
+                  <span>Valori</span>
+                  <textarea name="values" rows="4" maxlength="2000" placeholder="Es. onestà, lealtà, autonomia, curiosità"></textarea>
+                </label>
+                <label class="login-field setup-field-wide">
+                  <span>Abitudini</span>
+                  <textarea name="habits" rows="4" maxlength="2000" placeholder="Es. legge la sera, rimanda le telefonate, tiene un diario"></textarea>
+                </label>
+              </div>
+            </fieldset>
+          </section>
+
+          <section class="wizard-step" data-step="3" aria-labelledby="step-relations-title" hidden>
+            <div class="setup-section-head">
+              <p class="eyebrow">Passaggio 3 di 6</p>
+              <h2 id="step-relations-title">Relazioni</h2>
+              <p class="setup-hint">
+                La famiglia costruisce il passato; le persone importanti
+                definiscono la rete sociale e il grado di fiducia.
+              </p>
+            </div>
+
+            <fieldset class="setup-section">
+              <legend>Genitori o tutori</legend>
+              <p class="setup-hint">Puoi lasciare vuoto un nome per saltare una riga.</p>
+              <div class="setup-rows" id="parents-rows"></div>
+              <button class="setup-add" type="button" data-add-row="parent">+ Aggiungi genitore o tutore</button>
+            </fieldset>
+
+            <fieldset class="setup-section">
+              <legend>Fratelli e sorelle</legend>
+              <div class="setup-rows" id="siblings-rows"></div>
+              <button class="setup-add" type="button" data-add-row="sibling">+ Aggiungi fratello o sorella</button>
+            </fieldset>
+
+            <fieldset class="setup-section">
+              <label class="login-field">
+                <span>Note sulla famiglia</span>
+                <textarea name="family_notes" rows="3" maxlength="1000" placeholder="Clima familiare, legami importanti, conflitti o distanze."></textarea>
+              </label>
+            </fieldset>
+
+            <fieldset class="setup-section">
+              <legend>Persone importanti</legend>
+              <p class="setup-hint">
+                Amicizie, colleghi o legami significativi. Fiducia e intimità
+                vanno da 0 a 100.
+              </p>
+              <div class="setup-rows" id="people-rows"></div>
+              <button class="setup-add" type="button" data-add-row="person">+ Aggiungi persona importante</button>
+            </fieldset>
+          </section>
+
+          <section class="wizard-step" data-step="4" aria-labelledby="step-history-title" hidden>
+            <div class="setup-section-head">
+              <p class="eyebrow">Passaggio 4 di 6</p>
+              <h2 id="step-history-title">Storia</h2>
+              <p class="setup-hint">
+                Questi dati alimentano la biografia procedurale: più sono
+                coerenti, meno la storia generata sarà generica.
+              </p>
+            </div>
+
+            <fieldset class="setup-section">
+              <legend>Presentazione</legend>
+              <div class="setup-grid">
+                <label class="login-field setup-field-wide">
+                  <span>Sintesi biografica</span>
+                  <textarea name="biography_summary" rows="4" maxlength="2000" placeholder="Origini, famiglia, svolte e direzione della vita."></textarea>
+                </label>
+                <label class="login-field setup-field-wide">
+                  <span>Situazione attuale</span>
+                  <textarea name="current_situation" rows="3" maxlength="2000" placeholder="Dove vive, cosa fa, quali sono le priorità di questo periodo."></textarea>
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset class="setup-section">
+              <legend>Formazione</legend>
+              <div class="setup-rows" id="education-rows"></div>
+              <button class="setup-add" type="button" data-add-row="education">+ Aggiungi formazione</button>
+            </fieldset>
+
+            <fieldset class="setup-section">
+              <legend>Lavoro</legend>
+              <div class="setup-rows" id="work-rows"></div>
+              <button class="setup-add" type="button" data-add-row="work">+ Aggiungi esperienza di lavoro</button>
+            </fieldset>
+          </section>
+
+          <section class="wizard-step" data-step="5" aria-labelledby="step-review-title" hidden>
+            <div class="setup-section-head">
+              <p class="eyebrow">Passaggio 5 di 6</p>
+              <h2 id="step-review-title">Riepilogo</h2>
+              <p class="setup-hint">
+                Controlla il profilo prima della creazione. Puoi tornare a
+                qualsiasi passaggio con i pulsanti in alto o con “Indietro”.
+              </p>
+            </div>
+            <div class="setup-review" id="setup-review" aria-live="polite"></div>
+            <p class="setup-review-note">
+              La creazione è atomica: se qualcosa non è valido, nessun file
+              viene scritto. Nel passaggio successivo puoi generare biografia
+              e indice.
+            </p>
+          </section>
+
+          <section class="wizard-step" data-step="6" aria-labelledby="step-finalize-title" hidden>
+            <div class="setup-section-head">
+              <p class="eyebrow">Passaggio 6 di 6</p>
+              <h2 id="step-finalize-title">Completamento</h2>
+              <p class="setup-hint">
+                Dopo la creazione puoi popolare subito il profilo. Le operazioni
+                partono in background: la pagina di completamento mostra
+                l’avanzamento e si aggiorna da sola. Entrambe sono idempotenti e
+                possono essere ripetute in caso di errore.
+              </p>
+            </div>
+
+            <div class="setup-options">
+              <label class="setup-option">
+                <input type="checkbox" name="generate_biography" value="1" checked>
+                <span>
+                  <strong>Genera la biografia iniziale</strong>
+                  <small>
+                    Crea i ricordi proceduali dalla nascita a oggi. Non
+                    inserisce il dataset demo e non duplica ricordi esistenti.
+                  </small>
+                </span>
+              </label>
+
+              <label class="setup-option">
+                <input type="checkbox" name="build_index" value="1" checked>
+                <span>
+                  <strong>Costruisci l’indice vettoriale</strong>
+                  <small>
+                    Indicizza ricordi e conoscenze attive. La prima esecuzione
+                    può richiedere qualche minuto per caricare il modello locale.
+                  </small>
+                </span>
+              </label>
+            </div>
+
+            <p class="setup-review-note">
+              Se un’operazione fallisce, il profilo resta creato e potrai
+              riprovare dalla pagina di completamento senza rifare il wizard.
+            </p>
+          </section>
+
+          <p class="setup-inline-error" id="setup-error" role="alert" hidden></p>
+
+          <div class="wizard-actions">
+            <button class="button button-quiet" type="button" id="wizard-back" disabled>Indietro</button>
+            <button class="login-submit wizard-next" type="button" id="wizard-next">Avanti</button>
+            <button class="login-submit wizard-submit" type="submit" id="wizard-submit" hidden>Crea profilo e completa</button>
+          </div>
+        </form>
+
+        <p class="login-note">
+          La creazione usa gli stessi controlli e lo stesso lock di
+          <code>python -m agent_memory.profile init</code>. Non sovrascrive un
+          profilo esistente. Il passaggio finale genera la biografia e l’indice;
+          entrambi restano disponibili anche dalla riga di comando.
+        </p>
+        <noscript>
+          <p class="setup-noscript">
+            Il wizard interattivo richiede JavaScript. Senza JavaScript usa
+            <code>python -m agent_memory.profile init --interactive</code> per
+            creare il profilo da terminale.
+          </p>
+        </noscript>
+      </section>
+
+      <p class="login-footer">Mnemosine · prima configurazione del profilo</p>
+    </main>
+
+    <div id="setup-values" data-values="{{values_json}}" hidden></div>
+
+    <template id="language-row-template">
+      <div class="setup-row" data-row="language">
+        <div class="setup-row-grid setup-row-grid-language">
+          <label class="login-field">
+            <span>Lingua</span>
+            <select name="language___INDEX___code">
+              <option value="">Scegli una lingua</option>
+              {{language_options}}
+            </select>
+          </label>
+          <label class="login-field">
+            <span>Livello</span>
+            <select name="language___INDEX___level">
+              <option value="">Scegli il livello</option>
+              {{language_level_options}}
+            </select>
+          </label>
+        </div>
+        <button class="setup-row-remove" type="button" data-remove-row aria-label="Rimuovi lingua">Rimuovi</button>
+      </div>
+    </template>
+
+    <template id="parent-row-template">
+      <div class="setup-row" data-row="parent">
+        <p class="setup-row-title">Genitore o tutore</p>
+        <div class="setup-row-grid setup-row-grid-relations">
+          <label class="login-field">
+            <span>Nome</span>
+            <input name="parent___INDEX___first_name" maxlength="80">
+          </label>
+          <label class="login-field">
+            <span>Cognome</span>
+            <input name="parent___INDEX___last_name" maxlength="80">
+          </label>
+          <label class="login-field">
+            <span>Relazione</span>
+            <input name="parent___INDEX___relation" maxlength="30" value="genitore">
+          </label>
+          <label class="login-field">
+            <span>Data di nascita</span>
+            <input type="date" name="parent___INDEX___birth_date">
+          </label>
+          <label class="login-field">
+            <span>Occupazione</span>
+            <input name="parent___INDEX___occupation" maxlength="120">
+          </label>
+          <label class="login-field setup-field-wide">
+            <span>Note</span>
+            <textarea name="parent___INDEX___notes" rows="2" maxlength="1000" placeholder="Rapporto, carattere, distanza o presenza."></textarea>
+          </label>
+        </div>
+        <button class="setup-row-remove" type="button" data-remove-row aria-label="Rimuovi genitore">Rimuovi</button>
+      </div>
+    </template>
+
+    <template id="sibling-row-template">
+      <div class="setup-row" data-row="sibling">
+        <div class="setup-row-grid setup-row-grid-relations">
+          <label class="login-field">
+            <span>Nome</span>
+            <input name="sibling___INDEX___first_name" maxlength="80">
+          </label>
+          <label class="login-field">
+            <span>Cognome</span>
+            <input name="sibling___INDEX___last_name" maxlength="80">
+          </label>
+          <label class="login-field">
+            <span>Relazione</span>
+            <select name="sibling___INDEX___relation">
+              <option value="sorella">Sorella</option>
+              <option value="fratello">Fratello</option>
+              <option value="sorellastra">Sorellastra</option>
+              <option value="fratellastro">Fratellastro</option>
+              <option value="altro">Altro</option>
+            </select>
+          </label>
+          <label class="login-field">
+            <span>Data di nascita</span>
+            <input type="date" name="sibling___INDEX___birth_date">
+          </label>
+          <label class="login-field">
+            <span>Occupazione</span>
+            <input name="sibling___INDEX___occupation" maxlength="120">
+          </label>
+          <label class="login-field setup-field-wide">
+            <span>Note</span>
+            <textarea name="sibling___INDEX___notes" rows="2" maxlength="1000" placeholder="Rapporto, vicinanza, conflitti."></textarea>
+          </label>
+        </div>
+        <button class="setup-row-remove" type="button" data-remove-row aria-label="Rimuovi fratello o sorella">Rimuovi</button>
+      </div>
+    </template>
+
+    <template id="person-row-template">
+      <div class="setup-row" data-row="person">
+        <div class="setup-row-grid setup-row-grid-relations">
+          <label class="login-field">
+            <span>Nome</span>
+            <input name="person___INDEX___display_name" maxlength="80">
+          </label>
+          <label class="login-field">
+            <span>Relazione</span>
+            <input name="person___INDEX___relation" maxlength="60" placeholder="amico, collega, mentore…">
+          </label>
+          <label class="login-field">
+            <span>Fiducia (0–100)</span>
+            <input type="number" name="person___INDEX___trust" min="0" max="100" step="1" value="50">
+          </label>
+          <label class="login-field">
+            <span>Intimità (0–100)</span>
+            <input type="number" name="person___INDEX___intimacy" min="0" max="100" step="1" value="50">
+          </label>
+          <label class="login-field setup-field-wide">
+            <span>Note</span>
+            <textarea name="person___INDEX___notes" rows="2" maxlength="1000" placeholder="Come si conoscono, cosa condividono, confini."></textarea>
+          </label>
+        </div>
+        <button class="setup-row-remove" type="button" data-remove-row aria-label="Rimuovi persona importante">Rimuovi</button>
+      </div>
+    </template>
+
+    <template id="education-row-template">
+      <div class="setup-row" data-row="education">
+        <div class="setup-row-grid setup-row-grid-history">
+          <label class="login-field setup-field-wide">
+            <span>Istituto</span>
+            <input name="education___INDEX___institution" maxlength="160">
+          </label>
+          <label class="login-field setup-field-wide">
+            <span>Titolo o qualifica</span>
+            <input name="education___INDEX___qualification" maxlength="160">
+          </label>
+          <label class="login-field">
+            <span>Anno di inizio</span>
+            <input type="number" name="education___INDEX___start_year" min="1900" max="2100" step="1">
+          </label>
+          <label class="login-field">
+            <span>Anno di fine</span>
+            <input type="number" name="education___INDEX___end_year" min="1900" max="2100" step="1" placeholder="vuoto se in corso">
+          </label>
+          <label class="login-field">
+            <span>Luogo</span>
+            <input name="education___INDEX___location" maxlength="120">
+          </label>
+        </div>
+        <button class="setup-row-remove" type="button" data-remove-row aria-label="Rimuovi formazione">Rimuovi</button>
+      </div>
+    </template>
+
+    <template id="work-row-template">
+      <div class="setup-row" data-row="work">
+        <div class="setup-row-grid setup-row-grid-history">
+          <label class="login-field setup-field-wide">
+            <span>Ruolo</span>
+            <input name="work___INDEX___role" maxlength="160">
+          </label>
+          <label class="login-field setup-field-wide">
+            <span>Organizzazione</span>
+            <input name="work___INDEX___organization" maxlength="160">
+          </label>
+          <label class="login-field">
+            <span>Anno di inizio</span>
+            <input type="number" name="work___INDEX___start_year" min="1900" max="2100" step="1">
+          </label>
+          <label class="login-field">
+            <span>Anno di fine</span>
+            <input type="number" name="work___INDEX___end_year" min="1900" max="2100" step="1" placeholder="vuoto se attuale">
+          </label>
+          <label class="login-field">
+            <span>Luogo</span>
+            <input name="work___INDEX___location" maxlength="120">
+          </label>
+        </div>
+        <button class="setup-row-remove" type="button" data-remove-row aria-label="Rimuovi esperienza di lavoro">Rimuovi</button>
+      </div>
+    </template>
+
+    <script src="/static/setup.js" defer></script>
+  </body>
+</html>

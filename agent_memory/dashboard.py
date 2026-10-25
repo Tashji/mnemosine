@@ -1,8 +1,13 @@
-"""Dashboard amministrativa locale, di sola lettura.
+"""Dashboard amministrativa locale.
 
 Il modulo espone una piccola applicazione HTTP su loopback che legge i
-database e i file di configurazione già usati dai servizi. Non modifica
-ricordi, conoscenze, tratti o storico: le uniche operazioni sono letture.
+database e i file di configurazione già usati dai servizi. Le uniche
+scritture applicative sono la creazione iniziale del profilo e, su richiesta
+dal passaggio finale del wizard, la generazione della biografia e la
+costruzione dell'indice vettoriale. Queste ultime due vengono eseguite in un
+thread di background: la pagina di completamento segue lo stato con polling.
+Ricordi, conoscenze, tratti e storico non vengono modificati dalle altre
+viste.
 
 Uso:
     python -m agent_memory.dashboard
@@ -17,7 +22,10 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import secrets
 import sys
+import threading
+import time
 import traceback
 import webbrowser
 from collections.abc import Iterable
@@ -29,23 +37,385 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
+from .biography import BiographyService
+from .config import project_root
 from .dashboard_auth import SESSION_COOKIE, DashboardAuth, resolve_auth
 from .dashboard_tls import DashboardTLS, ensure_dashboard_tls
 from .db import decode_memory
-from .errors import AgentMemoryError, NotFoundError, ValidationError
+from .errors import AgentMemoryError, ConfigError, NotFoundError, ValidationError
 from .evolution import EvolutionService
+from .profile import (
+    PROFILE_STATE_INCOMPLETE,
+    PROFILE_STATE_MISSING,
+    PROFILE_STATE_READY,
+    _profile_lock,
+    build_profile_args,
+    create_profile,
+    profile_state,
+)
+from .retrieval import RetrievalService
 from .semantic import KNOWLEDGE_TYPES, SEMANTIC_STATUSES, SemanticService
 from .service import MEMORY_SOURCES, MemoryService, ShadowService
+from .setup_options import (
+    COUNTRIES,
+    GENDER_OPTIONS,
+    ITALIAN_PROVINCES,
+    ITALIAN_REGIONS,
+    LANGUAGE_LEVEL_OPTIONS,
+    LANGUAGES,
+    PRONOUN_OPTIONS,
+    timezone_groups,
+)
 
 ASSETS_DIR = Path(__file__).resolve().parent / "dashboard_assets"
 ACCESS_LEVELS = {"conscious", "latent", "repressed"}
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 MAX_TIMELINE_ROWS = 500
 MAX_SEMANTIC_ROWS = 100
-MAX_FORM_BYTES = 4096
+MAX_FORM_BYTES = 64 * 1024
 LOGIN_PATH = "/login"
 LOGOUT_PATH = "/logout"
+SETUP_PATH = "/setup"
+FINALIZE_PATH = "/setup/finalize"
+FINALIZE_STATUS_PATH = "/setup/finalize/status"
 SESSION_PATH = "/api/session"
+FORM_TOKEN_TTL = 30 * 60
+FINALIZE_ACTIONS = ("biography", "index")
+FINALIZE_LABELS = {
+    "biography": "Biografia",
+    "index": "Indice vettoriale",
+}
+FINALIZE_RUNNING_TEXT = {
+    "biography": "Generazione dei ricordi biografici in corso…",
+    "index": (
+        "Costruzione dell'indice in corso. La prima esecuzione può "
+        "richiedere qualche minuto per caricare il modello locale."
+    ),
+}
+
+
+class _FinalizeJob:
+    """Stato condiviso di un completamento eseguito in background."""
+
+    def __init__(self, actions: Iterable[str]) -> None:
+        selected = set(actions)
+        ordered = tuple(
+            action for action in FINALIZE_ACTIONS if action in selected
+        )
+        if not ordered:
+            raise ValidationError("Nessuna operazione di completamento scelta.")
+        self.id = secrets.token_urlsafe(9)
+        self.actions = ordered
+        self._started_at = time.monotonic()
+        self._finished_at: float | None = None
+        self._state = "running"
+        self._steps = [
+            {
+                "key": action,
+                "label": FINALIZE_LABELS[action],
+                "state": "pending",
+                "text": "In attesa.",
+            }
+            for action in ordered
+        ]
+        self._lock = threading.Lock()
+
+    def is_running(self) -> bool:
+        with self._lock:
+            return self._state == "running"
+
+    def mark_running(self, action: str) -> None:
+        with self._lock:
+            step = self._step(action)
+            step["state"] = "running"
+            step["text"] = FINALIZE_RUNNING_TEXT[action]
+
+    def mark_finished(self, action: str, result: dict[str, Any]) -> None:
+        state, text = _finalize_result_view(action, result)
+        with self._lock:
+            step = self._step(action)
+            step["state"] = "success" if state == "is-success" else "error"
+            step["text"] = text
+
+    def fail(self, action: str, message: str) -> None:
+        with self._lock:
+            step = self._step(action)
+            step["state"] = "error"
+            step["text"] = message
+
+    def finish(self, error: str = "") -> None:
+        with self._lock:
+            for step in self._steps:
+                if step["state"] in {"pending", "running"}:
+                    step["state"] = "error"
+                    step["text"] = error or "Operazione interrotta."
+            self._state = "done"
+            self._finished_at = time.monotonic()
+
+    def snapshot(self) -> dict[str, Any]:
+        with self._lock:
+            now = self._finished_at or time.monotonic()
+            completed = sum(
+                step["state"] in {"success", "error"} for step in self._steps
+            )
+            running = any(step["state"] == "running" for step in self._steps)
+            if self._state == "done":
+                progress = 100
+            else:
+                progress = min(
+                    95,
+                    round(
+                        (completed + (0.45 if running else 0.0))
+                        / len(self._steps)
+                        * 100
+                    ),
+                )
+            return {
+                "id": self.id,
+                "state": self._state,
+                "ok": self._state == "done"
+                and all(step["state"] == "success" for step in self._steps),
+                "progress": progress,
+                "elapsed": round(now - self._started_at, 1),
+                "steps": [dict(step) for step in self._steps],
+            }
+
+    def _step(self, action: str) -> dict[str, Any]:
+        for step in self._steps:
+            if step["key"] == action:
+                return step
+        raise ValidationError(f"Azione di completamento non valida: {action}.")
+
+
+class _FormTokenStore:
+    """Token CSRF monouso per i moduli senza sessione autenticata."""
+
+    def __init__(self, ttl: int = FORM_TOKEN_TTL) -> None:
+        self._ttl = ttl
+        self._tokens: dict[str, float] = {}
+        self._lock = threading.Lock()
+
+    def issue(self) -> str:
+        token = secrets.token_urlsafe(24)
+        now = time.monotonic()
+        with self._lock:
+            self._tokens = {
+                key: expires
+                for key, expires in self._tokens.items()
+                if expires > now
+            }
+            self._tokens[token] = now + self._ttl
+        return token
+
+    def consume(self, token: str | None) -> bool:
+        if not token:
+            return False
+        now = time.monotonic()
+        with self._lock:
+            expires = self._tokens.pop(token, None)
+            return expires is not None and expires > now
+
+
+def _finalize_actions_from_form(form: dict[str, str]) -> list[str]:
+    actions: list[str] = []
+    if form.get("generate_biography") == "1":
+        actions.append("biography")
+    if form.get("build_index") == "1":
+        actions.append("index")
+    return actions
+
+
+def _option_tag(value: str, label: str, selected: str) -> str:
+    mark = " selected" if value == selected else ""
+    escaped = html.escape(value, quote=True)
+    return f'<option value="{escaped}"{mark}>{html.escape(label)}</option>'
+
+
+def _select_options(
+    options: Iterable[tuple[str, str]], selected: str
+) -> str:
+    entries = list(options)
+    if selected and all(value != selected for value, _ in entries):
+        # Un valore non più in elenco (per esempio un profilo precedente)
+        # resta visibile invece di essere sostituito in silenzio.
+        entries.append((selected, selected))
+    return "".join(
+        _option_tag(value, label, selected) for value, label in entries
+    )
+
+
+def _country_options(selected: str, *, empty_label: str = "") -> str:
+    options: list[tuple[str, str]] = []
+    if empty_label:
+        options.append(("", empty_label))
+    # Il valore inviato è il nome italiano: è quello che finisce in
+    # identity.json, mentre il codice ISO viene ricavato dal server.
+    options.extend((name, name) for _code, name in COUNTRIES)
+    return _select_options(options, selected)
+
+
+def _region_options(selected: str) -> str:
+    """Menu delle regioni italiane; la voce vuota è una scelta esplicita."""
+
+    parts = [_option_tag("", "Non indicata", selected)]
+    parts.extend(
+        _option_tag(region, region, selected) for region in ITALIAN_REGIONS
+    )
+    return "".join(parts)
+
+
+def _province_options(selected: str) -> str:
+    """Menu delle province italiane, raggruppate per regione."""
+
+    selected_code = selected.strip().upper()
+    parts = [_option_tag("", "Non indicata", selected_code)]
+    current_region = ""
+    for code, name, region in ITALIAN_PROVINCES:
+        if region != current_region:
+            if current_region:
+                parts.append("</optgroup>")
+            parts.append(f'<optgroup label="{html.escape(region)}">')
+            current_region = region
+        mark = " selected" if code == selected_code else ""
+        parts.append(
+            f'<option value="{code}" data-region="{html.escape(region, quote=True)}"'
+            f"{mark}>{html.escape(name)} ({code})</option>"
+        )
+    if current_region:
+        parts.append("</optgroup>")
+    return "".join(parts)
+
+
+def _language_options(selected: str = "") -> str:
+    return _select_options(
+        (
+            (code, f"{name[:1].upper()}{name[1:]} ({code})")
+            for code, name in LANGUAGES
+        ),
+        selected,
+    )
+
+
+def _timezone_options(selected: str) -> str:
+    groups = timezone_groups()
+    known = {zone for _, zones in groups for zone in zones}
+    parts: list[str] = []
+    if selected and selected not in known:
+        parts.append(_option_tag(selected, selected, selected))
+    for label, zones in groups:
+        parts.append(f'<optgroup label="{html.escape(label)}">')
+        parts.extend(_option_tag(zone, zone, selected) for zone in zones)
+        parts.append("</optgroup>")
+    return "".join(parts)
+
+
+def _biography_result_view(result: dict[str, Any]) -> tuple[str, str]:
+    if result.get("ok"):
+        data = result.get("result") or {}
+        return (
+            "is-success",
+            (
+                f"{data.get('created', 0)} ricordi creati, "
+                f"{data.get('skipped', 0)} già presenti, "
+                f"{data.get('total', 0)} in timeline."
+            ),
+        )
+    return "is-error", str(result.get("error") or "Errore nella biografia.")
+
+
+def _index_payload_view(payload: dict[str, Any] | None) -> tuple[str, str]:
+    payload = payload or {}
+    indexes = payload.get("indexes") or {}
+    parts = []
+    for kind, label in (("episodic", "ricordi"), ("semantic", "conoscenze")):
+        item = indexes.get(kind) or {}
+        count = item.get("count", item.get("indexed", 0))
+        parts.append(f"{label}: {count}")
+    counts = ", ".join(parts)
+    items = list(indexes.values())
+    statuses = {str(item.get("status", "")) for item in items}
+    has_ready = any(
+        item.get("status") == "ready" and int(item.get("count", 0)) > 0
+        for item in items
+    )
+    has_error = any(
+        item.get("error")
+        or item.get("status") in {"stale", "inconsistent"}
+        for item in items
+    )
+    # Un archivio semantico vuoto non deve impedire di considerare
+    # pronto l'indice episodico appena costruito.
+    if payload.get("ok") or (has_ready and not has_error):
+        return "is-success", f"Indice pronto ({counts})."
+    issues: list[str] = []
+    for item in items:
+        for issue in item.get("issues") or []:
+            text = str(issue)
+            if text not in issues:
+                issues.append(text)
+        if item.get("error"):
+            text = str(item["error"])
+            if text not in issues:
+                issues.append(text)
+    if not items or statuses == {"empty"}:
+        return (
+            "is-pending",
+            "Indice non ancora pronto. Esegui la costruzione.",
+        )
+    detail = "; ".join(issues[:3])
+    return (
+        "is-error" if has_error else "is-pending",
+        "Indice non pronto. " + (detail or "Esegui la costruzione."),
+    )
+
+
+def _index_result_view(result: dict[str, Any]) -> tuple[str, str]:
+    if not result.get("ok"):
+        return "is-error", str(result.get("error") or "Errore nell'indice.")
+    return _index_payload_view(result.get("result") or {})
+
+
+def _format_index_errors(result: dict[str, Any]) -> str:
+    errors: list[str] = []
+    for kind, item in (result.get("indexes") or {}).items():
+        if item.get("error"):
+            errors.append(f"{kind}: {item['error']}")
+        for issue in item.get("issues") or []:
+            errors.append(f"{kind}: {issue}")
+    return "; ".join(errors) or "Costruzione dell'indice non riuscita."
+
+
+def _finalize_result_view(
+    action: str, result: dict[str, Any]
+) -> tuple[str, str]:
+    if action == "biography":
+        return _biography_result_view(result)
+    if action == "index":
+        return _index_result_view(result)
+    raise ValidationError(f"Azione di completamento non valida: {action}.")
+
+
+def _step_state_class(state: str) -> str:
+    return {
+        "pending": "is-pending",
+        "running": "is-running",
+        "success": "is-success",
+        "error": "is-error",
+    }.get(state, "is-pending")
+
+
+def _finalize_button_label(action: str, state: str) -> str:
+    if action == "biography":
+        if state == "success":
+            return "Rigenera biografia"
+        if state == "running":
+            return "Generazione in corso…"
+        return "Genera biografia"
+    if state == "success":
+        return "Ricostruisci indice"
+    if state == "running":
+        return "Costruzione in corso…"
+    return "Costruisci indice"
 
 
 def _default_port(scheme: str) -> int:
@@ -171,15 +541,57 @@ def _loads_snapshot(value: str | None) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
-class DashboardData:
-    """Letture aggregate per l'interfaccia amministrativa."""
+class _DashboardServices:
+    """Servizi caricati solo quando il profilo è pronto."""
 
-    def __init__(self, root: str | Path | None = None):
+    def __init__(self, root: Path) -> None:
         self.memory = MemoryService(root)
         self.semantic = SemanticService(root)
         self.shadow = ShadowService(root)
         self.evolution_service = EvolutionService(root)
-        self.root = self.memory.root
+
+
+class DashboardData:
+    """Letture aggregate per l'interfaccia amministrativa."""
+
+    def __init__(self, root: str | Path | None = None):
+        self.root = (
+            Path(root).expanduser().resolve() if root is not None else project_root()
+        )
+        self._services: _DashboardServices | None = None
+        self._services_lock = threading.Lock()
+
+    def profile_status(self) -> str:
+        return profile_state(self.root)
+
+    def reload(self) -> None:
+        with self._services_lock:
+            self._services = None
+
+    def _ensure_services(self) -> _DashboardServices:
+        services = self._services
+        if services is None:
+            with self._services_lock:
+                if self._services is None:
+                    self._services = _DashboardServices(self.root)
+                services = self._services
+        return services
+
+    @property
+    def memory(self) -> MemoryService:
+        return self._ensure_services().memory
+
+    @property
+    def semantic(self) -> SemanticService:
+        return self._ensure_services().semantic
+
+    @property
+    def shadow(self) -> ShadowService:
+        return self._ensure_services().shadow
+
+    @property
+    def evolution_service(self) -> EvolutionService:
+        return self._ensure_services().evolution_service
 
     # -- panoramica ---------------------------------------------------------
 
@@ -660,11 +1072,108 @@ class DashboardHTTPServer(ThreadingHTTPServer):
         self.tls = tls
         self.trusted_origins = trusted_origins
         self.allow_null_origin = allow_null_origin
+        self.form_tokens = _FormTokenStore()
+        self._finalize_lock = threading.Lock()
+        self._finalize_job: _FinalizeJob | None = None
         super().__init__(server_address, DashboardRequestHandler)
         if tls is not None:
             self.socket = tls.context.wrap_socket(
                 self.socket, server_side=True
             )
+
+    def start_finalize_job(
+        self, actions: Iterable[str]
+    ) -> _FinalizeJob | None:
+        """Avvia biografia e indice in un thread, senza bloccare la risposta."""
+
+        requested = set(actions)
+        selected = tuple(
+            action for action in FINALIZE_ACTIONS if action in requested
+        )
+        if not selected:
+            return None
+        with self._finalize_lock:
+            current = self._finalize_job
+            if current is not None and current.is_running():
+                return current
+            job = _FinalizeJob(selected)
+            self._finalize_job = job
+        thread = threading.Thread(
+            target=self._run_finalize_job,
+            args=(job,),
+            name="mnemosine-finalize",
+            daemon=True,
+        )
+        thread.start()
+        return job
+
+    def finalize_snapshot(self) -> dict[str, Any] | None:
+        with self._finalize_lock:
+            job = self._finalize_job
+        return job.snapshot() if job is not None else None
+
+    def _run_finalize_job(self, job: _FinalizeJob) -> None:
+        try:
+            for action in job.actions:
+                job.mark_running(action)
+                try:
+                    result = self._execute_finalize_action(action)
+                except Exception as exc:  # noqa: BLE001 - il job non deve morire in silenzio
+                    traceback.print_exc(file=sys.stderr)
+                    job.fail(action, f"Errore imprevisto: {exc}")
+                else:
+                    job.mark_finished(action, result)
+                    self._log_finalize_result(action, result)
+                finally:
+                    self.data.reload()
+        finally:
+            job.finish("Operazione interrotta.")
+
+    def _execute_finalize_action(self, action: str) -> dict[str, Any]:
+        if action == "biography":
+            return self._execute_biography()
+        if action == "index":
+            return self._execute_index()
+        raise ValidationError(f"Azione di completamento non valida: {action}.")
+
+    def _execute_biography(self) -> dict[str, Any]:
+        try:
+            with _profile_lock(self.data.root):
+                result = BiographyService(self.data.root).apply()
+        except AgentMemoryError as exc:
+            return {"ok": False, "error": str(exc)}
+        return {"ok": True, "result": result}
+
+    def _execute_index(self) -> dict[str, Any]:
+        try:
+            with _profile_lock(self.data.root):
+                result = RetrievalService(self.data.root).sync_index(
+                    rebuild=True
+                )
+        except AgentMemoryError as exc:
+            return {"ok": False, "error": str(exc)}
+        if not result.get("ok"):
+            return {
+                "ok": False,
+                "error": _format_index_errors(result),
+                "result": result,
+            }
+        return {"ok": True, "result": result}
+
+    def _log_finalize_result(
+        self, action: str, result: dict[str, Any]
+    ) -> None:
+        if self.quiet or not result.get("ok"):
+            return
+        if action == "biography":
+            data = result.get("result") or {}
+            sys.stderr.write(
+                "Biografia generata dalla dashboard: "
+                f"{data.get('created', 0)} nuovi ricordi\n"
+            )
+        else:
+            sys.stderr.write("Indice vettoriale costruito dalla dashboard.\n")
+        sys.stderr.flush()
 
 
 class DashboardRequestHandler(BaseHTTPRequestHandler):
@@ -708,6 +1217,36 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 )
                 return
 
+            if path == FINALIZE_PATH:
+                self._handle_finalize_page()
+                return
+            if path == SETUP_PATH:
+                self._handle_setup_page()
+                return
+            if path == FINALIZE_STATUS_PATH:
+                self._handle_finalize_status()
+                return
+
+            profile_status = self.server.data.profile_status()
+            if path == "/api/health":
+                self._send_json({"ok": True, "profile": profile_status})
+                return
+            if profile_status != PROFILE_STATE_READY:
+                if path.startswith("/api/"):
+                    self._send_json(
+                        {
+                            "error": (
+                                "Profilo non configurato. Completa la prima "
+                                "configurazione."
+                            ),
+                            "profile": profile_status,
+                        },
+                        status=HTTPStatus.SERVICE_UNAVAILABLE,
+                    )
+                else:
+                    self._redirect(SETUP_PATH)
+                return
+
             if path == "/":
                 self._serve_file("index.html")
             elif path == "/api/overview":
@@ -741,8 +1280,6 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 )
             elif path == "/api/evolution":
                 self._send_json(self.server.data.evolution())
-            elif path == "/api/health":
-                self._send_json({"ok": True})
             else:
                 self._send_json(
                     {"error": "Risorsa non trovata."},
@@ -793,6 +1330,21 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 self._handle_login_post()
             elif path == LOGOUT_PATH:
                 self._handle_logout()
+            elif path in {SETUP_PATH, FINALIZE_PATH}:
+                if (
+                    self.server.auth is not None
+                    and not self._is_authenticated()
+                ):
+                    self._discard_body()
+                    self._send_json(
+                        {"error": "Autenticazione richiesta."},
+                        status=HTTPStatus.UNAUTHORIZED,
+                    )
+                    return
+                if path == FINALIZE_PATH:
+                    self._handle_finalize_post()
+                else:
+                    self._handle_setup_post()
             else:
                 self._send_json(
                     {"error": "Metodo non consentito."},
@@ -904,6 +1456,358 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             return
         auth.revoke_session(self._session_token())
         self._redirect(LOGIN_PATH, cookie=self._expired_cookie())
+
+    # -- prima configurazione -----------------------------------------------
+
+    def _handle_setup_page(self) -> None:
+        status = self.server.data.profile_status()
+        if status == PROFILE_STATE_READY:
+            self._redirect("/")
+            return
+        if status == PROFILE_STATE_INCOMPLETE:
+            self._render_setup_page(
+                error=(
+                    "La directory contiene un profilo incompleto. Non verrà "
+                    "sovrascritta: usa `profile init --force` da terminale."
+                ),
+                status=HTTPStatus.CONFLICT,
+                form_visible=False,
+            )
+            return
+        self._render_setup_page()
+
+    def _render_setup_page(
+        self,
+        values: dict[str, str] | None = None,
+        error: str = "",
+        *,
+        status: HTTPStatus = HTTPStatus.OK,
+        form_visible: bool = True,
+    ) -> None:
+        try:
+            template = (self.server.assets_dir / "setup.html").read_text(
+                encoding="utf-8"
+            )
+        except OSError:
+            self._send_json(
+                {"error": "Pagina di configurazione non disponibile."},
+                status=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+            return
+
+        preserved = {
+            key: value
+            for key, value in (values or {}).items()
+            if key != "csrf"
+        }
+        payload = json.dumps(preserved, ensure_ascii=False)
+        birth_country = preserved.get("birth_country") or "Italia"
+        residence_country = preserved.get("residence_country") or ""
+        citizenship = preserved.get("citizenship") or "Italia"
+        birth_region = preserved.get("birth_region") or ""
+        birth_province = preserved.get("birth_province") or ""
+        residence_region = preserved.get("residence_region") or ""
+        residence_province = preserved.get("residence_province") or ""
+        timezone_name = preserved.get("timezone") or "Europe/Rome"
+        gender = preserved.get("gender") or "non specificato"
+        pronouns = preserved.get("pronouns") or ""
+        page = (
+            template.replace(
+                "{{csrf}}", html.escape(self.server.form_tokens.issue())
+            )
+            .replace("{{root}}", html.escape(str(self.server.data.root)))
+            .replace("{{error}}", html.escape(error))
+            .replace("{{form_hidden}}", "" if form_visible else "hidden")
+            .replace(
+                "{{gender_options}}",
+                _select_options(GENDER_OPTIONS, gender),
+            )
+            .replace(
+                "{{pronoun_options}}",
+                _select_options(PRONOUN_OPTIONS, pronouns),
+            )
+            .replace("{{timezone_options}}", _timezone_options(timezone_name))
+            .replace(
+                "{{birth_country_options}}",
+                _country_options(birth_country),
+            )
+            .replace(
+                "{{birth_region_options}}",
+                _region_options(birth_region),
+            )
+            .replace(
+                "{{birth_province_options}}",
+                _province_options(birth_province),
+            )
+            .replace(
+                "{{residence_region_options}}",
+                _region_options(residence_region),
+            )
+            .replace(
+                "{{residence_province_options}}",
+                _province_options(residence_province),
+            )
+            .replace(
+                "{{residence_country_options}}",
+                _country_options(
+                    residence_country,
+                    empty_label="Uguale al paese di nascita",
+                ),
+            )
+            .replace(
+                "{{citizenship_options}}",
+                _country_options(citizenship),
+            )
+            .replace("{{language_options}}", _language_options())
+            .replace(
+                "{{language_level_options}}",
+                _select_options(LANGUAGE_LEVEL_OPTIONS, ""),
+            )
+            .replace("{{values_json}}", html.escape(payload, quote=True))
+        )
+        self._send_html(page, status=status)
+
+    def _handle_setup_post(self) -> None:
+        form = self._read_form()
+        status = self.server.data.profile_status()
+        if status == PROFILE_STATE_READY:
+            self._redirect("/")
+            return
+        if status != PROFILE_STATE_MISSING:
+            self._render_setup_page(
+                values=form,
+                error=(
+                    "La directory contiene un profilo incompleto. Non verrà "
+                    "sovrascritta: usa `profile init --force` da terminale."
+                ),
+                status=HTTPStatus.CONFLICT,
+                form_visible=False,
+            )
+            return
+        if not self.server.form_tokens.consume(form.get("csrf", "")):
+            self._render_setup_page(
+                values=form,
+                error="Modulo scaduto o non valido. Riprova.",
+                status=HTTPStatus.BAD_REQUEST,
+            )
+            return
+        try:
+            args = build_profile_args(form)
+            create_profile(self.server.data.root, args, force=False)
+        except (ConfigError, ValidationError) as exc:
+            self._render_setup_page(
+                values=form,
+                error=str(exc),
+                status=HTTPStatus.BAD_REQUEST,
+            )
+            return
+
+        self.server.data.reload()
+        if not self.server.quiet:
+            sys.stderr.write(
+                f"Profilo creato dalla dashboard: {self.server.data.root}\n"
+            )
+            sys.stderr.flush()
+
+        actions = _finalize_actions_from_form(form)
+        if actions:
+            self.server.start_finalize_job(actions)
+        self._redirect(FINALIZE_PATH)
+
+    # -- completamento del profilo ------------------------------------------
+
+    def _handle_finalize_page(self) -> None:
+        if self.server.data.profile_status() != PROFILE_STATE_READY:
+            self._redirect(SETUP_PATH)
+            return
+        self._render_finalize_page()
+
+    def _handle_finalize_status(self) -> None:
+        status = self.server.data.profile_status()
+        if status != PROFILE_STATE_READY:
+            self._send_json(
+                {
+                    "ok": False,
+                    "profile": status,
+                    "job": None,
+                    "error": "Profilo non configurato.",
+                },
+                status=HTTPStatus.CONFLICT,
+            )
+            return
+        self._send_json(
+            {
+                "ok": True,
+                "profile": status,
+                "job": self.server.finalize_snapshot(),
+            }
+        )
+
+    def _handle_finalize_post(self) -> None:
+        form = self._read_form()
+        if self.server.data.profile_status() != PROFILE_STATE_READY:
+            self._redirect(SETUP_PATH)
+            return
+        if not self.server.form_tokens.consume(form.get("csrf", "")):
+            self._render_finalize_page(
+                error="Modulo scaduto o non valido. Riprova.",
+                status=HTTPStatus.BAD_REQUEST,
+            )
+            return
+
+        action = form.get("action")
+        if action not in FINALIZE_ACTIONS:
+            self._render_finalize_page(
+                error="Azione di completamento non riconosciuta.",
+                status=HTTPStatus.BAD_REQUEST,
+            )
+            return
+        self.server.start_finalize_job((action,))
+        self._redirect(FINALIZE_PATH)
+
+    def _biography_view(self) -> tuple[str, str]:
+        try:
+            count = int(self.server.data.overview()["counts"]["memories"])
+        except AgentMemoryError as exc:
+            return "is-error", str(exc)
+        if count:
+            return "is-success", f"{count} ricordi presenti nella timeline."
+        return (
+            "is-pending",
+            "Nessun ricordo biografico: la timeline è ancora vuota.",
+        )
+
+    def _index_view(self) -> tuple[str, str]:
+        try:
+            payload = RetrievalService(self.server.data.root).index.status()
+        except AgentMemoryError as exc:
+            return "is-error", str(exc)
+        return _index_payload_view(payload)
+
+    def _render_finalize_page(
+        self,
+        *,
+        error: str = "",
+        status: HTTPStatus = HTTPStatus.OK,
+    ) -> None:
+        if self.server.data.profile_status() != PROFILE_STATE_READY:
+            self._redirect(SETUP_PATH)
+            return
+        try:
+            template = (self.server.assets_dir / "setup_complete.html").read_text(
+                encoding="utf-8"
+            )
+        except OSError:
+            self._send_json(
+                {"error": "Pagina di completamento non disponibile."},
+                status=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+            return
+        job = self.server.finalize_snapshot()
+        job_running = bool(job and job.get("state") == "running")
+        steps = {step["key"]: step for step in job["steps"]} if job else {}
+        biography_step = steps.get("biography")
+        index_step = steps.get("index")
+        if biography_step:
+            biography_state = _step_state_class(biography_step["state"])
+            biography_text = biography_step["text"]
+        else:
+            biography_state, biography_text = self._biography_view()
+        if index_step:
+            index_state = _step_state_class(index_step["state"])
+            index_text = index_step["text"]
+        else:
+            index_state, index_text = self._index_view()
+        if job:
+            elapsed_label = f"{float(job['elapsed']):.1f}".replace(
+                ".", ","
+            )
+            if job_running:
+                job_class = "is-running"
+                job_state_label = "In corso"
+                job_summary = (
+                    "La pagina si aggiorna automaticamente mentre il "
+                    "completamento procede."
+                )
+                job_detail = (
+                    "La prima costruzione dell'indice può richiedere qualche "
+                    "minuto per caricare il modello locale."
+                )
+            elif job.get("ok"):
+                job_class = "is-success"
+                job_state_label = "Completato"
+                job_summary = (
+                    f"Completamento terminato in {elapsed_label} s."
+                )
+                job_detail = "Puoi riprovare o aprire la dashboard."
+            else:
+                job_class = "is-error"
+                job_state_label = "Terminato con errori"
+                job_summary = (
+                    "Completamento terminato con errori in "
+                    f"{elapsed_label} s."
+                )
+                job_detail = (
+                    "Il profilo resta valido; riprova l'operazione non "
+                    "riuscita."
+                )
+            job_hidden = ""
+            job_progress = str(job["progress"])
+        else:
+            job_class = "is-pending"
+            job_state_label = "Non avviato"
+            job_summary = "Nessun completamento in corso."
+            job_detail = "Scegli un'operazione per popolare il profilo."
+            job_hidden = "hidden"
+            job_progress = "0"
+        biography_state_name = biography_state.removeprefix("is-")
+        index_state_name = index_state.removeprefix("is-")
+        page = (
+            template.replace("{{root}}", html.escape(str(self.server.data.root)))
+            .replace("{{error}}", html.escape(error))
+            .replace("{{job_hidden}}", job_hidden)
+            .replace("{{job_class}}", html.escape(job_class))
+            .replace("{{job_progress}}", job_progress)
+            .replace("{{job_state_label}}", html.escape(job_state_label))
+            .replace("{{job_summary}}", html.escape(job_summary))
+            .replace("{{job_detail}}", html.escape(job_detail))
+            .replace(
+                "{{job_running}}", "1" if job_running else "0"
+            )
+            .replace("{{job_busy}}", "true" if job_running else "false")
+            .replace(
+                "{{job_status_url}}", html.escape(FINALIZE_STATUS_PATH)
+            )
+            .replace("{{biography_state}}", html.escape(biography_state))
+            .replace("{{biography_text}}", html.escape(biography_text))
+            .replace(
+                "{{biography_button}}",
+                html.escape(
+                    _finalize_button_label(
+                        "biography", biography_state_name
+                    )
+                ),
+            )
+            .replace(
+                "{{biography_disabled}}",
+                "disabled" if job_running else "",
+            )
+            .replace("{{index_state}}", html.escape(index_state))
+            .replace("{{index_text}}", html.escape(index_text))
+            .replace(
+                "{{index_button}}",
+                html.escape(_finalize_button_label("index", index_state_name)),
+            )
+            .replace(
+                "{{index_disabled}}", "disabled" if job_running else ""
+            )
+            .replace(
+                "{{csrf_biography}}",
+                html.escape(self.server.form_tokens.issue()),
+            )
+            .replace("{{csrf_index}}", html.escape(self.server.form_tokens.issue()))
+        )
+        self._send_html(page, status=status)
 
     def _render_login_page(
         self,
@@ -1128,7 +2032,11 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
     def _serve_file(self, name: str) -> None:
         candidate = (self.server.assets_dir / name).resolve()
-        if name == "login.html" or candidate.name == "login.html":
+        if candidate.name in {
+            "login.html",
+            "setup.html",
+            "setup_complete.html",
+        }:
             self._send_json(
                 {"error": "File non trovato."},
                 status=HTTPStatus.NOT_FOUND,
@@ -1206,8 +2114,8 @@ def create_server(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Dashboard amministrativa locale e di sola lettura per "
-            "timeline, tratti, conoscenze ed evoluzioni."
+            "Dashboard amministrativa locale per timeline, tratti, "
+            "conoscenze ed evoluzioni, con prima configurazione del profilo."
         ),
         epilog=(
             "Su un host non loopback l'autenticazione è sempre attiva: se non "
@@ -1374,7 +2282,11 @@ def main(argv: list[str] | None = None) -> int:
             "Autenticazione disattivata: accesso consentito solo da loopback.",
             flush=True,
         )
-    print("Sola lettura. Premi CTRL+C per terminare.", flush=True)
+    print(
+        "Lettura dati. Scrittura consentita per configurazione, biografia e indice.",
+        flush=True,
+    )
+    print("Premi CTRL+C per terminare.", flush=True)
     if args.open:
         webbrowser.open(url)
     try:

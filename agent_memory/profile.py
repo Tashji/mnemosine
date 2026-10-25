@@ -29,7 +29,7 @@ import sys
 import tempfile
 import time
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, BinaryIO
@@ -41,7 +41,13 @@ else:
     import fcntl
 
 from .config import CONFIG_FILENAMES, ConfigStore
-from .errors import AgentMemoryError, ConfigError
+from .errors import AgentMemoryError, ConfigError, ValidationError
+from .setup_options import (
+    country_code,
+    italian_province,
+    italian_region,
+    language_name,
+)
 
 PROFILE_VERSION = "1.0"
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -56,12 +62,18 @@ DATABASE_FILES = (
     "semantic_memory.db",
     "vector_index.db",
 )
+PROFILE_STATE_MISSING = "missing"
+PROFILE_STATE_INCOMPLETE = "incomplete"
+PROFILE_STATE_READY = "ready"
 TRAIT_LABELS = {
     "introversion_extraversion": ("introversione", "estroversione"),
     "empathy_detachment": ("empatia", "distacco"),
     "logic_impulsivity": ("logica", "impulsività"),
     "resilience_sensitivity": ("resilienza", "sensibilità"),
 }
+MAX_SETUP_ROWS = 20
+MAX_TEXT_FIELD = 2000
+LANGUAGE_CODE_RE = re.compile(r"^[a-z]{2,3}(?:-[a-z0-9]{2,8})?$")
 _LOCK_BUSY_ERRNOS = (errno.EACCES, errno.EAGAIN, errno.EDEADLK)
 
 
@@ -100,6 +112,603 @@ def _timezone(value: str) -> str:
     return value
 
 
+def profile_state(root: str | Path) -> str:
+    """Classifica una directory come profilo assente, incompleto o pronto."""
+
+    target = Path(root).expanduser().resolve()
+    config_paths = [
+        target / "config" / name for name in CONFIG_FILENAMES.values()
+    ]
+    database_paths = [target / "data" / name for name in DATABASE_FILES]
+    paths = config_paths + database_paths
+    if not any(path.exists() for path in paths):
+        return PROFILE_STATE_MISSING
+    if all(path.is_file() for path in paths):
+        return PROFILE_STATE_READY
+    return PROFILE_STATE_INCOMPLETE
+
+
+def _form_text(values: Mapping[str, Any], name: str, default: str = "") -> str:
+    raw = values.get(name, default)
+    if raw is None:
+        return default
+    if not isinstance(raw, str):
+        raw = str(raw)
+    return raw.strip()
+
+
+def _form_limited(
+    values: Mapping[str, Any],
+    name: str,
+    label: str,
+    *,
+    default: str = "",
+    maximum: int = MAX_TEXT_FIELD,
+) -> str:
+    value = _form_text(values, name, default)
+    if len(value) > maximum:
+        raise ValidationError(
+            f"{label}: massimo {maximum} caratteri."
+        )
+    return value
+
+
+def _form_int(
+    values: Mapping[str, Any],
+    name: str,
+    label: str,
+    *,
+    default: int | None = None,
+    minimum: int | None = None,
+    maximum: int | None = None,
+) -> int | None:
+    raw = _form_text(values, name)
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValidationError(f"{label}: atteso un numero intero.") from exc
+    if minimum is not None and value < minimum:
+        raise ValidationError(f"{label}: valore minimo {minimum}.")
+    if maximum is not None and value > maximum:
+        raise ValidationError(f"{label}: valore massimo {maximum}.")
+    return value
+
+
+def _form_date(
+    values: Mapping[str, Any],
+    name: str,
+    label: str,
+) -> date | None:
+    raw = _form_text(values, name)
+    if not raw:
+        return None
+    try:
+        parsed = date.fromisoformat(raw)
+    except ValueError as exc:
+        raise ValidationError(
+            f"{label}: data non valida {raw!r}. Usa YYYY-MM-DD."
+        ) from exc
+    if parsed > date.today():
+        raise ValidationError(f"{label}: la data non può essere nel futuro.")
+    return parsed
+
+
+def _form_entries(values: Mapping[str, Any], name: str) -> list[str]:
+    raw = _form_text(values, name)
+    if not raw:
+        return []
+    entries: list[str] = []
+    for item in re.split(r"[,;\n]+", raw):
+        cleaned = item.strip()
+        if cleaned and cleaned not in entries:
+            entries.append(cleaned)
+    return entries
+
+
+def _row_indexes(values: Mapping[str, Any], prefix: str) -> list[int]:
+    pattern = re.compile(rf"^{re.escape(prefix)}_(\d+)_")
+    indexes = {
+        int(match.group(1))
+        for key in values
+        if (match := pattern.match(str(key)))
+    }
+    if len(indexes) > MAX_SETUP_ROWS:
+        raise ValidationError(
+            f"Troppe righe in {prefix}: massimo {MAX_SETUP_ROWS}."
+        )
+    return sorted(indexes)
+
+
+def _has_row_values(
+    values: Mapping[str, Any], prefix: str, index: int, fields: tuple[str, ...]
+) -> bool:
+    return any(
+        _form_text(values, f"{prefix}_{index}_{field}")
+        for field in fields
+    )
+
+
+def _parse_languages(values: Mapping[str, Any]) -> list[dict[str, str]]:
+    indexes = _row_indexes(values, "language")
+    if not indexes:
+        return [{"code": "it", "name": "italiano", "level": "madrelingua"}]
+    languages: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for index in indexes:
+        if not _has_row_values(
+            values, "language", index, ("code", "name", "level")
+        ):
+            continue
+        code = _form_text(values, f"language_{index}_code").lower()
+        name = _form_text(values, f"language_{index}_name")
+        if code and not name:
+            name = (
+                language_name(code)
+                or language_name(code.split("-", 1)[0])
+                or ""
+            )
+        level = _form_text(values, f"language_{index}_level")
+        if not code or not name:
+            raise ValidationError(
+                "Lingue: scegli una lingua dall'elenco per ogni riga inserita."
+            )
+        if not LANGUAGE_CODE_RE.fullmatch(code):
+            raise ValidationError(
+                f"Lingue: codice non valido {code!r}. Usa un codice ISO come it, en o pt-BR."
+            )
+        if code in seen:
+            raise ValidationError(f"Lingue: codice duplicato {code!r}.")
+        seen.add(code)
+        languages.append(
+            {
+                "code": code,
+                "name": name,
+                "level": level or "non specificato",
+            }
+        )
+    if not languages:
+        raise ValidationError("Inserisci almeno una lingua.")
+    return languages
+
+
+def _parse_parents(values: Mapping[str, Any]) -> list[dict[str, str]] | None:
+    indexes = _row_indexes(values, "parent")
+    if not indexes:
+        return None
+    parents: list[dict[str, str]] = []
+    for index in indexes:
+        fields = ("first_name", "last_name", "relation", "birth_date", "occupation", "notes")
+        if not _has_row_values(values, "parent", index, fields):
+            continue
+        first_name = _form_text(values, f"parent_{index}_first_name")
+        if not first_name:
+            raise ValidationError("Familiari: il nome del genitore è obbligatorio.")
+        parent = {
+            "first_name": first_name,
+            "last_name": _form_text(values, f"parent_{index}_last_name"),
+            "relation": _form_text(values, f"parent_{index}_relation") or "genitore",
+            "occupation": _form_text(values, f"parent_{index}_occupation"),
+            "notes": _form_limited(
+                values, f"parent_{index}_notes", "Note familiare"
+            ),
+        }
+        birth_date = _form_date(
+            values, f"parent_{index}_birth_date", "Data di nascita del genitore"
+        )
+        if birth_date is not None:
+            parent["birth_date"] = birth_date.isoformat()
+        parents.append(parent)
+    return parents
+
+
+def _parse_siblings(values: Mapping[str, Any]) -> list[dict[str, str]] | None:
+    indexes = _row_indexes(values, "sibling")
+    if not indexes:
+        return None
+    siblings: list[dict[str, str]] = []
+    for index in indexes:
+        fields = ("first_name", "last_name", "relation", "birth_date", "occupation", "notes")
+        if not _has_row_values(values, "sibling", index, fields):
+            continue
+        first_name = _form_text(values, f"sibling_{index}_first_name")
+        if not first_name:
+            raise ValidationError("Familiari: il nome del fratello o sorella è obbligatorio.")
+        sibling = {
+            "first_name": first_name,
+            "last_name": _form_text(values, f"sibling_{index}_last_name"),
+            "relation": _form_text(values, f"sibling_{index}_relation") or "sorella",
+            "occupation": _form_text(values, f"sibling_{index}_occupation"),
+            "notes": _form_limited(
+                values, f"sibling_{index}_notes", "Note familiare"
+            ),
+        }
+        birth_date = _form_date(
+            values, f"sibling_{index}_birth_date", "Data di nascita del fratello o sorella"
+        )
+        if birth_date is not None:
+            sibling["birth_date"] = birth_date.isoformat()
+        siblings.append(sibling)
+    return siblings
+
+
+def _parse_people(values: Mapping[str, Any]) -> list[dict[str, Any]]:
+    indexes = _row_indexes(values, "person")
+    people: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for index in indexes:
+        fields = ("display_name", "relation", "trust", "intimacy", "notes")
+        if not _has_row_values(values, "person", index, fields):
+            continue
+        display_name = _form_text(values, f"person_{index}_display_name")
+        if not display_name:
+            raise ValidationError("Persone importanti: il nome è obbligatorio.")
+        user_id = _slug(display_name)
+        if user_id in seen:
+            raise ValidationError(
+                f"Persone importanti: nome duplicato {display_name!r}."
+            )
+        seen.add(user_id)
+        trust = _form_int(
+            values,
+            f"person_{index}_trust",
+            "Fiducia",
+            default=50,
+            minimum=0,
+            maximum=100,
+        )
+        intimacy = _form_int(
+            values,
+            f"person_{index}_intimacy",
+            "Intimità",
+            default=50,
+            minimum=0,
+            maximum=100,
+        )
+        people.append(
+            {
+                "user_id": f"user_{user_id}",
+                "display_name": display_name,
+                "full_name": display_name,
+                "relation": _form_text(values, f"person_{index}_relation") or "persona importante",
+                "trust": trust,
+                "intimacy": intimacy,
+                "notes": _form_limited(
+                    values, f"person_{index}_notes", "Note sulla persona"
+                ),
+            }
+        )
+    return people
+
+
+def _parse_education(values: Mapping[str, Any]) -> list[dict[str, Any]]:
+    indexes = _row_indexes(values, "education")
+    education: list[dict[str, Any]] = []
+    for index in indexes:
+        fields = ("institution", "qualification", "start_year", "end_year", "location")
+        if not _has_row_values(values, "education", index, fields):
+            continue
+        institution = _form_text(values, f"education_{index}_institution")
+        qualification = _form_text(values, f"education_{index}_qualification")
+        if not institution or not qualification:
+            raise ValidationError(
+                "Formazione: istituto e titolo sono obbligatori per ogni riga."
+            )
+        start_year = _form_int(
+            values,
+            f"education_{index}_start_year",
+            "Anno di inizio formazione",
+            minimum=1900,
+            maximum=date.today().year + 1,
+        )
+        end_year = _form_int(
+            values,
+            f"education_{index}_end_year",
+            "Anno di fine formazione",
+            minimum=1900,
+            maximum=date.today().year + 5,
+        )
+        if start_year is None:
+            raise ValidationError(
+                "Formazione: l'anno di inizio è obbligatorio."
+            )
+        if end_year is not None and end_year < start_year:
+            raise ValidationError(
+                "Formazione: l'anno di fine non può precedere quello di inizio."
+            )
+        education.append(
+            {
+                "institution": institution,
+                "qualification": qualification,
+                "start_year": start_year,
+                "end_year": end_year,
+                "location": _form_text(values, f"education_{index}_location"),
+            }
+        )
+    return education
+
+
+def _parse_work(values: Mapping[str, Any]) -> list[dict[str, Any]]:
+    indexes = _row_indexes(values, "work")
+    work: list[dict[str, Any]] = []
+    for index in indexes:
+        fields = ("role", "organization", "start_year", "end_year", "location")
+        if not _has_row_values(values, "work", index, fields):
+            continue
+        role = _form_text(values, f"work_{index}_role")
+        organization = _form_text(values, f"work_{index}_organization")
+        if not role or not organization:
+            raise ValidationError(
+                "Lavoro: ruolo e organizzazione sono obbligatori per ogni riga."
+            )
+        start_year = _form_int(
+            values,
+            f"work_{index}_start_year",
+            "Anno di inizio lavoro",
+            minimum=1900,
+            maximum=date.today().year + 1,
+        )
+        end_year = _form_int(
+            values,
+            f"work_{index}_end_year",
+            "Anno di fine lavoro",
+            minimum=1900,
+            maximum=date.today().year + 5,
+        )
+        if start_year is None:
+            raise ValidationError(
+                "Lavoro: l'anno di inizio è obbligatorio."
+            )
+        if end_year is not None and end_year < start_year:
+            raise ValidationError(
+                "Lavoro: l'anno di fine non può precedere quello di inizio."
+            )
+        work.append(
+            {
+                "role": role,
+                "organization": organization,
+                "start_year": start_year,
+                "end_year": end_year,
+                "location": _form_text(values, f"work_{index}_location"),
+            }
+        )
+    return work
+
+
+def _geo_fields(
+    values: Mapping[str, Any],
+    *,
+    prefix: str,
+    country_code: str,
+    province_label: str,
+    region_label: str,
+) -> tuple[str, str]:
+    """Valida provincia e regione italiane e ne garantisce la coerenza."""
+
+    raw_province = _form_limited(
+        values, f"{prefix}_province", province_label, maximum=80
+    )
+    raw_region = _form_limited(
+        values, f"{prefix}_region", region_label, maximum=80
+    )
+    province = raw_province.strip().upper()
+    if province:
+        entry = italian_province(province)
+        if entry is None:
+            raise ValidationError(
+                f"{province_label}: scegli una provincia dall'elenco."
+            )
+        name, province_region = entry
+        if country_code != "IT":
+            raise ValidationError(
+                f"{province_label}: la provincia è italiana, ma il paese "
+                "selezionato non è l'Italia. Scegli l'Italia o lascia vuoto "
+                "il campo."
+            )
+        if raw_region:
+            region = italian_region(raw_region)
+            if region is None:
+                raise ValidationError(
+                    f"{region_label}: scegli una regione dall'elenco."
+                )
+            if region != province_region:
+                raise ValidationError(
+                    f"{province_label}: {name} ({province}) non appartiene "
+                    f"alla regione {region}. Scegli la regione corretta o "
+                    "lascia vuoto il campo."
+                )
+        return province, province_region
+
+    if raw_region:
+        region = italian_region(raw_region)
+        if region is None:
+            raise ValidationError(
+                f"{region_label}: scegli una regione dall'elenco."
+            )
+        if country_code != "IT":
+            raise ValidationError(
+                f"{region_label}: la regione è italiana, ma il paese "
+                "selezionato non è l'Italia. Scegli l'Italia o lascia vuoto "
+                "il campo."
+            )
+        return "", region
+
+    return "", ""
+
+
+def build_profile_args(values: Mapping[str, Any]) -> argparse.Namespace:
+    """Costruisce e valida gli argomenti di ``profile init`` da un modulo web."""
+
+    first_name = _form_limited(values, "first_name", "Nome", maximum=80)
+    last_name = _form_limited(values, "last_name", "Cognome", maximum=80)
+    birth_city = _form_limited(values, "birth_city", "Città di nascita", maximum=120)
+    birth_date_text = _form_text(values, "birth_date")
+    required = [
+        label
+        for value, label in (
+            (first_name, "nome"),
+            (last_name, "cognome"),
+            (birth_date_text, "data di nascita"),
+            (birth_city, "città di nascita"),
+        )
+        if not value
+    ]
+    if required:
+        raise ValidationError(
+            "Compila i campi obbligatori: " + ", ".join(required) + "."
+        )
+
+    try:
+        birth_date = _birth_date(birth_date_text)
+    except argparse.ArgumentTypeError as exc:
+        raise ValidationError(str(exc)) from exc
+    timezone_name = _form_text(values, "timezone", "Europe/Rome") or "Europe/Rome"
+    try:
+        timezone_name = _timezone(timezone_name)
+    except argparse.ArgumentTypeError as exc:
+        raise ValidationError(str(exc)) from exc
+
+    birth_country = (
+        _form_limited(values, "birth_country", "Paese di nascita", maximum=80)
+        or "Italia"
+    )
+    birth_country_code = country_code(birth_country)
+    if birth_country_code is None:
+        raise ValidationError(
+            "Paese di nascita: scegli un paese dall'elenco."
+        )
+    residence_country = (
+        _form_limited(values, "residence_country", "Paese di residenza", maximum=80)
+        or birth_country
+    )
+    residence_country_code = country_code(residence_country)
+    if residence_country_code is None:
+        raise ValidationError(
+            "Paese di residenza: scegli un paese dall'elenco."
+        )
+    birth_province, birth_region = _geo_fields(
+        values,
+        prefix="birth",
+        country_code=birth_country_code,
+        province_label="Provincia di nascita",
+        region_label="Regione di nascita",
+    )
+    residence_province, residence_region = _geo_fields(
+        values,
+        prefix="residence",
+        country_code=residence_country_code,
+        province_label="Provincia di residenza",
+        region_label="Regione di residenza",
+    )
+    residence_since = _form_date(
+        values, "residence_since", "Data di inizio residenza"
+    )
+    if residence_since is not None and residence_since < birth_date:
+        raise ValidationError(
+            "Residenza: la data di inizio non può precedere la nascita."
+        )
+
+    parents = _parse_parents(values)
+    siblings = _parse_siblings(values)
+    if parents is not None:
+        for parent in parents:
+            born = parent.get("birth_date")
+            if born and date.fromisoformat(str(born)) >= birth_date:
+                raise ValidationError(
+                    "Familiari: la data di nascita del genitore deve precedere quella del profilo."
+                )
+    education = _parse_education(values)
+    work = _parse_work(values)
+    for entry in education:
+        if int(entry["start_year"]) < birth_date.year:
+            raise ValidationError(
+                "Formazione: l'anno di inizio non può precedere la nascita."
+            )
+    for entry in work:
+        if int(entry["start_year"]) < birth_date.year:
+            raise ValidationError(
+                "Lavoro: l'anno di inizio non può precedere la nascita."
+            )
+
+    traits: dict[str, dict[str, Any]] = {}
+    for trait_id, (left, right) in TRAIT_LABELS.items():
+        value = _form_int(
+            values,
+            f"trait_{trait_id}",
+            f"Tratto {left}/{right}",
+            default=5,
+            minimum=1,
+            maximum=10,
+        )
+        note = _form_limited(
+            values, f"trait_{trait_id}_note", f"Descrizione del tratto {left}/{right}", maximum=500
+        )
+        traits[trait_id] = {
+            "value": value,
+            "left": left,
+            "right": right,
+            "description": note
+            or (
+                f"Equilibrato tra {left} e {right}."
+                if value == 5
+                else f"Più orientato verso {left if value < 5 else right}."
+            ),
+        }
+
+    return argparse.Namespace(
+        first_name=first_name,
+        last_name=last_name,
+        birth_date=birth_date,
+        birth_city=birth_city,
+        birth_province=birth_province,
+        birth_region=birth_region,
+        birth_country=birth_country,
+        birth_country_code=birth_country_code,
+        citizenship=_form_limited(
+            values, "citizenship", "Cittadinanza", maximum=80
+        )
+        or "italiana",
+        residence_city=_form_limited(
+            values, "residence_city", "Città di residenza", maximum=120
+        )
+        or None,
+        residence_province=residence_province or None,
+        residence_region=residence_region or None,
+        residence_country=residence_country,
+        residence_since=residence_since,
+        timezone=timezone_name,
+        gender=_form_limited(values, "gender", "Genere", maximum=60)
+        or "non specificato",
+        pronouns=_form_limited(values, "pronouns", "Pronomi", maximum=60),
+        identity_id=None,
+        father_name=_form_text(values, "father_name") or None,
+        mother_name=_form_text(values, "mother_name") or None,
+        sibling_name=_form_text(values, "sibling_name") or None,
+        sibling_relation=_form_text(values, "sibling_relation", "sorella")
+        or "sorella",
+        parents=parents,
+        siblings=siblings,
+        languages=_parse_languages(values),
+        traits=traits,
+        interests=_form_entries(values, "interests"),
+        values=_form_entries(values, "values"),
+        habits=_form_entries(values, "habits"),
+        family_notes=_form_limited(
+            values, "family_notes", "Note sulla famiglia", maximum=1000
+        ),
+        biography_summary=_form_limited(
+            values, "biography_summary", "Sintesi biografica", maximum=MAX_TEXT_FIELD
+        ),
+        current_situation=_form_limited(
+            values, "current_situation", "Situazione attuale", maximum=MAX_TEXT_FIELD
+        ),
+        education=education,
+        work=work,
+        social_people=_parse_people(values),
+    )
+
+
 def _positive_seconds(value: str) -> float:
     try:
         seconds = float(value)
@@ -125,66 +734,152 @@ def _identity_document(args: argparse.Namespace, birth_date: date) -> dict[str, 
         f"character_{_slug(full_name)}_{birth_date.year}"
     )
     timestamp = _timestamp(args.timezone)
+    birth_province = args.birth_province.strip()
+    birth_region = args.birth_region.strip()
+    if not birth_region and birth_province:
+        entry = italian_province(birth_province)
+        if entry is not None:
+            birth_region = entry[1]
     birth_place = {
         "city": args.birth_city.strip(),
-        "province": args.birth_province.strip(),
-        "region": args.birth_region.strip(),
+        "province": birth_province,
+        "region": birth_region,
         "country": args.birth_country.strip(),
         "country_code": args.birth_country_code.strip().upper(),
     }
+    residence_country = (
+        getattr(args, "residence_country", None) or args.birth_country.strip()
+    )
+    # Eredita il luogo di nascita solo quando la residenza non è specificata
+    # e resta nello stesso paese: una città diversa non deve ereditare la
+    # provincia di nascita.
+    inherit_birth_place = (
+        not (args.residence_city or "").strip()
+        and residence_country.casefold() == args.birth_country.strip().casefold()
+    )
+    residence_province = (args.residence_province or "").strip()
+    if not residence_province and inherit_birth_place:
+        residence_province = birth_province
+    residence_region = (args.residence_region or "").strip()
+    if not residence_region and inherit_birth_place:
+        residence_region = birth_region
+    if not residence_region and residence_province:
+        entry = italian_province(residence_province)
+        if entry is not None:
+            residence_region = entry[1]
     residence = {
         "city": (args.residence_city or args.birth_city).strip(),
-        "province": (args.residence_province or args.birth_province).strip(),
-        "region": (args.residence_region or args.birth_region).strip(),
-        "country": args.birth_country.strip(),
-        "since": today.isoformat(),
+        "province": residence_province,
+        "region": residence_region,
+        "country": residence_country,
     }
-    parents: list[dict[str, Any]] = []
-    if args.father_name:
-        parents.append(
-            {
-                "id": "fam_father",
-                "first_name": args.father_name.strip(),
-                "last_name": args.last_name.strip(),
-                "relation": "padre",
-                "birth_place": args.birth_city.strip(),
-                "notes": "Dato inserito durante la creazione del profilo.",
-            }
-        )
-    if args.mother_name:
-        parents.append(
-            {
-                "id": "fam_mother",
-                "first_name": args.mother_name.strip(),
-                "last_name": args.last_name.strip(),
-                "relation": "madre",
-                "birth_place": args.birth_city.strip(),
-                "notes": "Dato inserito durante la creazione del profilo.",
-            }
-        )
-    siblings: list[dict[str, Any]] = []
-    if args.sibling_name:
-        siblings.append(
-            {
-                "id": "fam_sibling_1",
-                "first_name": args.sibling_name.strip(),
-                "last_name": args.last_name.strip(),
-                "relation": args.sibling_relation.strip() or "sorella",
-                "birth_place": args.birth_city.strip(),
-                "notes": "Dato inserito durante la creazione del profilo.",
-            }
+    residence_since = getattr(args, "residence_since", None)
+    if residence_since is None and not hasattr(args, "parents"):
+        residence_since = today
+    if residence_since is not None:
+        residence["since"] = (
+            residence_since.isoformat()
+            if isinstance(residence_since, date)
+            else str(residence_since)
         )
 
-    traits = {
-        trait_id: {
-            "value": 5,
-            "left": left,
-            "right": right,
-            "description": "Valore iniziale neutro; modificabile nel profilo.",
+    rich_parents = getattr(args, "parents", None)
+    if rich_parents is None:
+        parents: list[dict[str, Any]] = []
+        if args.father_name:
+            parents.append(
+                {
+                    "id": "fam_father",
+                    "first_name": args.father_name.strip(),
+                    "last_name": args.last_name.strip(),
+                    "relation": "padre",
+                    "birth_place": args.birth_city.strip(),
+                    "notes": "Dato inserito durante la creazione del profilo.",
+                }
+            )
+        if args.mother_name:
+            parents.append(
+                {
+                    "id": "fam_mother",
+                    "first_name": args.mother_name.strip(),
+                    "last_name": args.last_name.strip(),
+                    "relation": "madre",
+                    "birth_place": args.birth_city.strip(),
+                    "notes": "Dato inserito durante la creazione del profilo.",
+                }
+            )
+    else:
+        parents = []
+        for index, parent in enumerate(rich_parents, start=1):
+            item: dict[str, Any] = {
+                "id": f"fam_parent_{index}",
+                "first_name": str(parent.get("first_name", "")).strip(),
+                "last_name": str(parent.get("last_name", "")).strip(),
+                "relation": str(parent.get("relation", "genitore")).strip()
+                or "genitore",
+            }
+            for key in ("birth_date", "occupation", "notes"):
+                value = str(parent.get(key, "")).strip()
+                if value:
+                    item[key] = value
+            parents.append(item)
+
+    rich_siblings = getattr(args, "siblings", None)
+    if rich_siblings is None:
+        siblings: list[dict[str, Any]] = []
+        if args.sibling_name:
+            siblings.append(
+                {
+                    "id": "fam_sibling_1",
+                    "first_name": args.sibling_name.strip(),
+                    "last_name": args.last_name.strip(),
+                    "relation": args.sibling_relation.strip() or "sorella",
+                    "birth_place": args.birth_city.strip(),
+                    "notes": "Dato inserito durante la creazione del profilo.",
+                }
+            )
+    else:
+        siblings = []
+        for index, sibling in enumerate(rich_siblings, start=1):
+            item = {
+                "id": f"fam_sibling_{index}",
+                "first_name": str(sibling.get("first_name", "")).strip(),
+                "last_name": str(sibling.get("last_name", "")).strip(),
+                "relation": str(sibling.get("relation", "sorella")).strip()
+                or "sorella",
+            }
+            for key in ("birth_date", "occupation", "notes"):
+                value = str(sibling.get(key, "")).strip()
+                if value:
+                    item[key] = value
+            siblings.append(item)
+
+    rich_traits = getattr(args, "traits", None)
+    if rich_traits is None:
+        traits = {
+            trait_id: {
+                "value": 5,
+                "left": left,
+                "right": right,
+                "description": "Valore iniziale neutro; modificabile nel profilo.",
+            }
+            for trait_id, (left, right) in TRAIT_LABELS.items()
         }
-        for trait_id, (left, right) in TRAIT_LABELS.items()
-    }
-    return {
+    else:
+        traits = rich_traits
+
+    languages = getattr(args, "languages", None) or [
+        {
+            "code": "it",
+            "name": "italiano",
+            "level": "madrelingua",
+        }
+    ]
+    family_notes = getattr(args, "family_notes", None)
+    if family_notes is None:
+        family_notes = "Profilo iniziale: completa i familiari in identity.json."
+
+    identity: dict[str, Any] = {
         "schema_version": PROFILE_VERSION,
         "identity_id": identity_id,
         "profile_status": "active",
@@ -200,22 +895,14 @@ def _identity_document(args: argparse.Namespace, birth_date: date) -> dict[str, 
             "age_at_profile_creation": _age_on(birth_date, today),
             "birth_place": birth_place,
             "citizenship": args.citizenship.strip() or "italiana",
-            "languages": [
-                {
-                    "code": "it",
-                    "name": "italiano",
-                    "level": "madrelingua",
-                }
-            ],
+            "languages": languages,
             "residence": residence,
             "timezone": args.timezone,
         },
         "family": {
             "parents": parents,
             "siblings": siblings,
-            "family_notes": (
-                "Profilo iniziale: completa i familiari in identity.json."
-            ),
+            "family_notes": family_notes,
         },
         "personality": {
             "model": "bipolar_sliders_v1",
@@ -228,11 +915,18 @@ def _identity_document(args: argparse.Namespace, birth_date: date) -> dict[str, 
             "traits": traits,
         },
         "biography": {
-            "education": [],
-            "work": [],
-            "notes": "Profilo creato da profile init; la biografia è generata proceduralmente.",
+            "summary": getattr(args, "biography_summary", ""),
+            "current_situation": getattr(args, "current_situation", ""),
+            "education": getattr(args, "education", []),
+            "work": getattr(args, "work", []),
+            "notes": "Profilo creato dalla prima configurazione; la biografia è generata proceduralmente.",
         },
     }
+    for key in ("interests", "values", "habits"):
+        entries = getattr(args, key, None)
+        if entries:
+            identity[key] = entries
+    return identity
 
 
 def _profile_id(identity: dict[str, Any]) -> str:
@@ -353,7 +1047,7 @@ def _config_documents(
                     "notes": "0 = relazione formale, 100 = condivisione profonda.",
                 },
             },
-            "people": [],
+            "people": getattr(args, "social_people", None) or [],
         },
     }
 
