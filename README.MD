@@ -108,8 +108,6 @@ mnemosine-index --root ./profiles/marco --rebuild
 python -m unittest discover -s tests
 ```
 
-I test girano dal repository, dove ogni file di runtime esiste per costruzione. Prima di pubblicare una modifica al packaging va rifatta la verifica sul wheel installato: comandi, esiti attesi ed errori tipici sono in [`AGENTS.md`](AGENTS.md).
-
 <a id="indice" name="indice"></a>
 
 ## Indice
