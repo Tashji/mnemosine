@@ -446,6 +446,45 @@ def _activity_dict(
     }
 
 
+def availability_for(
+    load: Any, thresholds: Any, *, sleeping: bool
+) -> dict[str, Any]:
+    """Stile di risposta coerente con sonno e carico cognitivo.
+
+    Vive fuori dall'engine perché la usa anche l'Heartbeat, che aggiorna il
+    carico senza ricostruire la routine.
+    """
+
+    if sleeping:
+        return {
+            "accepting_messages": False,
+            "response_style": "assente",
+            "notes": "Finestra di sonno simulato: nessuna risposta spontanea.",
+        }
+    if not isinstance(thresholds, dict):
+        thresholds = {}
+    soft = thresholds.get("soft", 60)
+    overload = thresholds.get("overload", 80)
+    numeric = isinstance(load, (int, float)) and not isinstance(load, bool)
+    if numeric and load >= overload:
+        return {
+            "accepting_messages": True,
+            "response_style": "breve",
+            "notes": "Carico cognitivo oltre la soglia di sovraccarico.",
+        }
+    if numeric and load >= soft:
+        return {
+            "accepting_messages": True,
+            "response_style": "ridotta",
+            "notes": "Carico cognitivo sopra la soglia morbida.",
+        }
+    return {
+        "accepting_messages": True,
+        "response_style": "normale",
+        "notes": "Nessun sovraccarico cognitivo attivo.",
+    }
+
+
 def _resolve_now(value: datetime | None, tz: ZoneInfo) -> datetime:
     if value is None:
         return datetime.now(tz).replace(microsecond=0)
@@ -549,35 +588,11 @@ class RoutineEngine:
         )
 
     def _availability(self) -> dict[str, Any]:
-        if self.is_sleep:
-            return {
-                "accepting_messages": False,
-                "response_style": "assente",
-                "notes": "Finestra di sonno simulato: nessuna risposta spontanea.",
-            }
-        load = self.state.get("mental_load", 0)
-        thresholds = self.state.get("mental_load_thresholds", {})
-        if not isinstance(thresholds, dict):
-            thresholds = {}
-        soft = thresholds.get("soft", 60)
-        overload = thresholds.get("overload", 80)
-        if isinstance(load, (int, float)) and load >= overload:
-            return {
-                "accepting_messages": True,
-                "response_style": "breve",
-                "notes": "Carico cognitivo oltre la soglia di sovraccarico.",
-            }
-        if isinstance(load, (int, float)) and load >= soft:
-            return {
-                "accepting_messages": True,
-                "response_style": "ridotta",
-                "notes": "Carico cognitivo sopra la soglia morbida.",
-            }
-        return {
-            "accepting_messages": True,
-            "response_style": "normale",
-            "notes": "Nessun sovraccarico cognitivo attivo.",
-        }
+        return availability_for(
+            self.state.get("mental_load", 0),
+            self.state.get("mental_load_thresholds", {}),
+            sleeping=self.is_sleep,
+        )
 
     def preview(self) -> dict[str, Any]:
         return {

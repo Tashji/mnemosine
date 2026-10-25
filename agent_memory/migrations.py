@@ -61,7 +61,8 @@ SQLITE_MIGRATIONS: dict[str, dict[int, Callable[[sqlite3.Connection], None]]] = 
 JSON_DOCUMENTS: dict[str, int] = {
     "identity": 1,
     "shadow_traits": 1,
-    "current_state": 1,
+    # La versione 2 aggiunge i parametri del ciclo autonomo in ``heartbeat``.
+    "current_state": 2,
     "world_history": 1,
     "social_graph": 1,
 }
@@ -73,6 +74,29 @@ JSON_DOCUMENTS: dict[str, int] = {
 JSON_MIGRATIONS: dict[str, dict[int, Callable[[dict[str, Any]], dict[str, Any]]]] = {
     name: {} for name in JSON_DOCUMENTS
 }
+
+
+def _current_state_v2(document: dict[str, Any]) -> dict[str, Any]:
+    """Aggiunge i parametri del battito a un ``current_state`` della versione 1.
+
+    I valori già presenti nel profilo vincono sui default: la migrazione
+    completa solo le chiavi mancanti e non tocca carico, sonno o decisioni.
+    """
+
+    # Import locale: ``heartbeat`` dipende da ``config``, che importa questo
+    # modulo, quindi un import in cima creerebbe un ciclo.
+    from .heartbeat import HEARTBEAT_DEFAULTS
+
+    updated = json.loads(json.dumps(document))
+    heartbeat = updated.get("heartbeat")
+    heartbeat = dict(heartbeat) if isinstance(heartbeat, dict) else {}
+    merged = dict(HEARTBEAT_DEFAULTS)
+    merged.update(heartbeat)
+    updated["heartbeat"] = merged
+    return updated
+
+
+JSON_MIGRATIONS["current_state"] = {2: _current_state_v2}
 
 
 def format_version(version: int) -> str:

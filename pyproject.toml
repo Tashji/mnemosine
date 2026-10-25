@@ -37,6 +37,7 @@ mnemosine-dashboard = "agent_memory.dashboard:main"
 mnemosine-profile = "agent_memory.profile:main"
 mnemosine-biography = "agent_memory.biography:main"
 mnemosine-index = "agent_memory.index:main"
+mnemosine-heartbeat = "agent_memory.heartbeat:main"
 mnemosine-browser = "agent_memory.browser:main"
 
 [tool.setuptools]

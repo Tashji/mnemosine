@@ -301,6 +301,31 @@ class JsonMigrationTests(MigrationTestCase):
         self.assertIn("più recente", str(ctx.exception))
         self.assertEqual(self.json_path().read_bytes(), before)
 
+    def test_current_state_v1_gains_the_heartbeat_settings(self) -> None:
+        data = self.read_json("current_state")
+        data["schema_version"] = "1.0"
+        data["heartbeat"] = {
+            "last_run_at": "2026-10-24T15:00:00+02:00",
+            "next_run_at": "2026-10-24T15:30:00+02:00",
+            "last_decision": "continuare_l_attivita",
+            "spontaneous_message_pending": False,
+        }
+        self.write_json(data, "current_state")
+
+        configs = ConfigStore(self.root).load_all()
+
+        self.assertEqual(configs["current_state"]["schema_version"], "2.0")
+        heartbeat_state = configs["current_state"]["heartbeat"]
+        self.assertEqual(heartbeat_state["last_decision"], "continuare_l_attivita")
+        self.assertEqual(heartbeat_state["last_run_at"], "2026-10-24T15:00:00+02:00")
+        self.assertEqual(heartbeat_state["interval_minutes"], 30)
+        self.assertEqual(heartbeat_state["max_impulses_per_day"], 3)
+        self.assertIsNone(heartbeat_state["pending_impulse"])
+
+        on_disk = self.read_json("current_state")
+        self.assertEqual(on_disk["schema_version"], "2.0")
+        self.assertEqual(on_disk["heartbeat"]["cooldown_minutes"], 180)
+
     def test_migration_ladder_updates_the_document(self) -> None:
         document = ConfigStore(self.root).get("identity")
 

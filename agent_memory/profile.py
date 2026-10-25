@@ -56,16 +56,23 @@ from .setup_options import (
     language_name,
 )
 
-# La versione scritta nei JSON nasce da un solo posto: la tabella delle
-# versioni in ``migrations.py``. Così un profilo nuovo e una migrazione non
-# possono dichiarare numeri diversi.
-PROFILE_VERSION = format_version(JSON_DOCUMENTS["identity"])
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 # Gli schemi vivono dentro il pacchetto: così restano raggiungibili anche
 # quando il progetto è installato con pip e non esiste una working directory.
 PACKAGE_DIR = Path(__file__).resolve().parent
 SCHEMA_DIR = PACKAGE_DIR / "schemas"
 DATABASE_FILES = tuple(f"{database}.db" for database in DATABASE_SCHEMAS)
+def _schema_version(name: str) -> str:
+    """Versione del documento, dalla tabella unica in ``migrations.py``.
+
+    I documenti non sono tutti alla stessa versione: ``current_state`` può
+    essere più avanti degli altri, e un profilo nuovo deve nascere già
+    allineato invece di migrare al primo avvio.
+    """
+
+    return format_version(JSON_DOCUMENTS[name])
+
+
 PROFILE_STATE_MISSING = "missing"
 PROFILE_STATE_INCOMPLETE = "incomplete"
 PROFILE_STATE_READY = "ready"
@@ -944,7 +951,7 @@ def _identity_document(args: argparse.Namespace, birth_date: date) -> dict[str, 
         family_notes = "Profilo iniziale: completa i familiari in identity.json."
 
     identity: dict[str, Any] = {
-        "schema_version": PROFILE_VERSION,
+        "schema_version": _schema_version("identity"),
         "identity_id": identity_id,
         "profile_status": "active",
         "created_at": timestamp,
@@ -1006,7 +1013,7 @@ def _config_documents(
     return {
         "identity": identity,
         "shadow_traits": {
-            "schema_version": PROFILE_VERSION,
+            "schema_version": _schema_version("shadow_traits"),
             "identity_id": identity_id,
             "created_at": timestamp,
             "updated_at": timestamp,
@@ -1024,7 +1031,7 @@ def _config_documents(
             "traumas": [],
         },
         "current_state": {
-            "schema_version": PROFILE_VERSION,
+            "schema_version": _schema_version("current_state"),
             "state_id": f"state_{_slug(identity_id)}_{timestamp}",
             "identity_id": identity_id,
             "created_at": timestamp,
@@ -1068,11 +1075,22 @@ def _config_documents(
                 "response_style": "normale",
                 "notes": "Nessun carico cognitivo attivo.",
             },
+            # Gli stessi nomi di ``heartbeat.HEARTBEAT_DEFAULTS``: un profilo
+            # nuovo nasce già pronto per il ciclo autonomo, senza migrazione
+            # al primo battito.
             "heartbeat": {
                 "last_run_at": None,
                 "next_run_at": None,
                 "last_decision": "profilo_creato",
                 "spontaneous_message_pending": False,
+                "interval_minutes": 30,
+                "cooldown_minutes": 180,
+                "max_impulses_per_day": 3,
+                "pending_impulse": None,
+                "last_trigger": None,
+                "last_impulse_at": None,
+                "last_interaction_at": None,
+                "impulses_today": {"date": None, "count": 0},
             },
             "flags": {
                 "whatsapp_sending_enabled": False,
@@ -1084,7 +1102,7 @@ def _config_documents(
             "notes": "Stato iniziale creato da profile init.",
         },
         "world_history": {
-            "schema_version": PROFILE_VERSION,
+            "schema_version": _schema_version("world_history"),
             "dataset_id": f"world_{_slug(identity_id)}",
             "identity_id": identity_id,
             "birth_date": birth_date.isoformat(),
@@ -1095,7 +1113,7 @@ def _config_documents(
             ),
         },
         "social_graph": {
-            "schema_version": PROFILE_VERSION,
+            "schema_version": _schema_version("social_graph"),
             "identity_id": identity_id,
             "created_at": timestamp,
             "updated_at": timestamp,

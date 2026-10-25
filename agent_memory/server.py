@@ -28,6 +28,7 @@ from .config import project_root
 from .embeddings import Embedder
 from .errors import AgentMemoryError
 from .files import FileSandbox
+from .heartbeat import HeartbeatEngine
 from .retrieval import RetrievalService
 from .semantic import SemanticService
 from .service import MemoryService, ShadowService
@@ -97,6 +98,37 @@ def create_server(
 
         try:
             return service.update_current_state(patch)
+        except AgentMemoryError as exc:
+            raise ToolError(str(exc)) from exc
+
+    @mcp.tool()
+    def record_interaction(
+        messages: int = 1, complexity: str = "normale"
+    ) -> dict[str, Any]:
+        """Registra i messaggi appena scambiati e aggiorna il carico cognitivo.
+
+        ``complexity`` vale ``leggera``, ``normale`` o ``complessa``. Il carico
+        risultante decide lo stile di risposta in ``availability``: oltre la
+        soglia morbida diventa più asciutto, oltre quella dura ancora di più.
+        """
+
+        try:
+            return HeartbeatEngine(root, at=None).record_interaction(
+                messages=messages, complexity=complexity
+            )
+        except AgentMemoryError as exc:
+            raise ToolError(str(exc)) from exc
+
+    @mcp.tool()
+    def acknowledge_impulse(note: str = "") -> dict[str, Any]:
+        """Segna come gestito l'impulso spontaneo in attesa di risposta.
+
+        L'Heartbeat mette in coda un impulso, non un messaggio: dopo averlo
+        letto o inviato, questo tool chiude la voce e registra una nota.
+        """
+
+        try:
+            return HeartbeatEngine(root, at=None).acknowledge_impulse(note=note)
         except AgentMemoryError as exc:
             raise ToolError(str(exc)) from exc
 

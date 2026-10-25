@@ -62,6 +62,8 @@ class McpServerTests(unittest.TestCase):
         self.assertFalse(any("shadow" in name for name in names))
         self.assertNotIn("get_shadow_traits", names)
         self.assertNotIn("list_shadow_entries", names)
+        self.assertIn("record_interaction", names)
+        self.assertIn("acknowledge_impulse", names)
 
     def test_identity_and_state_tools(self) -> None:
         identity = call_tool(self.mcp, "get_identity", {})
@@ -75,6 +77,30 @@ class McpServerTests(unittest.TestCase):
         self.assertEqual(updated["mental_load"], 48)
         self.assertEqual(updated["emotion"]["label"], "sereno")
         self.assertEqual(updated["emotion"]["valence"], 0.35)
+
+    def test_heartbeat_tools_update_load_and_clear_impulses(self) -> None:
+        before = call_tool(self.mcp, "get_current_state", {})["mental_load"]
+
+        updated = call_tool(
+            self.mcp,
+            "record_interaction",
+            {"messages": 2, "complexity": "complessa"},
+        )
+
+        self.assertEqual(updated["mental_load"], min(100, before + 14))
+        self.assertEqual(updated["messages"], 2)
+        self.assertEqual(updated["availability"]["response_style"], "normale")
+
+        acknowledged = call_tool(
+            self.mcp, "acknowledge_impulse", {"note": "nessun messaggio"}
+        )
+        self.assertFalse(acknowledged["spontaneous_message_pending"])
+        self.assertIsNone(acknowledged["pending_impulse"])
+        self.assertEqual(acknowledged["last_decision"], "impulso_gestito")
+
+    def test_record_interaction_refuses_invalid_complexity(self) -> None:
+        with self.assertRaises(ToolError):
+            call_tool(self.mcp, "record_interaction", {"complexity": "enorme"})
 
     def test_world_history_and_social_tools(self) -> None:
         events_payload = call_tool(

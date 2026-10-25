@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-258%20passing-2ea043?logo=githubactions&logoColor=white" alt="258 test superati"></a>
+  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-286%20passing-2ea043?logo=githubactions&logoColor=white" alt="286 test superati"></a>
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12">
   <img src="https://img.shields.io/badge/MCP-Model%20Context%20Protocol-6ee7d8" alt="Model Context Protocol">
   <img src="https://img.shields.io/badge/storage-SQLite%20%2B%20FAISS-0b1422" alt="SQLite e FAISS">
@@ -315,6 +315,7 @@ Con l'installazione come pacchetto sono disponibili i comandi:
 | `mnemosine-profile` | `python -m agent_memory.profile` | Crea un nuovo profilo. |
 | `mnemosine-biography` | `python -m agent_memory.biography` | Genera il passato procedurale. |
 | `mnemosine-index` | `python -m agent_memory.index` | Allinea o ricostruisce l'indice vettoriale. |
+| `mnemosine-heartbeat` | `python -m agent_memory.heartbeat` | Esegue un battito del ciclo autonomo: carico cognitivo e impulsi. |
 | `mnemosine-browser` | `python -m agent_memory.browser` | Verifica la policy e apre una pagina consentita. |
 
 Il primo comando da eseguire dopo l'installazione è `mnemosine-start`: sceglie `~/.mnemosine/profile` (o `$AGENT_MEMORY_PROFILE`), avvia la dashboard in locale e apre il browser sulla pagina di configurazione. Se il profilo esiste già, riapre semplicemente la dashboard. Le opzioni utili sono `--root` per scegliere un'altra directory, `--no-open` quando non c'è un browser (server remoto) e `--port` per cambiare porta.
@@ -1163,13 +1164,13 @@ Aggiungere i seed esterni, le modifiche caratteriali e il riconsolidamento a cas
 
 Realizzare lo stato corrente, il generatore di routine, il carico cognitivo, il sonno simulato e l'Heartbeat Loop.
 
-La prima tranche è implementata in `agent_memory/routine.py`: genera il piano giornaliero, sceglie l'attività in corso e gestisce la finestra di sonno. Il carico cognitivo dinamico e l'Heartbeat Loop restano da implementare.
+La fase è implementata in due moduli: `agent_memory/routine.py` genera il piano giornaliero, sceglie l'attività in corso e gestisce la finestra di sonno; `agent_memory/heartbeat.py` gestisce il carico cognitivo dinamico, i trigger interni e la coda degli impulsi spontanei (sezione 17.5). Restano da implementare l'invio effettivo dei messaggi e la sintesi notturna dei ricordi, che richiede un modello linguistico.
 
 ### Fase 7 — Relazioni e autonomia web
 
 Integrare il grafo delle relazioni, il recupero dei ricordi relativi ai singoli utenti e l'iniziativa autonoma tramite WhatsApp Web e browser, con contatti e siti in whitelist.
 
-La parte web è implementata: `agent_memory/browser.py` applica la whitelist, la cronologia e l'indice numerato dei link, mentre `agent_memory/files.py` dà all'agente una cartella di lavoro isolata. Restano da implementare WhatsApp Web e il ciclo di iniziativa completo che sceglie tra le due integrazioni.
+La parte web è implementata: `agent_memory/browser.py` applica la whitelist, la cronologia e l'indice numerato dei link, mentre `agent_memory/files.py` dà all'agente una cartella di lavoro isolata. Il ciclo di iniziativa esiste in `heartbeat.py` e propone il canale più adatto, ma l'esecuzione resta da fare: WhatsApp Web e l'apertura effettiva del browser da un impulso.
 
 ### Fase 8 — Sicurezza e affidabilità
 
@@ -1423,7 +1424,38 @@ python -m agent_memory.routine --root ./profiles/marco --apply
 
 Senza `--apply` il comando è di sola lettura. Con `--apply` acquisisce lo stesso lock di `profile init`, `biography` e `index`, scrive in modo atomico e non riscrive lo stato se è già allineato. `--at` senza fuso orario usa quello dell'identità; un orario con fuso diverso viene convertito.
 
-L'Heartbeat Loop, l'incremento del carico cognitivo e il consolidamento notturno restano ai passi successivi. La dashboard mostra già il nuovo stato senza modifiche: attività, luogo, routine e carico sono letti da `current_state.json`.
+La dashboard mostra già il nuovo stato senza modifiche: attività, luogo, routine e carico sono letti da `current_state.json`.
+
+### 17.5. Heartbeat e carico cognitivo
+
+`agent_memory/heartbeat.py` porta a termine la Fase 6 in modo deterministico, senza chiamare un modello linguistico. Ogni battito:
+
+1. allinea routine, attività e orologio con lo stesso motore della sezione 17.4;
+2. recupera carico cognitivo per il tempo trascorso: 2 punti l'ora da svegli, 15 nel sonno, e una notte intera lo azzera;
+3. valuta i trigger interni in ordine di priorità — ricorrenza di un ricordo conscio con importanza almeno 7 nello stesso giorno dell'anno, silenzio di almeno tre giorni da una persona con fiducia almeno 60, noia dopo 90 minuti nella stessa attività;
+4. se un trigger è attivo e non ci sono freni (sonno, manutenzione, cooldown, limite giornaliero, sovraccarico) mette in coda un **impulso**, non un messaggio.
+
+L'impulso contiene trigger, eventuale destinatario, contesto e canale suggerito; `delivery.authorized` dice se l'integrazione è già abilitata. L'invio resta un'operazione separata e non ancora implementata: il battito non apre WhatsApp né il browser, e il testo del messaggio non viene inventato da qui.
+
+I messaggi aumentano il carico: `record_interaction` via MCP, oppure `mnemosine-heartbeat --interaction`, aggiunge 2 punti per un messaggio leggero, 4 normale e 7 complesso. Oltre la soglia morbida `availability.response_style` diventa `ridotta`, oltre quella dura `breve`.
+
+```bash
+# Anteprima di un battito a un'ora precisa
+python -m agent_memory.heartbeat --at 2026-10-25T15:00
+
+# Battito applicato
+python -m agent_memory.heartbeat --at 2026-10-25T15:00 --apply
+
+# Ciclo continuo, ogni 30 minuti
+python -m agent_memory.heartbeat --loop --interval 30
+
+# Interazione appena scambiata
+python -m agent_memory.heartbeat --interaction 2 --complexity complessa
+```
+
+Ritmo e freni vivono in `current_state.heartbeat` come `interval_minutes`, `cooldown_minutes` e `max_impulses_per_day`; i valori predefiniti sono 30 minuti, 180 minuti e 3 impulsi al giorno. Due strumenti MCP completano il quadro: `record_interaction` aggiorna il carico, `acknowledge_impulse` chiude l'impulso dopo che qualcuno se n'è occupato. I profili creati prima di questa versione ricevono i campi mancanti dalla migrazione 1→2 di `current_state.json`.
+
+Restano aperti l'invio effettivo (WhatsApp Web) e la sintesi dei ricordi notturni: durante il sonno il battito azzera il carico e registra `last_consolidation_at`, ma non inventa ricordi.
 
 ---
 
