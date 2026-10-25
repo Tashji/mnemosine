@@ -940,6 +940,8 @@ Aggiungere i seed esterni, le modifiche caratteriali e il riconsolidamento a cas
 
 Realizzare lo stato corrente, il generatore di routine, il carico cognitivo, il sonno simulato e l'Heartbeat Loop.
 
+La prima tranche è implementata in `agent_memory/routine.py`: genera il piano giornaliero, sceglie l'attività in corso e gestisce la finestra di sonno. Il carico cognitivo dinamico e l'Heartbeat Loop restano da implementare.
+
 ### Fase 7 — Relazioni e WhatsApp
 
 Integrare il grafo delle relazioni, il recupero dei ricordi relativi ai singoli utenti e l'invio autonomo dei messaggi autorizzati.
@@ -1164,6 +1166,39 @@ La dashboard espone cinque viste:
 - **Evoluzioni**: storico delle variazioni dei tratti, seed esterni, cascate e revisioni recenti.
 
 Le API dei dati sono in sola lettura; gli unici POST gestiscono accesso, logout, prima configurazione e completamento del profilo (biografia e indice). Il server ascolta su `127.0.0.1` per impostazione predefinita: contiene dati amministrativi e tratti dell'ombra, quindi non va pubblicato su Internet. L'opzione `--host` permette di cambiare l'indirizzo; su un host non loopback l'autenticazione è obbligatoria. Usa `--https` per cifrare il traffico quando la dashboard è raggiungibile da altri dispositivi.
+
+### 17.4. Routine giornaliera e stato corrente
+
+La prima tranche della Fase 6 è implementata in `agent_memory/routine.py`. Il motore non usa un LLM e non avvia un demone: legge `identity.json` e `current_state.json`, costruisce un piano deterministico per il giorno richiesto e allinea lo stato all'orario.
+
+Il piano usa interessi, formazione e lavoro in corso. Nei giorni feriali prevede studio e lavoro, nei fine settimana attività libere; colazione, pranzo, cena e riposo sono presenti in entrambi. La rotazione delle attività cambia con la data, ma resta stabile se il piano viene riutilizzato nello stesso giorno.
+
+La finestra di sonno è letta da `current_state.sleep.window` (`00:00`–`07:00` per impostazione predefinita) e supporta anche intervalli che attraversano la mezzanotte. Durante il sonno lo stato passa a `sleeping`, l'attività diventa `Dorme` e `availability.accepting_messages` viene disattivato. La disponibilità tiene conto anche delle soglie di carico cognitivo già presenti, ma il carico non viene ancora incrementato o decrementato dal motore.
+
+Il piano viene riutilizzato se `routine.date` coincide con il giorno richiesto; per personalizzarlo si possono modificare `planned_activities` in `current_state.json` lasciando `routine.date` allineato alla data. In caso contrario viene rigenerato.
+
+Comandi:
+
+```bash
+# Anteprima: mostra attività corrente, prossimo cambio e piano
+python -m agent_memory.routine --at 2026-10-25T15:00
+
+# Anteprima in JSON, senza scrivere
+python -m agent_memory.routine --at 2026-10-25T15:00 --json
+
+# Allinea current_state.json all'orario indicato
+python -m agent_memory.routine --at 2026-10-25T15:00 --apply
+
+# Usa l'orologio reale e applica
+python -m agent_memory.routine --apply
+
+# Progetto in un'altra directory
+python -m agent_memory.routine --root ./profiles/marco --apply
+```
+
+Senza `--apply` il comando è di sola lettura. Con `--apply` acquisisce lo stesso lock di `profile init`, `biography` e `index`, scrive in modo atomico e non riscrive lo stato se è già allineato. `--at` senza fuso orario usa quello dell'identità; un orario con fuso diverso viene convertito.
+
+L'Heartbeat Loop, l'incremento del carico cognitivo e il consolidamento notturno restano ai passi successivi. La dashboard mostra già il nuovo stato senza modifiche: attività, luogo, routine e carico sono letti da `current_state.json`.
 
 ---
 
