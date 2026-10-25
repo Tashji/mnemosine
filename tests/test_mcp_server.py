@@ -12,6 +12,7 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
 
+from agent_memory.browser import BrowserController, BrowserPolicy
 from agent_memory.server import create_server
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -50,6 +51,8 @@ class McpServerTests(unittest.TestCase):
         names = {tool.name for tool in tools}
         self.assertIn("get_identity", names)
         self.assertIn("create_memory", names)
+        self.assertIn("browser_status", names)
+        self.assertIn("browser_open", names)
         self.assertFalse(any("shadow" in name for name in names))
         self.assertNotIn("get_shadow_traits", names)
         self.assertNotIn("list_shadow_entries", names)
@@ -143,6 +146,70 @@ class McpServerTests(unittest.TestCase):
             call_tool(self.mcp, "get_memory_links", {"memory_id": "mem_0002"})["links"],
             [],
         )
+
+    def test_browser_tools_with_enabled_controller(self) -> None:
+        class FakeBackend:
+            url = ""
+
+            def open(self, url: str) -> None:
+                self.url = url
+
+            def title(self) -> str:
+                return "Esempio"
+
+            def text(self) -> str:
+                return "Testo della pagina"
+
+            def click(self, selector: str) -> None:
+                self.url = f"{self.url}#{selector}"
+
+            def fill(self, selector: str, value: str) -> None:
+                self.url = f"{self.url}#{selector}"
+
+            def screenshot(self, path: Path) -> None:
+                path.write_bytes(b"png")
+
+            def close(self) -> None:
+                self.url = ""
+
+        controller = BrowserController(
+            policy=BrowserPolicy(
+                ["https://example.com"],
+                enabled=True,
+                resolver=lambda _host: ["93.184.216.34"],
+            ),
+            backend=FakeBackend(),
+        )
+        mcp = create_server(self.root, browser=controller)
+        status = call_tool(mcp, "browser_status", {})
+        self.assertTrue(status["enabled"])
+        self.assertEqual(status["current_url"], None)
+
+        opened = call_tool(
+            mcp,
+            "browser_open",
+            {"url": "https://example.com", "max_chars": 4},
+        )
+        self.assertEqual(opened["title"], "Esempio")
+        self.assertEqual(opened["text"], "Test")
+        self.assertTrue(opened["truncated"])
+
+        with self.assertRaises(ToolError):
+            call_tool(mcp, "browser_click", {"selector": "#send"})
+        call_tool(mcp, "browser_close", {})
+        self.assertIsNone(controller.current_url)
+
+    def test_browser_is_disabled_by_default(self) -> None:
+        status = call_tool(self.mcp, "browser_status", {})
+        self.assertFalse(status["enabled"])
+        self.assertIsNone(status["current_url"])
+        self.assertEqual(status["allowed_origins"], [])
+        with self.assertRaises(ToolError):
+            call_tool(
+                self.mcp,
+                "browser_open",
+                {"url": "https://example.com"},
+            )
 
     def test_status_contains_no_shadow_content(self) -> None:
         status = call_tool(self.mcp, "get_status", {})

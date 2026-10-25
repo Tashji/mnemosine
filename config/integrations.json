@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "browser": {
+    "enabled": false,
+    "interaction_enabled": false,
+    "allowed_origins": [],
+    "navigation_timeout_seconds": 30
+  }
+}

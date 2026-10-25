@@ -41,3 +41,15 @@ class EmbeddingUnavailable(AgentMemoryError):
 
 class VectorIndexError(AgentMemoryError):
     """Indice vettoriale mancante, incoerente o non aggiornabile."""
+
+
+class BrowserError(AgentMemoryError):
+    """Errore del browser controllato."""
+
+
+class BrowserBlockedError(BrowserError):
+    """URL o azione non consentiti dalla whitelist."""
+
+
+class BrowserUnavailableError(BrowserError):
+    """Browser disabilitato o backend non installato."""

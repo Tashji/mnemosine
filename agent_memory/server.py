@@ -23,6 +23,7 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
 
+from .browser import BrowserController
 from .embeddings import Embedder
 from .errors import AgentMemoryError
 from .retrieval import RetrievalService
@@ -38,9 +39,11 @@ def create_server(
     host: str = "127.0.0.1",
     port: int = 8000,
     embedder: Embedder | None = None,
+    browser: BrowserController | None = None,
 ) -> FastMCP:
     """Costruisce il server MCP con i tool della memoria conscia."""
 
+    browser_controller = browser or BrowserController(root)
     service = MemoryService(root)
     semantic = SemanticService(root)
     retrieval = RetrievalService(
@@ -446,6 +449,60 @@ def create_server(
             return {"links": links, "count": len(links)}
         except AgentMemoryError as exc:
             raise ToolError(str(exc)) from exc
+
+    @mcp.tool()
+    def browser_status() -> dict[str, Any]:
+        """Restituisce stato, whitelist e pagina corrente del browser controllato."""
+
+        return browser_controller.status()
+
+    @mcp.tool()
+    def browser_open(url: str, max_chars: int = 6000) -> dict[str, Any]:
+        """Apre un URL HTTPS consentito e restituisce titolo e testo della pagina.
+
+        Il browser applica la whitelist di ``config/integrations.json``; se il
+        browser è disabilitato o l'URL non è autorizzato, il tool restituisce
+        un errore senza aprire la pagina.
+        """
+
+        try:
+            return browser_controller.open(url, max_chars=max_chars)
+        except AgentMemoryError as exc:
+            raise ToolError(str(exc)) from exc
+
+    @mcp.tool()
+    def browser_read(max_chars: int = 6000) -> dict[str, Any]:
+        """Legge la pagina corrente del browser controllato."""
+
+        try:
+            return browser_controller.snapshot(max_chars=max_chars)
+        except AgentMemoryError as exc:
+            raise ToolError(str(exc)) from exc
+
+    @mcp.tool()
+    def browser_click(selector: str) -> dict[str, Any]:
+        """Clicca un elemento della pagina corrente, se le interazioni sono abilitate."""
+
+        try:
+            return browser_controller.click(selector)
+        except AgentMemoryError as exc:
+            raise ToolError(str(exc)) from exc
+
+    @mcp.tool()
+    def browser_fill(selector: str, value: str) -> dict[str, Any]:
+        """Compila un campo della pagina corrente, se le interazioni sono abilitate."""
+
+        try:
+            return browser_controller.fill(selector, value)
+        except AgentMemoryError as exc:
+            raise ToolError(str(exc)) from exc
+
+    @mcp.tool()
+    def browser_close() -> dict[str, Any]:
+        """Chiude il browser controllato e restituisce lo stato aggiornato."""
+
+        browser_controller.close()
+        return browser_controller.status()
 
     @mcp.tool()
     def get_status() -> dict[str, Any]:

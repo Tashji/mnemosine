@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-164%20passing-2ea043?logo=githubactions&logoColor=white" alt="164 test superati"></a>
+  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-191%20passing-2ea043?logo=githubactions&logoColor=white" alt="191 test superati"></a>
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12">
   <img src="https://img.shields.io/badge/MCP-Model%20Context%20Protocol-6ee7d8" alt="Model Context Protocol">
   <img src="https://img.shields.io/badge/storage-SQLite%20%2B%20FAISS-0b1422" alt="SQLite e FAISS">
@@ -61,6 +61,10 @@ cd mnemosine
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+
+# Opzionale: browser controllato e Playwright
+pip install -r requirements-browser.txt
+python -m playwright install chromium
 
 # Prima configurazione dal browser
 python -m agent_memory.dashboard --root ./profiles/marco --auth
@@ -793,6 +797,60 @@ Per WhatsApp Web valgono regole analoghe a quelle della navigazione:
 - le credenziali della sessione non entrano mai nel prompt né nella memoria.
 
 In questo modo l'autonomia resta reale ma circoscritta: l'agente può cercare, leggere, partecipare a un forum e conversare con i suoi amici senza vagare per il web.
+
+### 14.6. Browser controllato: implementazione
+
+Il modulo `agent_memory/browser.py` implementa il livello descritto sopra:
+
+- legge la policy da `config/integrations.json`; se il file manca o `browser.enabled` è `false`, il browser resta disabilitato;
+
+- accetta solo origini HTTPS presenti nella whitelist, con dominio esatto o sottodomini dichiarati (`https://*.example.org`);
+
+- blocca `localhost`, indirizzi privati, link-local, `file://`, credenziali nell'URL e porte diverse dalla 443;
+
+- risolve il dominio e rifiuta anche un host pubblico che punta a un indirizzo privato;
+
+- intercetta ogni richiesta della pagina: le risorse di domini non elencati vengono bloccate, non solo la navigazione principale;
+
+- chiude i WebSocket verso server non elencati e disattiva i service worker, che altrimenti potrebbero aggirare l'intercettazione;
+
+- controlla l'URL finale dopo redirect e click, e chiude le finestre aperte da script;
+
+- carica Playwright solo alla prima apertura, quindi il server MCP parte anche senza il pacchetto opzionale.
+
+Esempio di configurazione:
+
+```json
+{
+  "schema_version": 1,
+  "browser": {
+    "enabled": true,
+    "interaction_enabled": false,
+    "allowed_origins": [
+      "https://it.wikipedia.org",
+      "https://forum.example.org"
+    ],
+    "navigation_timeout_seconds": 30
+  }
+}
+```
+
+`interaction_enabled` abilita click e compilazione dei campi; resta `false` per impostazione predefinita. La whitelist dei contatti WhatsApp è prevista dal modello di sicurezza, ma non viene dedotta automaticamente dal contenuto della pagina: l'interazione con WhatsApp Web va abilitata solo dopo aver configurato la sessione e i contatti.
+
+Comandi:
+
+```bash
+# Verifica policy, backend e pagina corrente
+python -m agent_memory.browser --check
+
+# Apre un URL consentito e stampa il testo
+python -m agent_memory.browser --open https://it.wikipedia.org --text
+
+# Salva anche uno screenshot
+python -m agent_memory.browser --open https://it.wikipedia.org --screenshot artifacts/browser.png
+```
+
+Il server MCP espone `browser_status`, `browser_open`, `browser_read`, `browser_click`, `browser_fill` e `browser_close`. `browser_click` e `browser_fill` richiedono `interaction_enabled`.
 
 ---
 
