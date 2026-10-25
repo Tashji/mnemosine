@@ -22,6 +22,7 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .errors import ConfigError, ValidationError
+from .migrations import migrate_json_document, write_json_atomic
 
 CONFIG_FILENAMES: dict[str, str] = {
     "identity": "identity.json",
@@ -358,7 +359,13 @@ class ConfigStore:
         return self.config_dir / CONFIG_FILENAMES[name]
 
     def load_all(self) -> dict[str, dict[str, Any]]:
-        """Carica e valida tutti i documenti (senza cache)."""
+        """Carica, migra e valida tutti i documenti (senza cache).
+
+        Un profilo creato da una versione precedente ha documenti con
+        ``schema_version`` vecchia o assente: qui vengono portati alla versione
+        corrente, validati e riscritti una sola volta. La riscrittura avviene
+        dopo la validazione, così un file non migrabile resta com'era.
+        """
 
         with self._lock:
             if not self.config_dir.is_dir():
@@ -368,9 +375,24 @@ class ConfigStore:
                     "contiene config/ e data/)."
                 )
             configs: dict[str, Any] = {}
+            migrated: dict[str, dict[str, Any]] = {}
             for name, filename in CONFIG_FILENAMES.items():
-                configs[name] = _read_json(self.config_dir / filename)
+                raw = _read_json(self.config_dir / filename)
+                if not isinstance(raw, dict):
+                    raise ConfigError(f"{filename}: atteso un oggetto JSON.")
+                document, changed = migrate_json_document(name, raw)
+                configs[name] = document
+                if changed:
+                    migrated[name] = document
             validate_configs(configs)
+            for name, document in migrated.items():
+                try:
+                    self._atomic_write(self.path_for(name), document)
+                except ConfigError as exc:
+                    raise ConfigError(
+                        f"{name}: il profilo è a una versione precedente e va riscritto, "
+                        f"ma la directory non è scrivibile: {exc}"
+                    ) from exc
             return configs
 
     def get(self, name: str) -> dict[str, Any]:
@@ -481,20 +503,4 @@ class ConfigStore:
 
     @staticmethod
     def _atomic_write(path: Path, data: dict[str, Any]) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_name(f".{path.name}.tmp")
-        try:
-            with tmp.open("w", encoding="utf-8") as handle:
-                json.dump(data, handle, ensure_ascii=False, indent=2)
-                handle.write("\n")
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(tmp, path)
-        except OSError as exc:
-            raise ConfigError(f"Impossibile scrivere {path}: {exc}") from exc
-        finally:
-            if tmp.exists():
-                try:
-                    tmp.unlink()
-                except OSError:
-                    pass
+        write_json_atomic(path, data)

@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-239%20passing-2ea043?logo=githubactions&logoColor=white" alt="239 test superati"></a>
+  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-258%20passing-2ea043?logo=githubactions&logoColor=white" alt="258 test superati"></a>
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12">
   <img src="https://img.shields.io/badge/MCP-Model%20Context%20Protocol-6ee7d8" alt="Model Context Protocol">
   <img src="https://img.shields.io/badge/storage-SQLite%20%2B%20FAISS-0b1422" alt="SQLite e FAISS">
@@ -167,6 +167,16 @@ L'architettura si baserà su quattro livelli complementari:
 3. Struttura semantica: Vector Database per il recupero delle informazioni in base al significato.
 
 4. Struttura di elaborazione: MCP e LLM per interpretare le richieste, collegare le informazioni e produrre risposte coerenti.
+
+### 1.5. Versioni e migrazioni automatiche
+
+Ogni database dichiara la propria versione in `schema_meta.schema_version`; ogni documento JSON della configurazione in `schema_version`. Le versioni correnti e i passi di migrazione vivono in un solo posto, `agent_memory/migrations.py`.
+
+Un profilo creato da una versione precedente continua a funzionare: al primo accesso i database e i documenti vengono portati alla versione corrente, i passi mancanti vengono eseguiti in ordine e la marcatura avanza solo se il passo è riuscito. I dati esistenti non vengono riscritti e una migrazione fallita lascia il database alla versione di partenza invece di lasciarlo a metà. Un profilo creato da una versione più recente del programma viene invece rifiutato con un messaggio esplicito, perché una migrazione al contrario non esiste: meglio un errore chiaro che dati reinterpretati male.
+
+`mnemosine --check` riporta per ogni database `schema_version`, `schema_supported` e `needs_migration`; la diagnostica non forza la migrazione, che avviene quando i servizi aprono davvero i dati.
+
+Per chi modifica il progetto: cambiare uno schema significa aggiungere un passo a `SQLITE_MIGRATIONS` o `JSON_MIGRATIONS` e alzare la versione corrente nello stesso commit. Un profilo nuovo nasce già all'ultima versione.
 
 ---
 

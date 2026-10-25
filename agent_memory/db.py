@@ -16,6 +16,11 @@ from typing import Any
 
 from .config import project_root
 from .errors import DatabaseUnavailable
+from .migrations import (
+    DATABASE_SCHEMAS,
+    ensure_database_schema,
+    stored_database_version,
+)
 
 TIMELINE_TABLES = {
     "episodic_memories",
@@ -42,6 +47,15 @@ VECTOR_TABLES = {
     "vector_entries",
     "index_meta",
     "schema_meta",
+}
+
+# Tabelle che ogni database deve avere perché una migrazione sia considerata
+# completa; l'ordine dei nomi è quello di DATABASE_SCHEMAS.
+DATABASE_TABLES: dict[str, set[str]] = {
+    "timeline_episodic": TIMELINE_TABLES,
+    "shadow_diary": SHADOW_TABLES,
+    "semantic_memory": SEMANTIC_TABLES,
+    "vector_index": VECTOR_TABLES,
 }
 
 TIMELINE_COUNTS = {
@@ -103,38 +117,44 @@ class Database:
         conn.execute("PRAGMA busy_timeout = 5000")
         return conn
 
-    def _ensure_one(
-        self, path: Path, required_tables: set[str], label: str
-    ) -> None:
+    def _open(
+        self, path: Path, database: str, required_tables: set[str]
+    ) -> sqlite3.Connection:
+        """Apre il database applicando prima le migrazioni mancanti.
+
+        La migrazione avviene qui, nell'unico punto in cui i database vengono
+        aperti: qualunque comando, tool o test passa di qui, quindi un profilo
+        creato da una versione precedente si aggiorna da solo al primo uso.
+        """
+
         if not path.exists():
             raise DatabaseUnavailable(
-                f"{label}: database non trovato in {path}. "
+                f"{database}: database non trovato in {path}. "
                 "Esegui `python scripts/init_db.py --reset` per crearlo."
             )
         try:
             conn = self._connect(path)
         except sqlite3.Error as exc:
-            raise DatabaseUnavailable(f"{label}: impossibile aprire {path}: {exc}") from exc
+            raise DatabaseUnavailable(
+                f"{database}: impossibile aprire {path}: {exc}"
+            ) from exc
         try:
-            rows = conn.execute(
-                "SELECT name FROM sqlite_master WHERE type IN ('table', 'view')"
-            ).fetchall()
-            present = {row["name"] for row in rows}
-            missing = sorted(required_tables - present)
-            if missing:
-                raise DatabaseUnavailable(
-                    f"{label}: schema incompleto in {path}; tabelle mancanti: "
-                    f"{', '.join(missing)}. Esegui `python scripts/init_db.py --reset`."
-                )
+            ensure_database_schema(conn, database, path, required_tables)
         except sqlite3.Error as exc:
-            raise DatabaseUnavailable(f"{label}: schema illeggibile in {path}: {exc}") from exc
-        finally:
             conn.close()
+            raise DatabaseUnavailable(
+                f"{database}: schema illeggibile in {path}: {exc}"
+            ) from exc
+        except BaseException:
+            conn.close()
+            raise
+        return conn
 
     @contextmanager
     def timeline(self) -> Iterator[sqlite3.Connection]:
-        self._ensure_one(self.timeline_path, TIMELINE_TABLES, "timeline_episodic")
-        conn = self._connect(self.timeline_path)
+        conn = self._open(
+            self.timeline_path, "timeline_episodic", DATABASE_TABLES["timeline_episodic"]
+        )
         try:
             yield conn
         finally:
@@ -142,8 +162,7 @@ class Database:
 
     @contextmanager
     def shadow(self) -> Iterator[sqlite3.Connection]:
-        self._ensure_one(self.shadow_path, SHADOW_TABLES, "shadow_diary")
-        conn = self._connect(self.shadow_path)
+        conn = self._open(self.shadow_path, "shadow_diary", DATABASE_TABLES["shadow_diary"])
         try:
             yield conn
         finally:
@@ -151,8 +170,9 @@ class Database:
 
     @contextmanager
     def semantic(self) -> Iterator[sqlite3.Connection]:
-        self._ensure_one(self.semantic_path, SEMANTIC_TABLES, "semantic_memory")
-        conn = self._connect(self.semantic_path)
+        conn = self._open(
+            self.semantic_path, "semantic_memory", DATABASE_TABLES["semantic_memory"]
+        )
         try:
             yield conn
         finally:
@@ -160,8 +180,7 @@ class Database:
 
     @contextmanager
     def vector(self) -> Iterator[sqlite3.Connection]:
-        self._ensure_one(self.vector_path, VECTOR_TABLES, "vector_index")
-        conn = self._connect(self.vector_path)
+        conn = self._open(self.vector_path, "vector_index", DATABASE_TABLES["vector_index"])
         try:
             yield conn
         finally:
@@ -174,7 +193,7 @@ class Database:
         path: Path,
         required_tables: set[str],
         counts: dict[str, str],
-        label: str,
+        database: str,
     ) -> dict[str, Any]:
         result: dict[str, Any] = {"path": str(path), "ok": False}
         if not path.exists():
@@ -195,7 +214,18 @@ class Database:
                     "SELECT name FROM sqlite_master WHERE type IN ('table', 'view')"
                 )
             }
-            missing = sorted(required_tables - present)
+            # `schema_meta` viene creata dalla migrazione: un profilo che ne è
+            # privo è vecchio, non rotto.
+            missing = sorted(required_tables - present - {"schema_meta"})
+
+            # La diagnostica non forza la migrazione: dice solo se c'è da fare.
+            # I database si aggiornano quando un servizio li apre davvero.
+            stored = stored_database_version(conn)
+            supported = DATABASE_SCHEMAS[database][1]
+            result["schema_version"] = stored
+            result["schema_supported"] = supported
+            result["needs_migration"] = stored is None or stored < supported
+
             if missing:
                 result["error"] = f"Tabelle mancanti: {', '.join(missing)}"
                 return result
@@ -213,6 +243,9 @@ class Database:
             if not result["ok"]:
                 result["error"] = "Integrity check o foreign key check fallita."
             return result
+        except DatabaseUnavailable as exc:
+            result["error"] = str(exc)
+            return result
         except sqlite3.Error as exc:
             result["error"] = f"Errore SQLite: {exc}"
             return result
@@ -221,10 +254,16 @@ class Database:
 
     def health(self) -> dict[str, Any]:
         timeline = self._health_one(
-            self.timeline_path, TIMELINE_TABLES, TIMELINE_COUNTS, "timeline_episodic"
+            self.timeline_path,
+            TIMELINE_TABLES,
+            TIMELINE_COUNTS,
+            "timeline_episodic",
         )
         shadow = self._health_one(
-            self.shadow_path, SHADOW_TABLES, SHADOW_COUNTS, "shadow_diary"
+            self.shadow_path,
+            SHADOW_TABLES,
+            SHADOW_COUNTS,
+            "shadow_diary",
         )
         return {
             "ok": bool(timeline.get("ok") and shadow.get("ok")),

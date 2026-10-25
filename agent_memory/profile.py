@@ -41,7 +41,14 @@ else:
     import fcntl
 
 from .config import CONFIG_FILENAMES, ConfigStore
+from .db import DATABASE_TABLES
 from .errors import AgentMemoryError, ConfigError, ValidationError
+from .migrations import (
+    DATABASE_SCHEMAS,
+    JSON_DOCUMENTS,
+    ensure_database_schema,
+    format_version,
+)
 from .setup_options import (
     country_code,
     italian_province,
@@ -49,22 +56,16 @@ from .setup_options import (
     language_name,
 )
 
-PROFILE_VERSION = "1.0"
+# La versione scritta nei JSON nasce da un solo posto: la tabella delle
+# versioni in ``migrations.py``. Così un profilo nuovo e una migrazione non
+# possono dichiarare numeri diversi.
+PROFILE_VERSION = format_version(JSON_DOCUMENTS["identity"])
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 # Gli schemi vivono dentro il pacchetto: così restano raggiungibili anche
 # quando il progetto è installato con pip e non esiste una working directory.
 PACKAGE_DIR = Path(__file__).resolve().parent
 SCHEMA_DIR = PACKAGE_DIR / "schemas"
-TIMELINE_SCHEMA = "timeline_episodic.sql"
-SHADOW_SCHEMA = "shadow_diary.sql"
-SEMANTIC_SCHEMA = "semantic_memory.sql"
-VECTOR_SCHEMA = "vector_index.sql"
-DATABASE_FILES = (
-    "timeline_episodic.db",
-    "shadow_diary.db",
-    "semantic_memory.db",
-    "vector_index.db",
-)
+DATABASE_FILES = tuple(f"{database}.db" for database in DATABASE_SCHEMAS)
 PROFILE_STATE_MISSING = "missing"
 PROFILE_STATE_INCOMPLETE = "incomplete"
 PROFILE_STATE_READY = "ready"
@@ -1142,16 +1143,24 @@ def _schema_path(name: str) -> Path:
     return path
 
 
-def _create_database(path: Path, schema_name: str) -> None:
+def _create_database(path: Path, database: str) -> None:
+    """Crea il database dallo schema del pacchetto e lo marcia all'ultima versione.
+
+    Un profilo nuovo parte già migrato, non alla versione degli schemi: così non
+    deve recuperare i passi intermedi al primo avvio.
+    """
+
+    schema_name = DATABASE_SCHEMAS[database][0]
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
         conn = sqlite3.connect(path)
         try:
             conn.executescript(_schema_path(schema_name).read_text(encoding="utf-8"))
+            ensure_database_schema(conn, database, path, DATABASE_TABLES[database])
             conn.commit()
         finally:
             conn.close()
-    except (OSError, sqlite3.Error) as exc:
+    except (OSError, sqlite3.Error, AgentMemoryError) as exc:
         raise ConfigError(f"Impossibile creare {path}: {exc}") from exc
 
 
@@ -1459,12 +1468,8 @@ def _create_profile_locked(
         for name, data in configs.items():
             _write_json(staging / "config" / CONFIG_FILENAMES[name], data)
         ConfigStore(staging).load_all()
-        for filename, schema in zip(
-            DATABASE_FILES,
-            (TIMELINE_SCHEMA, SHADOW_SCHEMA, SEMANTIC_SCHEMA, VECTOR_SCHEMA),
-            strict=True,
-        ):
-            _create_database(staging / "data" / filename, schema)
+        for database in DATABASE_SCHEMAS:
+            _create_database(staging / "data" / f"{database}.db", database)
         (staging / "data" / "indexes").mkdir(parents=True, exist_ok=True)
 
         if target.exists():
