@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-155%20passing-2ea043?logo=githubactions&logoColor=white" alt="155 test superati"></a>
+  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-160%20passing-2ea043?logo=githubactions&logoColor=white" alt="160 test superati"></a>
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12">
   <img src="https://img.shields.io/badge/MCP-Model%20Context%20Protocol-6ee7d8" alt="Model Context Protocol">
   <img src="https://img.shields.io/badge/storage-SQLite%20%2B%20FAISS-0b1422" alt="SQLite e FAISS">
@@ -1094,7 +1094,7 @@ Prima configurazione da browser:
 - L’ultimo passaggio può generare la biografia procedurale e costruire l’indice vettoriale. Le operazioni partono in background e la pagina di completamento segue l’avanzamento con polling su `/setup/finalize/status`; i pulsanti restano disabilitati finché il job è in corso. Se un’operazione fallisce, il profilo resta valido e si può riprovare da `/setup/finalize`; biografia e indice restano disponibili anche dai comandi CLI. Un solo job di completamento può essere attivo per dashboard: una nuova richiesta mentre il job è in corso viene ignorata. Se il server viene riavviato, lo stato del job in memoria si perde, ma i dati già scritti restano.
 
 - Le righe di familiari, lingue, persone, formazione e lavoro sono dinamiche; il server accetta al massimo 20 righe per sezione e valida date, anni, codici lingua e intervalli di fiducia.
-- Genere, pronomi, fuso orario IANA, paese di nascita e di residenza, cittadinanza, regione, provincia, lingua e livello sono menu a scelta: non si possono digitare valori ambigui. Il codice ISO del paese viene ricavato dal paese selezionato, quindi non può divergere dal nome. Le province restano salvate come sigla (per esempio `MI`) e la regione viene ricavata o verificata dal server; l'elenco è italiano, quindi per una località estera si lascia “Non indicata”.
+- Genere, pronomi, fuso orario IANA, paese di nascita e di residenza, cittadinanza, regione, provincia, lingua e livello sono menu a scelta: non si possono digitare valori ambigui. Il codice ISO del paese viene ricavato dal paese selezionato, quindi non può divergere dal nome. Le province italiane restano salvate come sigla (per esempio `MI`) e la regione viene ricavata o verificata dal server. Per una residenza estera compaiono invece “Regione o Stato” e “Provincia o contea”, con i suggerimenti delle suddivisioni del paese selezionato (dati GeoNames, CC BY 4.0); i valori restano modificabili come testo e il server rifiuta sigle o regioni italiane abbinate a un paese diverso dall'Italia. Per una nascita estera restano i menu italiani e si lascia “Non indicata”.
 
 - Se la directory contiene già un profilo pronto, `/setup` reindirizza alla dashboard. Un profilo incompleto non viene sovrascritto: usa `profile init --force` da terminale.
 

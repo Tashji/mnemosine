@@ -537,6 +537,50 @@ def _geo_fields(
     return "", ""
 
 
+def _foreign_geo_fields(
+    values: Mapping[str, Any],
+    *,
+    prefix: str,
+    province_label: str,
+    region_label: str,
+) -> tuple[str, str]:
+    """Accetta regione e provincia locali per una residenza estera.
+
+    I due campi dedicati hanno la precedenza; i vecchi campi restano letti
+    per compatibilità con i moduli inviati prima dell'introduzione dei campi
+    esteri. I valori italiani restano riservati all'Italia.
+    """
+
+    foreign_province = _form_limited(
+        values, f"{prefix}_province_foreign", province_label, maximum=120
+    )
+    foreign_region = _form_limited(
+        values, f"{prefix}_region_foreign", region_label, maximum=120
+    )
+    if foreign_province or foreign_region:
+        raw_province, raw_region = foreign_province, foreign_region
+    else:
+        raw_province = _form_limited(
+            values, f"{prefix}_province", province_label, maximum=120
+        )
+        raw_region = _form_limited(
+            values, f"{prefix}_region", region_label, maximum=120
+        )
+    province = raw_province.strip()
+    region = raw_region.strip()
+    if province and italian_province(province) is not None:
+        raise ValidationError(
+            f"{province_label}: per un paese estero indica la provincia "
+            "locale, non una sigla italiana."
+        )
+    if region and italian_region(region) is not None:
+        raise ValidationError(
+            f"{region_label}: per un paese estero indica la regione locale, "
+            "non una regione italiana."
+        )
+    return province, region
+
+
 def build_profile_args(values: Mapping[str, Any]) -> argparse.Namespace:
     """Costruisce e valida gli argomenti di ``profile init`` da un modulo web."""
 
@@ -594,13 +638,21 @@ def build_profile_args(values: Mapping[str, Any]) -> argparse.Namespace:
         province_label="Provincia di nascita",
         region_label="Regione di nascita",
     )
-    residence_province, residence_region = _geo_fields(
-        values,
-        prefix="residence",
-        country_code=residence_country_code,
-        province_label="Provincia di residenza",
-        region_label="Regione di residenza",
-    )
+    if residence_country_code == "IT":
+        residence_province, residence_region = _geo_fields(
+            values,
+            prefix="residence",
+            country_code=residence_country_code,
+            province_label="Provincia di residenza",
+            region_label="Regione di residenza",
+        )
+    else:
+        residence_province, residence_region = _foreign_geo_fields(
+            values,
+            prefix="residence",
+            province_label="Provincia di residenza",
+            region_label="Regione di residenza",
+        )
     residence_since = _form_date(
         values, "residence_since", "Data di inizio residenza"
     )

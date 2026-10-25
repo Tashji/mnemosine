@@ -273,6 +273,150 @@
     });
   }
 
+  function initResidenceGeoFields() {
+    const country = form.querySelector('[data-country-select="residence"]');
+    const birthCountry = form.querySelector('[name="birth_country"]');
+    if (!country) {
+      return;
+    }
+    const italianFields = Array.from(
+      form.querySelectorAll('[data-italian-geo="residence"]')
+    );
+    const foreignFields = Array.from(
+      form.querySelectorAll('[data-foreign-geo="residence"]')
+    );
+    const regionList = document.getElementById("residence-region-options");
+    const provinceList = document.getElementById(
+      "residence-province-options"
+    );
+    const regionInput = form.querySelector(
+      '[name="residence_region_foreign"]'
+    );
+    const provinceInput = form.querySelector(
+      '[name="residence_province_foreign"]'
+    );
+
+    let geoData = null;
+    let geoRequest = null;
+    let geoToken = 0;
+    let lastCode = null;
+
+    function selectedCode(select) {
+      const option = select ? select.selectedOptions[0] : null;
+      return option ? option.dataset.code || "" : "";
+    }
+
+    function setEnabled(field, enabled) {
+      field.hidden = !enabled;
+      field.querySelectorAll("input, select, textarea").forEach((element) => {
+        element.disabled = !enabled;
+      });
+    }
+
+    function emptyList(list) {
+      if (list) {
+        list.replaceChildren();
+      }
+    }
+
+    function clearForeignOptions() {
+      geoToken += 1;
+      emptyList(regionList);
+      emptyList(provinceList);
+    }
+
+    function loadGeoData() {
+      if (geoData) {
+        return Promise.resolve(geoData);
+      }
+      if (!geoRequest) {
+        geoRequest = fetch("/static/foreign-geo.json", { cache: "no-store" })
+          .then((response) => (response.ok ? response.json() : {}))
+          .then((data) => {
+            geoData = data && typeof data === "object" ? data : {};
+            return geoData;
+          })
+          .catch(() => {
+            geoData = {};
+            return geoData;
+          });
+      }
+      return geoRequest;
+    }
+
+    function fillList(list, values) {
+      if (!list) {
+        return;
+      }
+      const fragment = document.createDocumentFragment();
+      const items = Array.isArray(values) ? values : [];
+      items.forEach((value) => {
+        const option = document.createElement("option");
+        option.value = String(value);
+        fragment.appendChild(option);
+      });
+      list.replaceChildren(fragment);
+    }
+
+    function populateForeignOptions(code) {
+      if (!code || code === "IT") {
+        clearForeignOptions();
+        return;
+      }
+      const token = ++geoToken;
+      loadGeoData().then((data) => {
+        if (token !== geoToken) {
+          return;
+        }
+        const entry = data[code] || {};
+        fillList(regionList, entry.regions);
+        fillList(provinceList, entry.provinces);
+      });
+    }
+
+    function apply() {
+      const effectiveCountry =
+        country.value ||
+        (birthCountry ? birthCountry.value : "") ||
+        "Italia";
+      const isForeign = effectiveCountry !== "Italia";
+      const code = country.value
+        ? selectedCode(country)
+        : selectedCode(birthCountry);
+      const changed = lastCode !== null && code !== lastCode;
+      lastCode = code;
+      italianFields.forEach((field) => setEnabled(field, !isForeign));
+      foreignFields.forEach((field) => setEnabled(field, isForeign));
+      if (isForeign) {
+        if (changed) {
+          if (regionInput) {
+            regionInput.value = "";
+          }
+          if (provinceInput) {
+            provinceInput.value = "";
+          }
+        }
+        populateForeignOptions(code);
+      } else {
+        if (changed) {
+          if (regionInput) {
+            regionInput.value = "";
+          }
+          if (provinceInput) {
+            provinceInput.value = "";
+          }
+        }
+        clearForeignOptions();
+      }
+    }
+
+    country.addEventListener("change", apply);
+    if (birthCountry) {
+      birthCountry.addEventListener("change", apply);
+    }
+    apply();
+  }
+
   function clearError() {
     if (errorBox) {
       errorBox.hidden = true;
@@ -547,5 +691,6 @@
   initializeRows(initialValues);
   updateAllRanges();
   initGeoMenus();
+  initResidenceGeoFields();
   showStep(0);
 })();

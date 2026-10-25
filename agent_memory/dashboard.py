@@ -225,10 +225,20 @@ def _finalize_actions_from_form(form: dict[str, str]) -> list[str]:
     return actions
 
 
-def _option_tag(value: str, label: str, selected: str) -> str:
+def _option_tag(
+    value: str, label: str, selected: str, *, data_code: str = ""
+) -> str:
     mark = " selected" if value == selected else ""
     escaped = html.escape(value, quote=True)
-    return f'<option value="{escaped}"{mark}>{html.escape(label)}</option>'
+    code = (
+        f' data-code="{html.escape(data_code, quote=True)}"'
+        if data_code
+        else ""
+    )
+    return (
+        f'<option value="{escaped}"{code}{mark}>'
+        f"{html.escape(label)}</option>"
+    )
 
 
 def _select_options(
@@ -245,13 +255,19 @@ def _select_options(
 
 
 def _country_options(selected: str, *, empty_label: str = "") -> str:
-    options: list[tuple[str, str]] = []
+    parts: list[str] = []
     if empty_label:
-        options.append(("", empty_label))
+        parts.append(_option_tag("", empty_label, selected))
     # Il valore inviato è il nome italiano: è quello che finisce in
-    # identity.json, mentre il codice ISO viene ricavato dal server.
-    options.extend((name, name) for _code, name in COUNTRIES)
-    return _select_options(options, selected)
+    # identity.json, mentre il codice ISO viene ricavato dal server. Il
+    # codice resta disponibile nel DOM per caricare le suddivisioni estere.
+    parts.extend(
+        _option_tag(name, name, selected, data_code=code)
+        for code, name in COUNTRIES
+    )
+    if selected and all(name != selected for _code, name in COUNTRIES):
+        parts.append(_option_tag(selected, selected, selected))
+    return "".join(parts)
 
 
 def _region_options(selected: str) -> str:
@@ -1548,6 +1564,20 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 _province_options(residence_province),
             )
             .replace(
+                "{{residence_region_foreign}}",
+                html.escape(
+                    preserved.get("residence_region_foreign", ""),
+                    quote=True,
+                ),
+            )
+            .replace(
+                "{{residence_province_foreign}}",
+                html.escape(
+                    preserved.get("residence_province_foreign", ""),
+                    quote=True,
+                ),
+            )
+            .replace(
                 "{{residence_country_options}}",
                 _country_options(
                     residence_country,
@@ -2061,6 +2091,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             ".html": "text/html; charset=utf-8",
             ".css": "text/css; charset=utf-8",
             ".js": "text/javascript; charset=utf-8",
+            ".json": "application/json; charset=utf-8",
             ".svg": "image/svg+xml",
             ".png": "image/png",
             ".ico": "image/x-icon",

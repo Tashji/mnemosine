@@ -150,9 +150,10 @@
             <fieldset class="setup-section">
               <legend>Residenza</legend>
               <p class="setup-hint">
-                Se la città resta vuota viene usata quella di nascita. Province e
-                regioni sono quelle italiane; per una località estera lascia
-                “Non indicata”.
+                Se la città resta vuota viene usata quella di nascita. Per
+                l’Italia scegli regione e provincia dai menu; per una residenza
+                estera compaiono i campi per regione o stato e provincia o contea,
+                con i suggerimenti del paese selezionato.
               </p>
               <div class="setup-grid">
                 <label class="login-field">
@@ -161,15 +162,25 @@
                 </label>
                 <label class="login-field">
                   <span>Paese</span>
-                  <select name="residence_country">{{residence_country_options}}</select>
+                  <select name="residence_country" data-country-select="residence">{{residence_country_options}}</select>
                 </label>
-                <label class="login-field">
+                <label class="login-field" data-italian-geo="residence">
                   <span>Regione</span>
                   <select name="residence_region" data-region-select="residence" data-strict>{{residence_region_options}}</select>
                 </label>
-                <label class="login-field">
+                <label class="login-field" data-italian-geo="residence">
                   <span>Provincia</span>
                   <select name="residence_province" data-province-select="residence" data-strict>{{residence_province_options}}</select>
+                </label>
+                <label class="login-field" data-foreign-geo="residence" hidden>
+                  <span>Regione o Stato</span>
+                  <input name="residence_region_foreign" list="residence-region-options" maxlength="120" value="{{residence_region_foreign}}" placeholder="Es. Île-de-France, Baviera, California">
+                  <datalist id="residence-region-options"></datalist>
+                </label>
+                <label class="login-field" data-foreign-geo="residence" hidden>
+                  <span>Provincia o contea</span>
+                  <input name="residence_province_foreign" list="residence-province-options" maxlength="120" value="{{residence_province_foreign}}" placeholder="Es. Parigi, Monaco, Los Angeles">
+                  <datalist id="residence-province-options"></datalist>
                 </label>
                 <label class="login-field">
                   <span>Residente dal</span>
