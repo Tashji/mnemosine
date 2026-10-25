@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-160%20passing-2ea043?logo=githubactions&logoColor=white" alt="160 test superati"></a>
+  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-164%20passing-2ea043?logo=githubactions&logoColor=white" alt="164 test superati"></a>
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12">
   <img src="https://img.shields.io/badge/MCP-Model%20Context%20Protocol-6ee7d8" alt="Model Context Protocol">
   <img src="https://img.shields.io/badge/storage-SQLite%20%2B%20FAISS-0b1422" alt="SQLite e FAISS">
@@ -720,7 +720,7 @@ Il sistema utilizzerà SQLite per le date e i ricordi, il Vector Database per tr
 
 ### 14.3. Invio spontaneo di messaggi
 
-Se un trigger viene attivato, l'MCP potrà generare un messaggio e inviarlo tramite l'integrazione WhatsApp, se autorizzata.
+Se un trigger viene attivato, l'MCP potrà generare un messaggio e inviarlo tramite WhatsApp Web, oppure scegliere il browser per un'altra azione, solo se l'integrazione e il contatto sono autorizzati.
 
 Esempio:
 
@@ -734,7 +734,7 @@ Esempio:
 
 5. Il sistema applica i controlli di orario e sicurezza.
 
-6. L'integrazione WhatsApp esegue l'invio consentito.
+6. L'executor autorizzato apre WhatsApp Web ed esegue l'invio consentito.
 
 La generazione del messaggio e l'invio effettivo saranno due operazioni distinte.
 
@@ -745,6 +745,54 @@ Tra le 00:00 e le 07:00, il sistema entrerà nello stato «Sonno/Fase REM».
 Durante questa fascia, non saranno inviati messaggi spontanei. Il sistema potrà consolidare la memoria, ridurre il carico cognitivo e aggiornare gli indici semantici.
 
 Le fasce orarie saranno configurabili.
+
+### 14.5. Integrazioni autonome: WhatsApp Web, browser e whitelist
+
+L'agente non usa una singola integrazione dedicata a WhatsApp. Quando il ciclo autonomo produce un'iniziativa, sceglie lo strumento più adatto tra quelli abilitati dall'amministratore:
+
+- **WhatsApp Web** per scrivere ai contatti autorizzati: amici, familiari e persone presenti nel grafo delle relazioni.
+
+- **Browser** per cercare informazioni, leggere pagine e approfondire un argomento.
+
+- **Browser** per partecipare a un forum o a una comunità, con lo stesso profilo di navigazione.
+
+- **Browser** per consultare servizi web già autorizzati.
+
+La scelta avviene nel ciclo di pianificazione: l'agente valuta l'obiettivo, lo stato corrente, le relazioni e le autorizzazioni, poi propone l'azione. La generazione del testo e l'esecuzione restano separate: il modello decide *cosa* fare, mentre un executor controllato apre il browser o WhatsApp Web e compie i passaggi.
+
+#### Whitelist di navigazione
+
+Ogni navigazione passa da una whitelist esplicita, configurata dall'amministratore in un file dedicato (per esempio `config/integrations.json`). La whitelist contiene origini o domini, non URL arbitrari proposti dal modello:
+
+- solo HTTPS, con dominio esatto o sottodomini dichiarati;
+
+- nessun accesso a `localhost`, indirizzi privati, `file://` o schemi non previsti;
+
+- i redirect verso domini non elencati vengono bloccati;
+
+- link, download e nuove schede restano confinati nella whitelist;
+
+- l'agente non può aggiungere voci alla whitelist da solo.
+
+La whitelist non è un filtro affidato al modello linguistico: è un controllo dell'executor. Se l'agente propone un sito o un'azione non previsti, il browser non esegue la richiesta e l'iniziativa viene messa in pausa in attesa di approvazione umana.
+
+#### WhatsApp Web e contatti autorizzati
+
+Per WhatsApp Web valgono regole analoghe a quelle della navigazione:
+
+- si apre solo la sessione web ufficiale, in un profilo browser isolato;
+
+- si scrive solo a contatti e gruppi presenti in una lista autorizzata;
+
+- i numeri sconosciuti richiedono approvazione umana;
+
+- si applicano limiti di frequenza e le fasce di silenzio della routine;
+
+- ogni invio viene registrato con destinatario, orario e contenuto;
+
+- le credenziali della sessione non entrano mai nel prompt né nella memoria.
+
+In questo modo l'autonomia resta reale ma circoscritta: l'agente può cercare, leggere, partecipare a un forum e conversare con i suoi amici senza vagare per il web.
 
 ---
 
@@ -768,7 +816,7 @@ Se l'LLM viene eseguito tramite API esterne, il computer locale gestirà princip
 
 - Elaborazione e indicizzazione dei ricordi.
 
-- Integrazione con WhatsApp.
+- Integrazioni autonome con WhatsApp Web e browser controllato.
 
 - Pannello amministrativo.
 
@@ -812,7 +860,9 @@ L'architettura dovrà comprendere:
 
 - Un meccanismo di backup e ripristino.
 
-- Un'integrazione autorizzata con WhatsApp.
+- Un'integrazione autorizzata con WhatsApp Web.
+
+- Un browser automatizzato (Playwright o Chromium) per ricerche, forum e servizi web, vincolato alla whitelist.
 
 - Un pannello di controllo per identità, memoria e configurazione.
 
@@ -880,7 +930,7 @@ Il sistema sarà composto dai seguenti moduli:
 
 18. Heartbeat Loop: iniziativa autonoma.
 
-19. Integrazione WhatsApp: ricezione e invio delle interazioni.
+19. Integrazioni autonome: WhatsApp Web per i contatti autorizzati e browser con whitelist per ricerche e forum.
 
 20. Server MCP: coordinamento dei moduli e comunicazione con l'LLM.
 
@@ -942,9 +992,9 @@ Realizzare lo stato corrente, il generatore di routine, il carico cognitivo, il 
 
 La prima tranche è implementata in `agent_memory/routine.py`: genera il piano giornaliero, sceglie l'attività in corso e gestisce la finestra di sonno. Il carico cognitivo dinamico e l'Heartbeat Loop restano da implementare.
 
-### Fase 7 — Relazioni e WhatsApp
+### Fase 7 — Relazioni e autonomia web
 
-Integrare il grafo delle relazioni, il recupero dei ricordi relativi ai singoli utenti e l'invio autonomo dei messaggi autorizzati.
+Integrare il grafo delle relazioni, il recupero dei ricordi relativi ai singoli utenti e l'iniziativa autonoma tramite WhatsApp Web e browser, con contatti e siti in whitelist.
 
 ### Fase 8 — Sicurezza e affidabilità
 
@@ -1094,7 +1144,7 @@ Prima configurazione da browser:
 - L’ultimo passaggio può generare la biografia procedurale e costruire l’indice vettoriale. Le operazioni partono in background e la pagina di completamento segue l’avanzamento con polling su `/setup/finalize/status`; i pulsanti restano disabilitati finché il job è in corso. Se un’operazione fallisce, il profilo resta valido e si può riprovare da `/setup/finalize`; biografia e indice restano disponibili anche dai comandi CLI. Un solo job di completamento può essere attivo per dashboard: una nuova richiesta mentre il job è in corso viene ignorata. Se il server viene riavviato, lo stato del job in memoria si perde, ma i dati già scritti restano.
 
 - Le righe di familiari, lingue, persone, formazione e lavoro sono dinamiche; il server accetta al massimo 20 righe per sezione e valida date, anni, codici lingua e intervalli di fiducia.
-- Genere, pronomi, fuso orario IANA, paese di nascita e di residenza, cittadinanza, regione, provincia, lingua e livello sono menu a scelta: non si possono digitare valori ambigui. Il codice ISO del paese viene ricavato dal paese selezionato, quindi non può divergere dal nome. Le province italiane restano salvate come sigla (per esempio `MI`) e la regione viene ricavata o verificata dal server. Per una residenza estera compaiono invece “Regione o Stato” e “Provincia o contea”, con i suggerimenti delle suddivisioni del paese selezionato (dati GeoNames, CC BY 4.0); i valori restano modificabili come testo e il server rifiuta sigle o regioni italiane abbinate a un paese diverso dall'Italia. Per una nascita estera restano i menu italiani e si lascia “Non indicata”.
+- Genere, pronomi, fuso orario IANA, paese di nascita e di residenza, cittadinanza, regione, provincia, lingua e livello sono menu a scelta: non si possono digitare valori ambigui. Il codice ISO del paese viene ricavato dal paese selezionato, quindi non può divergere dal nome. Le province italiane restano salvate come sigla (per esempio `MI`) e la regione viene ricavata o verificata dal server. Per una nascita o una residenza estera compaiono invece “Regione o Stato” e “Provincia o contea”, con i suggerimenti delle suddivisioni del paese selezionato (dati GeoNames, CC BY 4.0); i valori restano modificabili come testo e il server rifiuta sigle o regioni italiane abbinate a un paese diverso dall'Italia.
 
 - Se la directory contiene già un profilo pronto, `/setup` reindirizza alla dashboard. Un profilo incompleto non viene sovrascritto: usa `profile init --force` da terminale.
 
@@ -1545,7 +1595,7 @@ Esempio operativo:
 
 Sono le 15:00 e "current_state.json" indica che l'agente sta riposando in camera.
 
-Un utente gli scrive su WhatsApp:
+Un utente gli scrive su WhatsApp Web:
 
 «Che fai di bello?»
 
@@ -1567,7 +1617,7 @@ Il sistema potrà seguire questa sequenza:
 
 8. Il sistema esegue i controlli di coerenza e sicurezza previsti.
 
-9. L'immagine viene inviata tramite l'integrazione WhatsApp, se l'azione è autorizzata.
+9. L'immagine viene inviata tramite WhatsApp Web, se il contatto e l'azione sono autorizzati.
 
 10. L'evento viene registrato nella memoria episodica.
 
@@ -1641,7 +1691,7 @@ Il motore di consistenza visiva sarà integrato come modulo autonomo, collegato 
 
 8. Heartbeat Loop.
 
-9. Integrazione WhatsApp.
+9. WhatsApp Web e browser controllato.
 
 10. Sicurezza, logging e backup.
 

@@ -273,27 +273,28 @@
     });
   }
 
-  function initResidenceGeoFields() {
-    const country = form.querySelector('[data-country-select="residence"]');
-    const birthCountry = form.querySelector('[name="birth_country"]');
+  function initForeignGeoFields(key) {
+    const country = form.querySelector(`[data-country-select="${key}"]`);
+    const birthCountry =
+      key === "residence"
+        ? form.querySelector('[name="birth_country"]')
+        : null;
     if (!country) {
       return;
     }
     const italianFields = Array.from(
-      form.querySelectorAll('[data-italian-geo="residence"]')
+      form.querySelectorAll(`[data-italian-geo="${key}"]`)
     );
     const foreignFields = Array.from(
-      form.querySelectorAll('[data-foreign-geo="residence"]')
+      form.querySelectorAll(`[data-foreign-geo="${key}"]`)
     );
-    const regionList = document.getElementById("residence-region-options");
+    const regionList = document.getElementById(`${key}-region-options`);
     const provinceList = document.getElementById(
-      "residence-province-options"
+      `${key}-province-options`
     );
-    const regionInput = form.querySelector(
-      '[name="residence_region_foreign"]'
-    );
+    const regionInput = form.querySelector(`[name="${key}_region_foreign"]`);
     const provinceInput = form.querySelector(
-      '[name="residence_province_foreign"]'
+      `[name="${key}_province_foreign"]`
     );
 
     let geoData = null;
@@ -691,6 +692,7 @@
   initializeRows(initialValues);
   updateAllRanges();
   initGeoMenus();
-  initResidenceGeoFields();
+  initForeignGeoFields("birth");
+  initForeignGeoFields("residence");
   showStep(0);
 })();

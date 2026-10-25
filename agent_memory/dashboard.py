@@ -1556,6 +1556,20 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 _province_options(birth_province),
             )
             .replace(
+                "{{birth_region_foreign}}",
+                html.escape(
+                    preserved.get("birth_region_foreign", ""),
+                    quote=True,
+                ),
+            )
+            .replace(
+                "{{birth_province_foreign}}",
+                html.escape(
+                    preserved.get("birth_province_foreign", ""),
+                    quote=True,
+                ),
+            )
+            .replace(
                 "{{residence_region_options}}",
                 _region_options(residence_region),
             )

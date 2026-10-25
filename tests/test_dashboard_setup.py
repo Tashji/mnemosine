@@ -337,6 +337,14 @@ class DashboardSetupTests(SetupFixture):
         )
         self.assertIn('<select name="language___INDEX___code">', page)
         self.assertIn('<select name="language___INDEX___level">', page)
+        self.assertIn('data-italian-geo="birth"', page)
+        self.assertIn('data-foreign-geo="birth"', page)
+        self.assertIn('name="birth_region_foreign"', page)
+        self.assertIn('name="birth_province_foreign"', page)
+        self.assertIn('list="birth-region-options"', page)
+        self.assertIn('list="birth-province-options"', page)
+        self.assertIn('id="birth-region-options"', page)
+        self.assertIn('id="birth-province-options"', page)
         self.assertIn('data-italian-geo="residence"', page)
         self.assertIn('data-foreign-geo="residence"', page)
         self.assertIn('name="residence_region_foreign"', page)
@@ -413,6 +421,106 @@ class DashboardSetupTests(SetupFixture):
         self.assertEqual(residence["province"], "TO")
         self.assertEqual(residence["region"], "Piemonte")
 
+    def test_foreign_birth_accepts_local_geo_fields(self) -> None:
+        _page, csrf = self._csrf("/setup")
+        response = self._submit(
+            csrf,
+            self._form(
+                birth_city="Parigi",
+                birth_country="Francia",
+                birth_region="",
+                birth_province="",
+                birth_region_foreign="Île-de-France",
+                birth_province_foreign="Paris",
+            ),
+        )
+        self.assertEqual(response.status, 303)
+        identity = json.loads(
+            (self.root / "config" / "identity.json").read_text(encoding="utf-8")
+        )
+        birth_place = identity["personal_data"]["birth_place"]
+        self.assertEqual(birth_place["country"], "Francia")
+        self.assertEqual(birth_place["region"], "Île-de-France")
+        self.assertEqual(birth_place["province"], "Paris")
+
+    def test_foreign_birth_rejects_italian_geo_values(self) -> None:
+        _page, csrf = self._csrf("/setup")
+        response = self._submit(
+            csrf,
+            self._form(
+                birth_country="Francia",
+                birth_region="",
+                birth_province="",
+                birth_province_foreign="MI",
+            ),
+        )
+        self.assertEqual(response.status, 400)
+        self.assertIn(
+            "non una sigla italiana",
+            response.read().decode("utf-8"),
+        )
+        self.assertEqual(profile_state(self.root), PROFILE_STATE_MISSING)
+
+        _page, csrf = self._csrf("/setup")
+        response = self._submit(
+            csrf,
+            self._form(
+                birth_country="Francia",
+                birth_region="",
+                birth_province="",
+                birth_region_foreign="Lazio",
+            ),
+        )
+        self.assertEqual(response.status, 400)
+        self.assertIn(
+            "non una regione italiana",
+            response.read().decode("utf-8"),
+        )
+
+    def test_foreign_birth_values_survive_form_errors(self) -> None:
+        _page, csrf = self._csrf("/setup")
+        response = self._submit(
+            csrf,
+            self._form(
+                birth_date="not-a-date",
+                birth_country="Francia",
+                birth_region="",
+                birth_province="",
+                birth_region_foreign="Île-de-France",
+                birth_province_foreign="Paris",
+            ),
+        )
+        self.assertEqual(response.status, 400)
+        page = response.read().decode("utf-8")
+        self.assertIn('value="Île-de-France"', page)
+        self.assertIn('value="Paris"', page)
+
+    def test_residence_inherits_foreign_birth_geo(self) -> None:
+        _page, csrf = self._csrf("/setup")
+        response = self._submit(
+            csrf,
+            self._form(
+                birth_city="Parigi",
+                birth_country="Francia",
+                birth_region="",
+                birth_province="",
+                birth_region_foreign="Île-de-France",
+                birth_province_foreign="Paris",
+                residence_city="",
+                residence_country="",
+                residence_region="",
+                residence_province="",
+            ),
+        )
+        self.assertEqual(response.status, 303)
+        identity = json.loads(
+            (self.root / "config" / "identity.json").read_text(encoding="utf-8")
+        )
+        residence = identity["personal_data"]["residence"]
+        self.assertEqual(residence["country"], "Francia")
+        self.assertEqual(residence["region"], "Île-de-France")
+        self.assertEqual(residence["province"], "Paris")
+
     def test_invalid_province_or_region_is_rejected(self) -> None:
         _page, csrf = self._csrf("/setup")
         response = self._submit(csrf, self._form(birth_province="XYZ"))
@@ -442,7 +550,7 @@ class DashboardSetupTests(SetupFixture):
         )
         self.assertEqual(response.status, 400)
         self.assertIn(
-            "la provincia è italiana",
+            "non una sigla italiana",
             response.read().decode("utf-8"),
         )
         self.assertEqual(profile_state(self.root), PROFILE_STATE_MISSING)

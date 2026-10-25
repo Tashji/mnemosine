@@ -120,8 +120,10 @@
               <legend>Nascita</legend>
               <p class="setup-hint">
                 Scegli il paese dall’elenco: il codice ISO viene ricavato
-                automaticamente. Province e regioni sono quelle italiane; per
-                una località estera lascia “Non indicata”.
+                automaticamente. Per l’Italia scegli regione e provincia dai
+                menu; per una nascita estera compaiono i campi per regione o
+                stato e provincia o contea, con i suggerimenti del paese
+                selezionato.
               </p>
               <div class="setup-grid">
                 <label class="login-field">
@@ -130,15 +132,25 @@
                 </label>
                 <label class="login-field">
                   <span>Paese</span>
-                  <select name="birth_country" data-required>{{birth_country_options}}</select>
+                  <select name="birth_country" data-country-select="birth" data-required>{{birth_country_options}}</select>
                 </label>
-                <label class="login-field">
+                <label class="login-field" data-italian-geo="birth">
                   <span>Regione</span>
                   <select name="birth_region" data-region-select="birth" data-strict>{{birth_region_options}}</select>
                 </label>
-                <label class="login-field">
+                <label class="login-field" data-italian-geo="birth">
                   <span>Provincia</span>
                   <select name="birth_province" data-province-select="birth" data-strict>{{birth_province_options}}</select>
+                </label>
+                <label class="login-field" data-foreign-geo="birth" hidden>
+                  <span>Regione o Stato</span>
+                  <input name="birth_region_foreign" list="birth-region-options" maxlength="120" value="{{birth_region_foreign}}" placeholder="Es. Île-de-France, Baviera, California">
+                  <datalist id="birth-region-options"></datalist>
+                </label>
+                <label class="login-field" data-foreign-geo="birth" hidden>
+                  <span>Provincia o contea</span>
+                  <input name="birth_province_foreign" list="birth-province-options" maxlength="120" value="{{birth_province_foreign}}" placeholder="Es. Parigi, Monaco, Los Angeles">
+                  <datalist id="birth-province-options"></datalist>
                 </label>
                 <label class="login-field">
                   <span>Cittadinanza (paese)</span>

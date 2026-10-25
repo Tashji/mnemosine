@@ -544,7 +544,7 @@ def _foreign_geo_fields(
     province_label: str,
     region_label: str,
 ) -> tuple[str, str]:
-    """Accetta regione e provincia locali per una residenza estera.
+    """Accetta regione e provincia locali per una località estera.
 
     I due campi dedicati hanno la precedenza; i vecchi campi restano letti
     per compatibilità con i moduli inviati prima dell'introduzione dei campi
@@ -631,13 +631,21 @@ def build_profile_args(values: Mapping[str, Any]) -> argparse.Namespace:
         raise ValidationError(
             "Paese di residenza: scegli un paese dall'elenco."
         )
-    birth_province, birth_region = _geo_fields(
-        values,
-        prefix="birth",
-        country_code=birth_country_code,
-        province_label="Provincia di nascita",
-        region_label="Regione di nascita",
-    )
+    if birth_country_code == "IT":
+        birth_province, birth_region = _geo_fields(
+            values,
+            prefix="birth",
+            country_code=birth_country_code,
+            province_label="Provincia di nascita",
+            region_label="Regione di nascita",
+        )
+    else:
+        birth_province, birth_region = _foreign_geo_fields(
+            values,
+            prefix="birth",
+            province_label="Provincia di nascita",
+            region_label="Regione di nascita",
+        )
     if residence_country_code == "IT":
         residence_province, residence_region = _geo_fields(
             values,
