@@ -16,3 +16,8 @@ data/dashboard_tls/
 # File scritti dall'agente nella sandbox del profilo.
 files/
 profiles/*/files/
+
+# Artefatti di build del pacchetto.
+build/
+dist/
+*.egg-info/

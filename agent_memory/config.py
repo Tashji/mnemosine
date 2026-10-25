@@ -361,6 +361,12 @@ class ConfigStore:
         """Carica e valida tutti i documenti (senza cache)."""
 
         with self._lock:
+            if not self.config_dir.is_dir():
+                raise ConfigError(
+                    f"Cartella di configurazione non trovata: {self.config_dir}. "
+                    "Indica la directory del profilo con --root (quella che "
+                    "contiene config/ e data/)."
+                )
             configs: dict[str, Any] = {}
             for name, filename in CONFIG_FILENAMES.items():
                 configs[name] = _read_json(self.config_dir / filename)

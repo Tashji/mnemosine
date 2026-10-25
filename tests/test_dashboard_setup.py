@@ -240,6 +240,8 @@ class DashboardSetupTests(SetupFixture):
         self.assertIn("Indice vettoriale", body)
         self.assertIn("setup_complete.js", body)
         self.assertIn("data-status-url=\"/setup/finalize/status\"", body)
+        self.assertIn("Collega l’agente con", body)
+        self.assertIn("mnemosine --root", body)
         self.assertNotIn("{{", body)
         self.assertIsNone(self._job_status()["job"])
 

@@ -3,7 +3,7 @@
 
 Il comando:
   1. carica e valida i cinque file JSON in config/;
-  2. applica gli schemi in schemas/ ai quattro database in data/;
+  2. applica gli schemi in agent_memory/schemas/ ai quattro database in data/;
   3. inserisce ricordi episodici, voci dell'ombra e conoscenze semantiche;
   4. verifica i riferimenti incrociati tra JSON, timeline, diario e semantica.
 
@@ -27,7 +27,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG_DIR = ROOT / "config"
-SCHEMA_DIR = ROOT / "schemas"
+SCHEMA_DIR = ROOT / "agent_memory" / "schemas"
 DATA_DIR = ROOT / "data"
 
 TIMELINE_DB = DATA_DIR / "timeline_episodic.db"

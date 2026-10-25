@@ -51,7 +51,10 @@ from .setup_options import (
 
 PROFILE_VERSION = "1.0"
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SCHEMA_DIR = PROJECT_ROOT / "schemas"
+# Gli schemi vivono dentro il pacchetto: così restano raggiungibili anche
+# quando il progetto è installato con pip e non esiste una working directory.
+PACKAGE_DIR = Path(__file__).resolve().parent
+SCHEMA_DIR = PACKAGE_DIR / "schemas"
 TIMELINE_SCHEMA = "timeline_episodic.sql"
 SHADOW_SCHEMA = "shadow_diary.sql"
 SEMANTIC_SCHEMA = "semantic_memory.sql"

@@ -24,6 +24,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
 
 from .browser import BrowserController
+from .config import project_root
 from .embeddings import Embedder
 from .errors import AgentMemoryError
 from .files import FileSandbox
@@ -640,6 +641,14 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     except AgentMemoryError as exc:
         print(f"ERRORE: {exc}", file=sys.stderr)
+        target = args.root if args.root is not None else project_root()
+        if not (target / "config").is_dir():
+            print(
+                "Nessun profilo in questa directory: al primo avvio esegui "
+                "`mnemosine-start` (oppure `python -m agent_memory.start`) per "
+                "crearlo con il wizard.",
+                file=sys.stderr,
+            )
         return 1
     except KeyboardInterrupt:
         return 130

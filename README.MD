@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-218%20passing-2ea043?logo=githubactions&logoColor=white" alt="218 test superati"></a>
+  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-239%20passing-2ea043?logo=githubactions&logoColor=white" alt="239 test superati"></a>
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12">
   <img src="https://img.shields.io/badge/MCP-Model%20Context%20Protocol-6ee7d8" alt="Model Context Protocol">
   <img src="https://img.shields.io/badge/storage-SQLite%20%2B%20FAISS-0b1422" alt="SQLite e FAISS">
@@ -62,25 +62,33 @@ cd mnemosine
 
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -e ".[browser]"      # oppure: pip install -r requirements.txt
+python -m playwright install chromium   # solo se vuoi i tool browser
 
-# Opzionale: browser controllato e Playwright
-pip install -r requirements-browser.txt
-python -m playwright install chromium
-
-# Prima configurazione dal browser
-python -m agent_memory.dashboard --root ./profiles/marco --auth
-# Apri http://127.0.0.1:8765/setup
-
-# In alternativa, crea il profilo da terminale
-python -m agent_memory.profile init --root ./profiles/marco --interactive
+# 1. Prima cosa: il wizard per creare il primo profilo
+mnemosine-start                  # oppure: python -m agent_memory.start
 ```
 
-Dopo la creazione, popola il passato e l'indice vettoriale:
+Il comando prepara un profilo in `~/.mnemosine/profile`, avvia la dashboard in locale e apre il browser sulla pagina di configurazione (`/setup`). Il wizard raccoglie anagrafica, carattere, famiglia e persone importanti, crea i cinque file JSON e i quattro database, poi genera biografia e indice. Non serve conoscere `--root` né le opzioni della dashboard.
+
+Al primo avvio il server rifiuta una directory senza profilo e indica proprio questo comando:
+
+```text
+ERRORE: Cartella di configurazione non trovata: ...
+Nessun profilo in questa directory: al primo avvio esegui `mnemosine-start` ...
+```
+
+Dopo la creazione, collega l'agente indicando la directory del profilo:
 
 ```bash
-python -m agent_memory.biography --root ./profiles/marco --apply
-python -m agent_memory.index --root ./profiles/marco --rebuild
+mnemosine --root ~/.mnemosine/profile
+```
+
+Il wizard esegue già biografia e indice; se usi il percorso da terminale (`mnemosine-profile init --root ./profiles/marco --interactive`) puoi generarli a mano:
+
+```bash
+mnemosine-biography --root ./profiles/marco --apply
+mnemosine-index --root ./profiles/marco --rebuild
 ```
 
 ## Struttura del progetto
@@ -89,7 +97,7 @@ python -m agent_memory.index --root ./profiles/marco --rebuild
 | --- | --- |
 | `agent_memory/` | Server MCP, servizi di memoria, dashboard e comandi CLI. |
 | `config/` | Profilo demo: identità, tratti, stato, storia e relazioni. |
-| `schemas/` | Schemi SQLite delle quattro memorie. |
+| `agent_memory/schemas/` | Schemi SQLite delle quattro memorie, inclusi nel pacchetto installato. |
 | `scripts/` | Inizializzazione del dataset demo. |
 | `tests/` | Test unitari e di integrazione. |
 | `assets/` | Illustrazioni e materiale del README. |
@@ -99,6 +107,8 @@ python -m agent_memory.index --root ./profiles/marco --rebuild
 ```bash
 python -m unittest discover -s tests
 ```
+
+I test girano dal repository, dove ogni file di runtime esiste per costruzione. Prima di pubblicare una modifica al packaging va rifatta la verifica sul wheel installato: comandi, esiti attesi ed errori tipici sono in [`AGENTS.md`](AGENTS.md).
 
 <a id="indice" name="indice"></a>
 
@@ -268,9 +278,67 @@ python -m agent_memory.index --root ./profiles/marco --rebuild
 
 # Avvia la dashboard sul nuovo profilo
 python -m agent_memory.dashboard --root ./profiles/marco --auth
+````biography` e `index` non vengono eseguiti automaticamente da `profile init`, ma il wizard della dashboard può eseguir
+li subito dopo la creazione: la biografia dipende dalla data di riferimento e l'indice richiede il modello FastEmbed. Se modifichi l'identità dopo aver generato la biografia, controlla che `world_history.birth_date` resti uguale a `identity.personal_data.birth_date`.
+
+### 2.5. Installazione come pacchetto e collegamento dell'agente
+
+Il server si può usare in due modi, nessuno dei due richiede Docker.
+
+```bash
+# A) Dal repository, senza installare nulla: i comandi vanno lanciati dalla cartella del progetto
+git clone https://github.com/Tashji/mnemosine.git
+cd mnemosine
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+
+# B) Come pacchetto installato: i comandi diventano globali e la working directory non conta
+pip install "mnemosine[browser] @ git+https://github.com/Tashji/mnemosine.git"
+# oppure, da un clone: pip install -e ".[browser]"
 ```
 
-`biography` e `index` non vengono eseguiti automaticamente da `profile init`, ma il wizard della dashboard può eseguirli subito dopo la creazione: la biografia dipende dalla data di riferimento e l'indice richiede il modello FastEmbed. Se modifichi l'identità dopo aver generato la biografia, controlla che `world_history.birth_date` resti uguale a `identity.personal_data.birth_date`.
+Con l'installazione come pacchetto sono disponibili i comandi:
+
+| Comando | Equivalente | Cosa fa |
+| --- | --- | --- |
+| `mnemosine-start` | `python -m agent_memory.start` | Primo avvio guidato: apre il wizard del profilo e la dashboard. |
+| `mnemosine` | `python -m agent_memory.server` | Server MCP su stdio o streamable-http. |
+| `mnemosine-dashboard` | `python -m agent_memory.dashboard` | Dashboard locale di consultazione e setup. |
+| `mnemosine-profile` | `python -m agent_memory.profile` | Crea un nuovo profilo. |
+| `mnemosine-biography` | `python -m agent_memory.biography` | Genera il passato procedurale. |
+| `mnemosine-index` | `python -m agent_memory.index` | Allinea o ricostruisce l'indice vettoriale. |
+| `mnemosine-browser` | `python -m agent_memory.browser` | Verifica la policy e apre una pagina consentita. |
+
+Il primo comando da eseguire dopo l'installazione è `mnemosine-start`: sceglie `~/.mnemosine/profile` (o `$AGENT_MEMORY_PROFILE`), avvia la dashboard in locale e apre il browser sulla pagina di configurazione. Se il profilo esiste già, riapre semplicemente la dashboard. Le opzioni utili sono `--root` per scegliere un'altra directory, `--no-open` quando non c'è un browser (server remoto) e `--port` per cambiare porta.
+
+Il client MCP si configura con il comando e la radice del profilo; con il pacchetto installato non serve indicare la working directory:
+
+```json
+{
+  "mcpServers": {
+    "mnemosine": {
+      "command": "mnemosine",
+      "args": ["--root", "/percorso/del/profilo"]
+    }
+  }
+}
+```
+
+Se invece usi il repository senza installarlo, il modulo si trova solo dalla cartella del progetto: indica l'interprete del virtualenv e la directory di lavoro.
+
+```json
+{
+  "mcpServers": {
+    "mnemosine": {
+      "command": "/percorso/mnemosine/.venv/bin/python",
+      "args": ["-m", "agent_memory.server", "--root", "/percorso/del/profilo"],
+      "cwd": "/percorso/mnemosine"
+    }
+  }
+}
+```
+
+`--root` è sempre la directory del profilo: quella che contiene `config/`, `data/` e la sandbox `files/`. Il dataset demo è la radice del repository stesso, quindi per provare subito si può usare `--root .` dalla cartella del progetto. Senza `--root`, un pacchetto installato non trova nessuna configurazione e il server si ferma con un errore esplicito, invece di partire con dati casuali.
 
 ---
 
