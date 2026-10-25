@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-286%20passing-2ea043?logo=githubactions&logoColor=white" alt="286 test superati"></a>
+  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-309%20passing-2ea043?logo=githubactions&logoColor=white" alt="309 test superati"></a>
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12">
   <img src="https://img.shields.io/badge/MCP-Model%20Context%20Protocol-6ee7d8" alt="Model Context Protocol">
   <img src="https://img.shields.io/badge/storage-SQLite%20%2B%20FAISS-0b1422" alt="SQLite e FAISS">
@@ -315,7 +315,7 @@ Con l'installazione come pacchetto sono disponibili i comandi:
 | `mnemosine-profile` | `python -m agent_memory.profile` | Crea un nuovo profilo. |
 | `mnemosine-biography` | `python -m agent_memory.biography` | Genera il passato procedurale. |
 | `mnemosine-index` | `python -m agent_memory.index` | Allinea o ricostruisce l'indice vettoriale. |
-| `mnemosine-heartbeat` | `python -m agent_memory.heartbeat` | Esegue un battito del ciclo autonomo: carico cognitivo e impulsi. |
+| `mnemosine-heartbeat` | `python -m agent_memory.heartbeat` | Esegue un battito del ciclo autonomo e consegna gli impulsi con `--deliver`. |
 | `mnemosine-browser` | `python -m agent_memory.browser` | Verifica la policy e apre una pagina consentita. |
 
 Il primo comando da eseguire dopo l'installazione è `mnemosine-start`: sceglie `~/.mnemosine/profile` (o `$AGENT_MEMORY_PROFILE`), avvia la dashboard in locale e apre il browser sulla pagina di configurazione. Se il profilo esiste già, riapre semplicemente la dashboard. Le opzioni utili sono `--root` per scegliere un'altra directory, `--no-open` quando non c'è un browser (server remoto) e `--port` per cambiare porta.
@@ -875,6 +875,8 @@ Per WhatsApp Web valgono regole analoghe a quelle della navigazione:
 
 - le credenziali della sessione non entrano mai nel prompt né nella memoria.
 
+L'esecutore implementato applica già le regole che non richiedono una sessione esterna: contatti in `whatsapp.allowed_contacts`, flag `whatsapp_sending_enabled`, fasce di silenzio, limite giornaliero e registro durevole in `data/outbox/messages.jsonl` (sezione 17.5). Aprire la sessione web ufficiale e compiere i passaggi della chat resta il passo mancante del trasporto.
+
 In questo modo l'autonomia resta reale ma circoscritta: l'agente può cercare, leggere, partecipare a un forum e conversare con i suoi amici senza vagare per il web.
 
 ### 14.6. Browser controllato: implementazione
@@ -1164,13 +1166,13 @@ Aggiungere i seed esterni, le modifiche caratteriali e il riconsolidamento a cas
 
 Realizzare lo stato corrente, il generatore di routine, il carico cognitivo, il sonno simulato e l'Heartbeat Loop.
 
-La fase è implementata in due moduli: `agent_memory/routine.py` genera il piano giornaliero, sceglie l'attività in corso e gestisce la finestra di sonno; `agent_memory/heartbeat.py` gestisce il carico cognitivo dinamico, i trigger interni e la coda degli impulsi spontanei (sezione 17.5). Restano da implementare l'invio effettivo dei messaggi e la sintesi notturna dei ricordi, che richiede un modello linguistico.
+La fase è implementata in tre moduli: `agent_memory/routine.py` genera il piano giornaliero, sceglie l'attività in corso e gestisce la finestra di sonno; `agent_memory/heartbeat.py` gestisce il carico cognitivo dinamico, i trigger interni e la coda degli impulsi spontanei (sezione 17.5). `agent_memory/executor.py` consuma gli impulsi e consegna i messaggi nella coda del profilo, con whitelist e flag (sezione 17.5). Restano da implementare il trasporto verso WhatsApp Web e la sintesi notturna dei ricordi, che richiede un modello linguistico.
 
 ### Fase 7 — Relazioni e autonomia web
 
 Integrare il grafo delle relazioni, il recupero dei ricordi relativi ai singoli utenti e l'iniziativa autonoma tramite WhatsApp Web e browser, con contatti e siti in whitelist.
 
-La parte web è implementata: `agent_memory/browser.py` applica la whitelist, la cronologia e l'indice numerato dei link, mentre `agent_memory/files.py` dà all'agente una cartella di lavoro isolata. Il ciclo di iniziativa esiste in `heartbeat.py` e propone il canale più adatto, ma l'esecuzione resta da fare: WhatsApp Web e l'apertura effettiva del browser da un impulso.
+La parte web è implementata: `agent_memory/browser.py` applica la whitelist, la cronologia e l'indice numerato dei link, mentre `agent_memory/files.py` dà all'agente una cartella di lavoro isolata. Il ciclo di iniziativa esiste in `heartbeat.py` e propone il canale più adatto; `agent_memory/executor.py` consuma l'impulso, verifica whitelist e flag e consegna il messaggio nella coda dell'outbox. Aprire una sessione WhatsApp Web o il browser da un impulso resta il passo mancante.
 
 ### Fase 8 — Sicurezza e affidabilità
 
@@ -1435,7 +1437,34 @@ La dashboard mostra già il nuovo stato senza modifiche: attività, luogo, routi
 3. valuta i trigger interni in ordine di priorità — ricorrenza di un ricordo conscio con importanza almeno 7 nello stesso giorno dell'anno, silenzio di almeno tre giorni da una persona con fiducia almeno 60, noia dopo 90 minuti nella stessa attività;
 4. se un trigger è attivo e non ci sono freni (sonno, manutenzione, cooldown, limite giornaliero, sovraccarico) mette in coda un **impulso**, non un messaggio.
 
-L'impulso contiene trigger, eventuale destinatario, contesto e canale suggerito; `delivery.authorized` dice se l'integrazione è già abilitata. L'invio resta un'operazione separata e non ancora implementata: il battito non apre WhatsApp né il browser, e il testo del messaggio non viene inventato da qui.
+L'impulso contiene trigger, eventuale destinatario, contesto e canale suggerito; `delivery.authorized` dice se l'integrazione è già abilitata. L'invio passa da un esecutore separato (sotto): il battito non apre WhatsApp né il browser, e il testo del messaggio non viene inventato da qui.
+
+`agent_memory/executor.py` consuma quell'impulso e fallisce chiuso. Perché la consegna avvenga, tutte queste condizioni devono valere insieme:
+
+- l'impulso esiste, ha al massimo dodici ore e chiede un messaggio;
+- il canale è `whatsapp`: un impulso browser serve a navigare, non a scrivere a qualcuno;
+- il destinatario sta **sia** nel grafo delle relazioni **sia** nella whitelist `whatsapp.allowed_contacts` di `config/integrations.json`;
+- `whatsapp.enabled` è vero e `current_state.flags.whatsapp_sending_enabled` anche;
+- non sono attivi manutenzione, finestra di sonno, `availability.accepting_messages` falso, fascia di silenzio (`quiet_hours`, predefinita 00:00–07:00) o limite `max_per_day` raggiunto.
+
+Il flag non è modificabile dal server MCP: `update_current_state` rifiuta `whatsapp_sending_enabled: true`, quindi l'autorizzazione resta in mano all'amministratore del profilo.
+
+Il blocco corrispondente in `config/integrations.json`, che in un profilo nuovo nasce spento con whitelist vuota:
+
+```json
+"whatsapp": {
+  "enabled": true,
+  "allowed_contacts": [
+    {"user_id": "user_marco", "display_name": "Marco", "phone": "+39 333 1234567"}
+  ],
+  "quiet_hours": {"start": "00:00", "end": "07:00"},
+  "max_per_day": 3
+}
+```
+
+Il limite giornaliero si conta sulle consegne già registrate oggi, non sugli impulsi: due esecuzioni nello stesso giorno non possono superare il tetto. Quando tutto è a posto il messaggio viene scritto in `data/outbox/messages.jsonl`, una riga JSON per consegna con id, destinatario, telefono, trigger, testo e istante. Solo dopo l'impulso viene chiuso con `last_decision: impulso_consegnato`. L'ordine è voluto: se la scrittura fallisce, l'impulso resta in coda invece di sparire. L'outbox è escluso dal repository perché contiene testi privati.
+
+Il trasporto verso WhatsApp Web resta fuori da questo modulo: qui si produce una consegna durevole e verificabile, non si apre una sessione esterna.
 
 I messaggi aumentano il carico: `record_interaction` via MCP, oppure `mnemosine-heartbeat --interaction`, aggiunge 2 punti per un messaggio leggero, 4 normale e 7 complesso. Oltre la soglia morbida `availability.response_style` diventa `ridotta`, oltre quella dura `breve`.
 
@@ -1451,11 +1480,14 @@ python -m agent_memory.heartbeat --loop --interval 30
 
 # Interazione appena scambiata
 python -m agent_memory.heartbeat --interaction 2 --complexity complessa
+
+# Consegna il messaggio all'impulso in attesa (whitelist e flag permettendo)
+python -m agent_memory.heartbeat --deliver "Ciao Marco, come stai?"
 ```
 
-Ritmo e freni vivono in `current_state.heartbeat` come `interval_minutes`, `cooldown_minutes` e `max_impulses_per_day`; i valori predefiniti sono 30 minuti, 180 minuti e 3 impulsi al giorno. Due strumenti MCP completano il quadro: `record_interaction` aggiorna il carico, `acknowledge_impulse` chiude l'impulso dopo che qualcuno se n'è occupato. I profili creati prima di questa versione ricevono i campi mancanti dalla migrazione 1→2 di `current_state.json`.
+Ritmo e freni vivono in `current_state.heartbeat` come `interval_minutes`, `cooldown_minutes` e `max_impulses_per_day`; i valori predefiniti sono 30 minuti, 180 minuti e 3 impulsi al giorno. Tre strumenti MCP completano il quadro: `record_interaction` aggiorna il carico, `acknowledge_impulse` chiude l'impulso senza inviare nulla, `deliver_impulse` consegna il messaggio all'impulso in attesa rispettando whitelist e flag. Anche la CLI espone la consegna con `--deliver`. I profili creati prima di questa versione ricevono i campi mancanti dalla migrazione 1→2 di `current_state.json`.
 
-Restano aperti l'invio effettivo (WhatsApp Web) e la sintesi dei ricordi notturni: durante il sonno il battito azzera il carico e registra `last_consolidation_at`, ma non inventa ricordi.
+Restano aperti il trasporto verso WhatsApp Web (l'esecutore si ferma all'outbox) e la sintesi dei ricordi notturni: durante il sonno il battito azzera il carico e registra `last_consolidation_at`, ma non inventa ricordi.
 
 ---
 

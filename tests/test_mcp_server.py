@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import shutil
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -64,6 +66,7 @@ class McpServerTests(unittest.TestCase):
         self.assertNotIn("list_shadow_entries", names)
         self.assertIn("record_interaction", names)
         self.assertIn("acknowledge_impulse", names)
+        self.assertIn("deliver_impulse", names)
 
     def test_identity_and_state_tools(self) -> None:
         identity = call_tool(self.mcp, "get_identity", {})
@@ -101,6 +104,54 @@ class McpServerTests(unittest.TestCase):
     def test_record_interaction_refuses_invalid_complexity(self) -> None:
         with self.assertRaises(ToolError):
             call_tool(self.mcp, "record_interaction", {"complexity": "enorme"})
+
+    def test_deliver_impulse_respects_whitelist_and_flags(self) -> None:
+        with self.assertRaises(ToolError) as ctx:
+            call_tool(self.mcp, "deliver_impulse", {"text": "Ciao Marco"})
+        self.assertIn("nessun impulso in attesa", str(ctx.exception))
+
+        with self.assertRaises(ToolError) as flag_error:
+            call_tool(
+                self.mcp,
+                "update_current_state",
+                {"patch": {"flags": {"whatsapp_sending_enabled": True}}},
+            )
+        self.assertIn("whatsapp_sending_enabled", str(flag_error.exception))
+
+        state_path = self.root / "config" / "current_state.json"
+        state = json.loads(state_path.read_text("utf-8"))
+        state["flags"]["whatsapp_sending_enabled"] = True
+        state["heartbeat"]["pending_impulse"] = {
+            "trigger": "relazione",
+            "target": {"user_id": "user_marco", "display_name": "Marco"},
+            "context": {},
+            "created_at": datetime.now().astimezone().replace(microsecond=0).isoformat(),
+            "delivery": {"channel": "whatsapp", "authorized": True, "note": ""},
+            "requires_message": True,
+        }
+        state_path.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+
+        integrations_path = self.root / "config" / "integrations.json"
+        integrations = json.loads(integrations_path.read_text("utf-8"))
+        integrations["whatsapp"] = {
+            "enabled": True,
+            "allowed_contacts": [
+                {"user_id": "user_marco", "display_name": "Marco", "phone": "+39"}
+            ],
+            "quiet_hours": {"start": "00:00", "end": "07:00"},
+            "max_per_day": 3,
+        }
+        integrations_path.write_text(
+            json.dumps(integrations, ensure_ascii=False), encoding="utf-8"
+        )
+
+        result = call_tool(self.mcp, "deliver_impulse", {"text": "Ciao Marco"})
+        self.assertTrue(result["delivered"])
+        self.assertEqual(result["target"]["user_id"], "user_marco")
+        self.assertEqual(result["transport"], "outbox")
+
+        state = json.loads(state_path.read_text("utf-8"))
+        self.assertIsNone(state["heartbeat"]["pending_impulse"])
 
     def test_world_history_and_social_tools(self) -> None:
         events_payload = call_tool(

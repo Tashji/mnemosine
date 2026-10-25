@@ -466,7 +466,8 @@ class ConfigStore:
         """Applica un patch ricorsivo a ``current_state.json``.
 
         I campi di sicurezza non possono essere alterati dal server: in
-        particolare la lettura diretta dell'ombra resta sempre disabilitata.
+        particolare la lettura diretta dell'ombra e l'invio WhatsApp restano
+        disabilitati finché non li abilita l'amministratore del profilo.
         """
 
         if not isinstance(patch, dict) or not patch:
@@ -486,6 +487,13 @@ class ConfigStore:
             ) not in (None, False):
                 raise ValidationError(
                     "shadow_direct_read_enabled non può essere abilitato dal server."
+                )
+            if isinstance(flags_patch, dict) and flags_patch.get(
+                "whatsapp_sending_enabled"
+            ) not in (None, False):
+                raise ValidationError(
+                    "whatsapp_sending_enabled non può essere abilitato dal server: "
+                    "l'invio va autorizzato dall'amministratore nel profilo."
                 )
 
             _deep_merge(state, patch)

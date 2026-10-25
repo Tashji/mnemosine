@@ -17,6 +17,9 @@ data/dashboard_tls/
 files/
 profiles/*/files/
 
+# Messaggi consegnati dall'esecutore: contengono testi privati.
+profiles/*/data/outbox/
+
 # Artefatti di build del pacchetto.
 build/
 dist/

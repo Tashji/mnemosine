@@ -73,6 +73,15 @@ class ConfigAndServiceTests(TempProjectTestCase):
             self.memory.update_current_state(
                 {"flags": {"shadow_direct_read_enabled": True}}
             )
+        with self.assertRaises(ValidationError):
+            self.memory.update_current_state(
+                {"flags": {"whatsapp_sending_enabled": True}}
+            )
+        # Spegnerlo resta possibile: è il verso sicuro.
+        state = self.memory.update_current_state(
+            {"flags": {"whatsapp_sending_enabled": False}}
+        )
+        self.assertFalse(state["flags"]["whatsapp_sending_enabled"])
 
     def test_update_identity_is_internal_and_preserves_id(self) -> None:
         updated = self.memory.update_identity(

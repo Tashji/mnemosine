@@ -5,5 +5,14 @@
     "interaction_enabled": false,
     "allowed_origins": [],
     "navigation_timeout_seconds": 30
+  },
+  "whatsapp": {
+    "enabled": false,
+    "allowed_contacts": [],
+    "quiet_hours": {
+      "start": "00:00",
+      "end": "07:00"
+    },
+    "max_per_day": 3
   }
 }

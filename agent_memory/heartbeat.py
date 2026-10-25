@@ -22,6 +22,7 @@ Uso:
     python -m agent_memory.heartbeat --at 2026-10-25T15:00 --apply
     python -m agent_memory.heartbeat --loop --interval 30
     python -m agent_memory.heartbeat --interaction 2 --complexity complessa
+    python -m agent_memory.heartbeat --deliver "Ciao, come stai?"
 """
 
 from __future__ import annotations
@@ -40,6 +41,7 @@ from .browser import BrowserPolicy
 from .config import ConfigStore
 from .db import Database
 from .errors import AgentMemoryError, ValidationError
+from .executor import MessageExecutor
 from .routine import RoutineEngine, availability_for
 
 HEARTBEAT_VERSION = "v1"
@@ -451,7 +453,8 @@ class HeartbeatEngine:
         )
         # L'impulso in attesa sopravvive a un battito senza nuovi trigger: non
         # va perso solo perché il ciclo è passato di nuovo.
-        pending_patch = impulse if impulse is not None else pending        # Si parte dal battito esistente: le chiavi non gestite qui (ultima
+        pending_patch = impulse if impulse is not None else pending
+        # Si parte dal battito esistente: le chiavi non gestite qui (ultima
         # interazione, ultima gestione di un impulso) restano intatte invece di
         # sparire a ogni riscrittura.
         heartbeat_patch: dict[str, Any] = copy.deepcopy(self.heartbeat)
@@ -603,6 +606,15 @@ def build_parser() -> argparse.ArgumentParser:
         default="normale",
         help="Complessità dei messaggi registrati con --interaction.",
     )
+    parser.add_argument(
+        "--deliver",
+        default=None,
+        metavar="TESTO",
+        help=(
+            "Consegna il messaggio all'impulso in attesa, se whitelist e "
+            "flag lo permettono."
+        ),
+    )
     return parser
 
 
@@ -643,6 +655,13 @@ def main(argv: list[str] | None = None) -> int:
     root = args.root
 
     try:
+        if args.deliver is not None:
+            if args.interaction is not None:
+                raise ValidationError(
+                    "Usa --deliver oppure --interaction, non entrambi."
+                )
+            return _deliver(args)
+
         if args.interaction is not None:
             result = HeartbeatEngine(root, at=args.at).record_interaction(
                 messages=args.interaction, complexity=args.complexity
@@ -672,6 +691,21 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     except KeyboardInterrupt:
         return 130
+
+
+def _deliver(args: argparse.Namespace) -> int:
+    result = MessageExecutor(args.root, at=args.at).deliver(args.deliver)
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        target = result["target"]
+        print(
+            f"Messaggio consegnato a {target['display_name']} "
+            f"({target['user_id']}) su {result['channel']}."
+        )
+        print(f"Canale: {result['transport']} — {result['message_id']}")
+        print(f"Impulso: {result['trigger']}")
+    return 0
 
 
 def _run_loop(args: argparse.Namespace) -> int:

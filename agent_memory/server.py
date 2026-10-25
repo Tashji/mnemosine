@@ -27,6 +27,7 @@ from .browser import BrowserController
 from .config import project_root
 from .embeddings import Embedder
 from .errors import AgentMemoryError
+from .executor import MessageExecutor
 from .files import FileSandbox
 from .heartbeat import HeartbeatEngine
 from .retrieval import RetrievalService
@@ -129,6 +130,24 @@ def create_server(
 
         try:
             return HeartbeatEngine(root, at=None).acknowledge_impulse(note=note)
+        except AgentMemoryError as exc:
+            raise ToolError(str(exc)) from exc
+
+    @mcp.tool()
+    def deliver_impulse(text: str) -> dict[str, Any]:
+        """Scrive al destinatario il messaggio dell'impulso in attesa.
+
+        Il testo è l'unica parte che decidi tu: destinatario, canale e
+        momento vengono dall'impulso e dalle regole del profilo. La consegna
+        riesce solo se l'integrazione è abilitata, il destinatario è in
+        whitelist, il flag di invio è attivo e nessun freno (sonno,
+        manutenzione, silenzio, limite giornaliero) è in corso. Il messaggio
+        finisce nella coda di consegna del profilo e l'impulso viene chiuso:
+        il trasporto verso WhatsApp Web resta esterno a questo processo.
+        """
+
+        try:
+            return MessageExecutor(root, at=None).deliver(text)
         except AgentMemoryError as exc:
             raise ToolError(str(exc)) from exc
 
