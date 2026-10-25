@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-309%20passing-2ea043?logo=githubactions&logoColor=white" alt="309 test superati"></a>
+  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-326%20passing-2ea043?logo=githubactions&logoColor=white" alt="326 test superati"></a>
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12">
   <img src="https://img.shields.io/badge/MCP-Model%20Context%20Protocol-6ee7d8" alt="Model Context Protocol">
   <img src="https://img.shields.io/badge/storage-SQLite%20%2B%20FAISS-0b1422" alt="SQLite e FAISS">
@@ -317,6 +317,7 @@ Con l'installazione come pacchetto sono disponibili i comandi:
 | `mnemosine-index` | `python -m agent_memory.index` | Allinea o ricostruisce l'indice vettoriale. |
 | `mnemosine-heartbeat` | `python -m agent_memory.heartbeat` | Esegue un battito del ciclo autonomo e consegna gli impulsi con `--deliver`. |
 | `mnemosine-browser` | `python -m agent_memory.browser` | Verifica la policy e apre una pagina consentita. |
+| `mnemosine-browser-login` | `python -m agent_memory.browser_login` | Apre un browser visibile per il primo accesso e salva la sessione. |
 
 Il primo comando da eseguire dopo l'installazione è `mnemosine-start`: sceglie `~/.mnemosine/profile` (o `$AGENT_MEMORY_PROFILE`), avvia la dashboard in locale e apre il browser sulla pagina di configurazione. Se il profilo esiste già, riapre semplicemente la dashboard. Le opzioni utili sono `--root` per scegliere un'altra directory, `--no-open` quando non c'è un browser (server remoto) e `--port` per cambiare porta.
 
@@ -916,7 +917,19 @@ Esempio di configurazione:
 }
 ```
 
-`interaction_enabled` abilita click e compilazione dei campi; resta `false` per impostazione predefinita. La whitelist dei contatti WhatsApp è prevista dal modello di sicurezza, ma non viene dedotta automaticamente dal contenuto della pagina: l'interazione con WhatsApp Web va abilitata solo dopo aver configurato la sessione e i contatti.
+`interaction_enabled` abilita click, compilazione e tasti; resta `false` per impostazione predefinita. La whitelist dei contatti WhatsApp è prevista dal modello di sicurezza, ma non viene dedotta automaticamente dal contenuto della pagina: l'interazione con WhatsApp Web va abilitata solo dopo aver configurato la sessione e i contatti.
+
+La sessione non è una configurazione per sito: cookie e storage locale vengono salvati in `data/browser/session.json` con permessi `600` e ricaricati a ogni apertura del browser headless. Il primo accesso si fa una volta, con una finestra visibile:
+
+```bash
+# Verifica whitelist e stato della sessione, senza aprire il browser
+mnemosine-browser-login --check
+
+# Apre il sito con lo schermo e salva la sessione dopo il login
+mnemosine-browser-login --origin https://web.whatsapp.com
+```
+
+Il comando richiede uno schermo e un terminale interattivo, perché l'accesso (password, QR, secondo fattore) lo completa una persona. Il file che produce contiene credenziali: è escluso dal repository, va cancellato quando revochi l'accesso e non va copiato in un backup condiviso. Il browser headless blocca i service worker: le pagine che ne hanno bisogno per funzionare possono non caricarsi, e il limite è voluto, perché le richieste partite da un service worker non passano dal filtro delle origini.
 
 Comandi:
 
@@ -932,9 +945,12 @@ python -m agent_memory.browser --open https://it.wikipedia.org --screenshot arti
 
 # Stampa l'indice numerato dei link consentiti
 python -m agent_memory.browser --open https://it.wikipedia.org --links
+
+# Stampa l'indice numerato degli elementi interattivi
+python -m agent_memory.browser --open https://it.wikipedia.org --elements
 ```
 
-Il server MCP espone `browser_status`, `browser_open`, `browser_read`, `browser_links`, `browser_open_link`, `browser_back`, `browser_click`, `browser_fill` e `browser_close`. `browser_click` e `browser_fill` richiedono `interaction_enabled`.
+Il server MCP espone `browser_status`, `browser_open`, `browser_read`, `browser_links`, `browser_open_link`, `browser_back`, `browser_elements`, `browser_click`, `browser_fill`, `browser_press`, `browser_wait` e `browser_close`. `browser_click`, `browser_fill` e `browser_press` richiedono `interaction_enabled`. `browser_elements` restituisce l'indice numerato di campi, aree di scrittura e bottoni; `browser_click` e `browser_fill` accettano quell'indice al posto del selettore, e `browser_press` preme Enter, Tab o una freccia sulla pagina o su un elemento. `browser_wait` aspetta che un elemento compaia o che un testo sia nella pagina, così la conferma di un invio è una lettura e non una supposizione.
 
 ### 14.7. File locali dell'agente
 
@@ -959,6 +975,10 @@ Il server MCP può essere collegato a qualunque client e a qualunque modello, co
 - `browser_links` restituisce i link della pagina come **indice numerato** (`1`, `2`, `3`...) e contiene soltanto i link che la whitelist autorizza; `blocked_count` dice quanti sono stati esclusi. Il modello non deve indovinare selettori CSS né scoprire a proprie spese un dominio vietato.
 
 - `browser_open_link` apre un link per numero. È un passo unico e deterministico, al posto di `click` con un selettore inventato.
+
+- `browser_elements` fa per campi e bottoni quello che `browser_links` fa per i link: indice numerato, etichetta e ruolo, nessun selettore da indovinare. Il numero resta valido finché la pagina non cambia, poi l'errore chiede di rilanciare l'elenco.
+
+- `browser_press` e `browser_wait` chiudono il ciclo di un invio: scrivi con `browser_fill`, premi `Enter`, attendi che il testo compaia. La conferma è una lettura della pagina, non una ricevuta: per questo l'invio resta comunque dietro i controlli dell'esecutore.
 
 - `browser_back` torna alla pagina precedente usando una cronologia tenuta dal server, non dal contesto del modello, che due turni dopo non ricorda più dove era.
 

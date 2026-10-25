@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 
+from agent_memory import browser_login
 from agent_memory.browser import (
     BrowserController,
     BrowserPolicy,
     PlaywrightBackend,
+    _element_info,
+    _save_storage_state,
+    _storage_state,
 )
 from agent_memory.errors import (
     BrowserBlockedError,
@@ -35,17 +42,41 @@ class FakeBackend:
         title: str = "Pagina di prova",
         text: str = "Contenuto della pagina",
         links: list[dict[str, str]] | None = None,
+        elements: list[dict[str, Any]] | None = None,
         click_error: Exception | None = None,
     ) -> None:
         self.final_url = final_url
         self.title_text = title
         self.page_text = text
         self.link_items = links or []
+        self.element_items = elements if elements is not None else [
+            {
+                "tag": "input",
+                "role": "",
+                "type": "search",
+                "label": "Cerca",
+                "value": "",
+                "multiline": False,
+            },
+            {
+                "tag": "div",
+                "role": "textbox",
+                "type": "",
+                "label": "Scrivi",
+                "value": "",
+                "multiline": True,
+            },
+        ]
         self.click_error = click_error
         self.url = ""
         self.opened: list[str] = []
         self.clicked: list[str] = []
         self.filled: list[tuple[str, str]] = []
+        self.clicked_index: list[int] = []
+        self.filled_index: list[tuple[int, str]] = []
+        self.pressed: list[tuple[str, str | None, int | None]] = []
+        self.waited: list[tuple[str | None, str | None, int | None]] = []
+        self.elements_count = 0
         self.closed = False
 
     def open(self, url: str) -> None:
@@ -65,6 +96,38 @@ class FakeBackend:
 
     def fill(self, selector: str, value: str) -> None:
         self.filled.append((selector, value))
+
+    def elements(self, limit: int) -> dict[str, Any]:
+        items = [
+            dict(item, index=position + 1)
+            for position, item in enumerate(self.element_items[:limit])
+        ]
+        self.elements_count = len(items)
+        return {"elements": items, "total": len(self.element_items)}
+
+    def click_element(self, index: int) -> None:
+        self.clicked_index.append(index)
+
+    def fill_element(self, index: int, value: str) -> None:
+        self.filled_index.append((index, value))
+
+    def press(
+        self,
+        key: str,
+        *,
+        selector: str | None = None,
+        index: int | None = None,
+    ) -> None:
+        self.pressed.append((key, selector, index))
+
+    def wait(
+        self,
+        *,
+        selector: str | None = None,
+        text: str | None = None,
+        timeout_ms: int | None = None,
+    ) -> None:
+        self.waited.append((selector, text, timeout_ms))
 
     def links(self) -> list[dict[str, str]]:
         return list(self.link_items)
@@ -195,6 +258,26 @@ class BrowserPolicyTests(unittest.TestCase):
         self.assertFalse(policy.interaction_enabled)
         self.assertEqual(policy.allowed_origins, ("https://example.com",))
         self.assertEqual(policy.timeout_seconds, 15)
+
+    def test_config_sets_session_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "config").mkdir()
+            (root / "config" / "integrations.json").write_text(
+                json.dumps(
+                    {
+                        "browser": {
+                            "enabled": True,
+                            "allowed_origins": ["https://example.com"],
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            policy = BrowserPolicy.from_root(root)
+        self.assertEqual(
+            policy.session_path, root / "data" / "browser" / "session.json"
+        )
 
     def test_config_rejects_http_origin(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -411,6 +494,128 @@ class BrowserControllerTests(unittest.TestCase):
             controller.click("a.forum")
         self.assertIn("browser_links", str(caught.exception))
 
+    def test_elements_are_numbered_and_truncated(self) -> None:
+        backend = FakeBackend(
+            elements=[
+                {"tag": "input", "label": "Cerca"},
+                {"tag": "button", "label": "Invia"},
+                {"tag": "div", "label": "Scrivi"},
+            ]
+        )
+        controller = BrowserController(policy=make_policy(), backend=backend)
+        with self.assertRaises(BrowserUnavailableError):
+            controller.elements()
+        controller.open("https://example.com")
+        result = controller.elements(limit=2)
+        self.assertEqual(result["url"], "https://example.com")
+        self.assertEqual(result["count"], 2)
+        self.assertEqual(result["total"], 3)
+        self.assertTrue(result["truncated"])
+        self.assertEqual([item["index"] for item in result["elements"]], [1, 2])
+
+    def test_elements_validate_limit(self) -> None:
+        controller = BrowserController(policy=make_policy(), backend=FakeBackend())
+        controller.open("https://example.com")
+        for limit in (0, 61, True):
+            with self.subTest(limit=limit), self.assertRaises(ValidationError):
+                controller.elements(limit=limit)
+
+    def test_mutations_accept_an_index(self) -> None:
+        backend = FakeBackend()
+        controller = BrowserController(
+            policy=make_policy(interaction=True), backend=backend
+        )
+        controller.open("https://example.com")
+        controller.elements()
+        controller.click(index=2)
+        controller.fill(index=1, value="ciao")
+        self.assertEqual(backend.clicked_index, [2])
+        self.assertEqual(backend.filled_index, [(1, "ciao")])
+
+    def test_selector_and_index_are_exclusive(self) -> None:
+        backend = FakeBackend()
+        controller = BrowserController(
+            policy=make_policy(interaction=True), backend=backend
+        )
+        controller.open("https://example.com")
+        with self.assertRaises(ValidationError):
+            controller.click("#send", index=1)
+        with self.assertRaises(ValidationError) as caught:
+            controller.click()
+        self.assertIn("browser_elements", str(caught.exception))
+        with self.assertRaises(ValidationError):
+            controller.fill(value="ciao")
+        with self.assertRaises(ValidationError):
+            controller.fill("#message", "ciao", index=1)
+        with self.assertRaises(ValidationError):
+            controller.click(index=0)
+        with self.assertRaises(ValidationError):
+            controller.click(index=True)  # type: ignore[arg-type]
+
+    def test_press_validates_keys_and_records_target(self) -> None:
+        backend = FakeBackend()
+        controller = BrowserController(
+            policy=make_policy(interaction=True), backend=backend
+        )
+        controller.open("https://example.com")
+        controller.press("Enter")
+        controller.press("Control+Enter", index=2)
+        controller.press("Escape", selector="#chiudi")
+        self.assertEqual(
+            backend.pressed,
+            [
+                ("Enter", None, None),
+                ("Control+Enter", None, 2),
+                ("Escape", "#chiudi", None),
+            ],
+        )
+        for key in ("enter", "F5", "Invio", "", "a", "x" * 500):
+            with self.subTest(key=key), self.assertRaises(ValidationError):
+                controller.press(key)
+        with self.assertRaises(ValidationError):
+            controller.press("Enter", selector="#campo", index=1)
+
+    def test_press_requires_interaction(self) -> None:
+        backend = FakeBackend()
+        controller = BrowserController(
+            policy=make_policy(interaction=False), backend=backend
+        )
+        controller.open("https://example.com")
+        with self.assertRaises(BrowserBlockedError):
+            controller.press("Enter")
+        self.assertEqual(backend.pressed, [])
+
+    def test_wait_accepts_selector_or_text(self) -> None:
+        backend = FakeBackend()
+        controller = BrowserController(policy=make_policy(), backend=backend)
+        controller.open("https://example.com")
+        controller.wait(selector="#chat")
+        controller.wait(text="  Inviato  ", timeout_seconds=2)
+        self.assertEqual(
+            backend.waited,
+            [("#chat", None, None), (None, "Inviato", 2000)],
+        )
+        with self.assertRaises(ValidationError):
+            controller.wait()
+        with self.assertRaises(ValidationError):
+            controller.wait(text="  ")
+        with self.assertRaises(ValidationError):
+            controller.wait(text="x" * 301)
+        with self.assertRaises(ValidationError):
+            controller.wait(selector="#a", timeout_seconds=0)
+        with self.assertRaises(ValidationError):
+            controller.wait(selector="#a", timeout_seconds=True)  # type: ignore[arg-type]
+
+    def test_status_exposes_session_and_elements(self) -> None:
+        controller = BrowserController(policy=make_policy(), backend=FakeBackend())
+        controller.open("https://example.com")
+        controller.elements()
+        status = controller.status()
+        self.assertEqual(status["elements_count"], 2)
+        self.assertFalse(status["session_saved"])
+        self.assertEqual(status["session_file"], "data/browser/session.json")
+        self.assertEqual(status["service_workers"], "block")
+
     def test_close_releases_backend(self) -> None:
         backend = FakeBackend()
         controller = BrowserController(policy=make_policy(), backend=backend)
@@ -418,6 +623,116 @@ class BrowserControllerTests(unittest.TestCase):
         controller.close()
         self.assertTrue(backend.closed)
         self.assertIsNone(controller.current_url)
+
+
+class BrowserSessionTests(unittest.TestCase):
+    def test_missing_session_is_not_loaded(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            policy = BrowserPolicy([], session_path=Path(tmp) / "session.json")
+            self.assertIsNone(_storage_state(policy))
+            self.assertFalse(_save_storage_state(policy, None))
+
+    def test_session_is_saved_with_restricted_permissions(self) -> None:
+        class FakeContext:
+            def storage_state(self, path: str) -> None:
+                Path(path).write_text("{}", encoding="utf-8")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "data" / "browser" / "session.json"
+            policy = BrowserPolicy([], session_path=target)
+            self.assertTrue(_save_storage_state(policy, FakeContext()))
+            self.assertTrue(target.is_file())
+            self.assertEqual(target.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(_storage_state(policy), str(target))
+
+    def test_session_without_path_is_not_saved(self) -> None:
+        class FakeContext:
+            def storage_state(self, path: str) -> None:
+                raise AssertionError("non deve salvare")
+
+        self.assertFalse(_save_storage_state(BrowserPolicy([]), FakeContext()))
+
+    def test_save_failure_is_reported(self) -> None:
+        class BrokenContext:
+            def storage_state(self, path: str) -> None:
+                raise RuntimeError("disco pieno")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            policy = BrowserPolicy([], session_path=Path(tmp) / "session.json")
+            self.assertFalse(_save_storage_state(policy, BrokenContext()))
+
+    def test_element_info_skips_unusable_handles(self) -> None:
+        class Handle:
+            def __init__(
+                self,
+                *,
+                visible: bool = True,
+                info: Any = None,
+                fail: bool = False,
+            ) -> None:
+                self.visible = visible
+                self.info = info
+                self.fail = fail
+
+            def is_visible(self) -> bool:
+                return self.visible
+
+            def is_enabled(self) -> bool:
+                return True
+
+            def evaluate(self, _script: str) -> Any:
+                if self.fail:
+                    raise RuntimeError("elemento staccato")
+                return self.info
+
+        self.assertIsNone(_element_info(Handle(visible=False)))
+        self.assertIsNone(_element_info(Handle(fail=True)))
+        self.assertIsNone(_element_info(Handle(info=[1, 2])))
+        self.assertEqual(_element_info(Handle(info={"tag": "input"})), {"tag": "input"})
+
+
+class BrowserLoginTests(unittest.TestCase):
+    def test_origin_without_scheme_becomes_https(self) -> None:
+        self.assertEqual(
+            browser_login._as_url("web.whatsapp.com"),
+            "https://web.whatsapp.com",
+        )
+        self.assertEqual(
+            browser_login._as_url(" https://discord.com "),
+            "https://discord.com",
+        )
+
+    def test_check_reports_missing_session(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "config").mkdir()
+            (root / "config" / "integrations.json").write_text(
+                json.dumps(
+                    {
+                        "browser": {
+                            "enabled": True,
+                            "allowed_origins": ["https://example.com"],
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            buffer = io.StringIO()
+            with contextlib.redirect_stdout(buffer):
+                code = browser_login.main(["--root", str(root), "--check"])
+        self.assertEqual(code, 0)
+        payload = json.loads(buffer.getvalue())
+        self.assertTrue(payload["enabled"])
+        self.assertEqual(payload["session_file"], "data/browser/session.json")
+        self.assertFalse(payload["session_saved"])
+
+    def test_disabled_browser_refuses_to_open(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            buffer = io.StringIO()
+            with contextlib.redirect_stderr(buffer):
+                code = browser_login.main(["--root", tmp])
+        self.assertEqual(code, 1)
+        self.assertIn("ERRORE", buffer.getvalue())
 
 
 class FakeRoute:

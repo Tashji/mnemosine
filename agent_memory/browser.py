@@ -12,6 +12,11 @@ La policy e il backend sono separati:
 Il browser è disabilitato per impostazione predefinita. Per abilitarlo, crea
 ``config/integrations.json`` con una sezione ``browser`` e almeno un'origine
 HTTPS nella whitelist.
+
+Il login non è un'integrazione per sito: cookie e storage locale vivono in
+``data/browser/session.json`` e vengono ricaricati a ogni apertura, così una
+sessione autenticata vale per qualunque origine in whitelist. Il comando
+``mnemosine-browser-login`` apre il browser con lo schermo per il primo accesso.
 """
 
 from __future__ import annotations
@@ -21,6 +26,7 @@ import importlib.util
 import ipaddress
 import json
 import os
+import re
 import socket
 import sys
 from collections.abc import Callable, Iterable
@@ -48,6 +54,48 @@ MAX_FILL_CHARS = 4_000
 MAX_HISTORY = 50
 MAX_LINKS = 100
 MAX_LINK_TEXT = 120
+MAX_ELEMENTS = 60
+MAX_ELEMENT_LABEL = 120
+MAX_ELEMENT_VALUE = 60
+MAX_WAIT_TEXT = 300
+SESSION_RELATIVE_PATH = Path("data") / "browser" / "session.json"
+
+# Elementi con cui si può interagire: campi, aree di scrittura, menu e bottoni.
+_ELEMENTS_SELECTOR = (
+    "input, textarea, select, button, "
+    "[contenteditable='true'], [contenteditable=''], "
+    "[role='textbox'], [role='searchbox'], [role='button'], [role='link']"
+)
+_ELEMENTS_JS = (
+    r"""
+(el) => {
+  const attr = (name) => (el.getAttribute(name) || '').trim();
+  const tag = el.tagName.toLowerCase();
+  const raw = attr('aria-label') || attr('placeholder') || attr('title')
+    || (el.innerText || '').trim() || attr('name') || attr('id');
+  return {
+    tag: tag,
+    role: attr('role') || (tag === 'button' ? 'button' : (tag === 'a' ? 'link' : '')),
+    type: attr('type'),
+    label: raw.replace(/\s+/g, ' ').slice(0, MAX_LABEL),
+    value: (el.isContentEditable ? '' : (el.value || '')).toString().slice(0, MAX_VALUE),
+    multiline: tag === 'textarea' || Boolean(el.isContentEditable),
+  };
+}
+""".replace("MAX_LABEL", str(MAX_ELEMENT_LABEL)).replace(
+        "MAX_VALUE", str(MAX_ELEMENT_VALUE)
+    )
+)
+_TEXT_PRESENT_JS = (
+    "t => !!(document.body && "
+    "document.body.innerText.toLowerCase().includes(t))"
+)
+# Solo tasti di controllo: il testo si scrive con ``fill``, non con ``press``.
+_KEY_PATTERN = re.compile(
+    r"^(?:(?:Control|Shift|Alt|Meta)\+)*"
+    r"(?:Enter|Tab|Escape|Backspace|Delete|Space|ArrowUp|ArrowDown|"
+    r"ArrowLeft|ArrowRight|PageUp|PageDown|Home|End)$"
+)
 _LOCAL_SUFFIXES = (
     ".localhost",
     ".local",
@@ -173,6 +221,7 @@ class BrowserPolicy:
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
         executable_path: str | None = None,
         resolver: Callable[[str], Iterable[str]] | None = None,
+        session_path: Path | None = None,
     ) -> None:
         if isinstance(timeout_seconds, bool) or not isinstance(
             timeout_seconds, (int, float)
@@ -196,6 +245,9 @@ class BrowserPolicy:
         self._rules = tuple(OriginRule.parse(origin) for origin in allowed_origins)
         self._resolver = resolver or _default_resolver
         self._resolved: dict[str, tuple[str, ...]] = {}
+        self.session_path = (
+            Path(session_path).expanduser() if session_path is not None else None
+        )
 
     @property
     def allowed_origins(self) -> tuple[str, ...]:
@@ -251,6 +303,7 @@ class BrowserPolicy:
             interaction_enabled=interaction_enabled,
             timeout_seconds=timeout,
             executable_path=executable_path or None,
+            session_path=base / SESSION_RELATIVE_PATH,
         )
 
     def _resolve(self, host: str) -> tuple[str, ...]:
@@ -365,6 +418,28 @@ class BrowserBackend(Protocol):
 
     def fill(self, selector: str, value: str) -> None: ...
 
+    def elements(self, limit: int) -> dict[str, Any]: ...
+
+    def click_element(self, index: int) -> None: ...
+
+    def fill_element(self, index: int, value: str) -> None: ...
+
+    def press(
+        self,
+        key: str,
+        *,
+        selector: str | None = None,
+        index: int | None = None,
+    ) -> None: ...
+
+    def wait(
+        self,
+        *,
+        selector: str | None = None,
+        text: str | None = None,
+        timeout_ms: int | None = None,
+    ) -> None: ...
+
     def links(self) -> list[dict[str, str]]: ...
 
     def screenshot(self, path: Path) -> None: ...
@@ -374,6 +449,51 @@ class BrowserBackend(Protocol):
 
 def _playwright_available() -> bool:
     return importlib.util.find_spec("playwright") is not None
+
+
+def _element_info(handle: Any) -> dict[str, Any] | None:
+    """Descrizione di un elemento interattivo, o ``None`` se non è utilizzabile.
+
+    Un elemento che sparisce fra una query e l'altra non deve interrompere
+    l'elenco: viene semplicemente saltato.
+    """
+
+    try:
+        if not handle.is_visible() or not handle.is_enabled():
+            return None
+        info = handle.evaluate(_ELEMENTS_JS)
+    except Exception:  # noqa: BLE001 - l'elemento non è più raggiungibile
+        return None
+    return info if isinstance(info, dict) else None
+
+
+def _storage_state(policy: BrowserPolicy) -> str | None:
+    """File di sessione da ricaricare, se esiste."""
+
+    path = policy.session_path
+    if path is None or not path.is_file():
+        return None
+    return str(path)
+
+
+def _save_storage_state(policy: BrowserPolicy, context: Any) -> bool:
+    """Salva cookie e storage locale come credenziale, con permessi ristretti.
+
+    Un salvataggio fallito non deve nascondere l'errore che ha portato alla
+    chiusura del browser: il chiamante riceve ``False`` e la sessione precedente
+    resta sul disco.
+    """
+
+    path = policy.session_path
+    if path is None or context is None:
+        return False
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        context.storage_state(path=str(path))
+        os.chmod(path, 0o600)
+    except Exception:  # noqa: BLE001 - la sessione è un di più, non un requisito
+        return False
+    return True
 
 
 class PlaywrightBackend:
@@ -400,6 +520,8 @@ class PlaywrightBackend:
         self._browser = None
         self._context = None
         self._page = None
+        self._elements: list[Any] = []
+        self._elements_url = ""
         try:
             self._playwright = sync_playwright().start()
             self._browser = self._playwright.chromium.launch(
@@ -410,6 +532,7 @@ class PlaywrightBackend:
                 accept_downloads=False,
                 ignore_https_errors=False,
                 service_workers="block",
+                storage_state=_storage_state(policy),
             )
             self._context.set_default_timeout(self._timeout_ms)
             self._context.route("**/*", self._handle_route)
@@ -474,6 +597,8 @@ class PlaywrightBackend:
         except Exception as exc:
             raise BrowserError(f"Navigazione non riuscita: {exc}") from exc
         self.url = page.url
+        self._elements = []
+        self._elements_url = ""
 
     def title(self) -> str:
         page = self._require_page()
@@ -503,6 +628,121 @@ class PlaywrightBackend:
             page.fill(selector, value, timeout=self._timeout_ms)
         except Exception as exc:
             raise BrowserError(f"Compilazione non riuscita: {exc}") from exc
+        self.url = page.url
+
+    @property
+    def elements_count(self) -> int:
+        return len(self._elements)
+
+    def elements(self, limit: int) -> dict[str, Any]:
+        """Elenca gli elementi interattivi visibili, nell'ordine del documento.
+
+        Gli handle restano nel backend: il modello riceve solo numeri, così non
+        deve inventare selettori CSS. Un'azione numerata verifica poi che la
+        pagina sia ancora quella dell'elenco.
+        """
+
+        page = self._require_page()
+        try:
+            handles = page.query_selector_all(_ELEMENTS_SELECTOR)
+        except Exception as exc:
+            raise BrowserError(f"Elementi non leggibili: {exc}") from exc
+        collected: list[dict[str, Any]] = []
+        kept: list[Any] = []
+        total = 0
+        for handle in handles:
+            info = _element_info(handle)
+            if info is None:
+                continue
+            total += 1
+            if len(collected) >= limit:
+                continue
+            kept.append(handle)
+            collected.append(
+                {
+                    "index": len(collected) + 1,
+                    "tag": str(info.get("tag") or ""),
+                    "role": str(info.get("role") or ""),
+                    "type": str(info.get("type") or ""),
+                    "label": str(info.get("label") or ""),
+                    "value": str(info.get("value") or ""),
+                    "multiline": bool(info.get("multiline")),
+                }
+            )
+        self._elements = kept
+        self._elements_url = page.url
+        return {"elements": collected, "total": total}
+
+    def _element(self, index: int) -> Any:
+        page = self._require_page()
+        if not self._elements or self._elements_url != page.url:
+            self._elements = []
+            self._elements_url = ""
+            raise BrowserError(
+                "Elenco degli elementi non più valido: chiama browser_elements."
+            )
+        if not 1 <= index <= len(self._elements):
+            raise ValidationError(
+                f"index fuori intervallo: l'ultimo browser_elements aveva "
+                f"{len(self._elements)} elementi (da 1 a {len(self._elements)})."
+            )
+        return self._elements[index - 1]
+
+    def click_element(self, index: int) -> None:
+        handle = self._element(index)
+        try:
+            handle.click(timeout=self._timeout_ms)
+        except Exception as exc:
+            raise BrowserError(f"Click non riuscito: {exc}") from exc
+        self.url = self._require_page().url
+
+    def fill_element(self, index: int, value: str) -> None:
+        handle = self._element(index)
+        try:
+            handle.fill(value, timeout=self._timeout_ms)
+        except Exception as exc:
+            raise BrowserError(f"Compilazione non riuscita: {exc}") from exc
+        self.url = self._require_page().url
+
+    def press(
+        self,
+        key: str,
+        *,
+        selector: str | None = None,
+        index: int | None = None,
+    ) -> None:
+        page = self._require_page()
+        try:
+            if index is not None:
+                self._element(index).press(key, timeout=self._timeout_ms)
+            elif selector is not None:
+                page.press(selector, key, timeout=self._timeout_ms)
+            else:
+                page.keyboard.press(key)
+        except AgentMemoryError:
+            raise
+        except Exception as exc:
+            raise BrowserError(f"Tasto non premuto: {exc}") from exc
+        self.url = page.url
+
+    def wait(
+        self,
+        *,
+        selector: str | None = None,
+        text: str | None = None,
+        timeout_ms: int | None = None,
+    ) -> None:
+        page = self._require_page()
+        timeout = self._timeout_ms if timeout_ms is None else timeout_ms
+        try:
+            if selector is not None:
+                page.wait_for_selector(selector, state="visible", timeout=timeout)
+            if text is not None:
+                page.wait_for_function(
+                    _TEXT_PRESENT_JS, arg=text.lower(), timeout=timeout
+                )
+        except Exception as exc:
+            raise BrowserError(f"Attesa non soddisfatta: {exc}") from exc
         self.url = page.url
 
     def links(self) -> list[dict[str, str]]:
@@ -535,8 +775,11 @@ class PlaywrightBackend:
             raise BrowserError(f"Screenshot non riuscito: {exc}") from exc
 
     def close(self) -> None:
+        context = getattr(self, "_context", None)
+        if context is not None:
+            _save_storage_state(self.policy, context)
         for closer in (
-            getattr(self, "_context", None),
+            context,
             getattr(self, "_browser", None),
         ):
             if closer is None:
@@ -551,6 +794,8 @@ class PlaywrightBackend:
         self._browser = None
         self._playwright = None
         self._page = None
+        self._elements = []
+        self._elements_url = ""
         self.url = ""
 
 
@@ -610,6 +855,53 @@ class BrowserController:
             raise ValidationError(
                 f"Il selettore supera {MAX_SELECTOR_CHARS} caratteri."
             )
+        return value
+
+    @staticmethod
+    def _target(selector: str | None, index: int | None) -> None:
+        if (selector is None) == (index is None):
+            raise ValidationError(
+                "Indica un selettore oppure un indice, non entrambi: usa "
+                "browser_elements per ottenere gli indici."
+            )
+
+    @staticmethod
+    def _target_index(value: int) -> int:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValidationError("index deve essere un intero.")
+        if value < 1:
+            raise ValidationError("index parte da 1, come in browser_elements.")
+        return value
+
+    @staticmethod
+    def _key(value: str) -> str:
+        if not isinstance(value, str) or not value.strip():
+            raise ValidationError("Il tasto da premere non può essere vuoto.")
+        key = value.strip()
+        if not _KEY_PATTERN.match(key):
+            raise ValidationError(
+                "Tasto non consentito: usa Enter, Tab, Escape, Spazio, le frecce "
+                "o le loro combinazioni con Control, Shift, Alt, Meta. Per "
+                "scrivere testo usa browser_fill."
+            )
+        return key
+
+    @staticmethod
+    def _timeout(value: float | None) -> int | None:
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValidationError("timeout_seconds deve essere un numero.")
+        if not 1 <= float(value) <= 120:
+            raise ValidationError("timeout_seconds deve essere tra 1 e 120.")
+        return int(float(value) * 1000)
+
+    @staticmethod
+    def _value(value: str) -> str:
+        if not isinstance(value, str):
+            raise ValidationError("Il valore da inserire deve essere testo.")
+        if len(value) > MAX_FILL_CHARS:
+            raise ValidationError(f"Il valore supera {MAX_FILL_CHARS} caratteri.")
         return value
 
     def _remember(self, url: str) -> None:
@@ -729,32 +1021,123 @@ class BrowserController:
             "truncated": truncated,
         }
 
-    def click(self, selector: str) -> dict[str, Any]:
+    def elements(self, *, limit: int = 40) -> dict[str, Any]:
+        """Elenco numerato degli elementi interattivi della pagina corrente.
+
+        È la vista che serve al modello per agire senza configurazione per sito
+        né selettori inventati: campi, aree di scrittura e bottoni hanno un
+        indice stabile finché la pagina non cambia.
+        """
+
+        if isinstance(limit, bool) or not isinstance(limit, int):
+            raise ValidationError("limit deve essere un intero.")
+        if not 1 <= limit <= MAX_ELEMENTS:
+            raise ValidationError(f"limit deve essere tra 1 e {MAX_ELEMENTS}.")
         backend = self._active_backend()
-        selector = self._selector(selector)
+        self.policy.assert_allowed(backend.url)
+        result = backend.elements(limit)
+        items = result["elements"]
+        total = int(result["total"])
+        return {
+            "url": backend.url,
+            "count": len(items),
+            "total": total,
+            "truncated": total > len(items),
+            "elements": items,
+        }
+
+    def click(
+        self, selector: str | None = None, *, index: int | None = None
+    ) -> dict[str, Any]:
+        backend = self._active_backend()
         self.policy.assert_interaction_allowed(backend.url)
+        self._target(selector, index)
         try:
-            backend.click(selector)
+            if index is not None:
+                backend.click_element(self._target_index(index))
+            else:
+                backend.click(self._selector(selector or ""))
         except BrowserError as exc:
             raise BrowserError(
-                f"{exc} Se non conosci il selettore, usa browser_links e poi "
-                "browser_open_link."
+                f"{exc} Se non conosci il selettore, usa browser_links per i "
+                "link oppure browser_elements per gli altri elementi."
             ) from exc
         self.policy.assert_allowed(backend.url)
         self._remember(backend.url)
         return self._page_info()
 
-    def fill(self, selector: str, value: str) -> dict[str, Any]:
+    def fill(
+        self,
+        selector: str | None = None,
+        value: str = "",
+        *,
+        index: int | None = None,
+    ) -> dict[str, Any]:
         backend = self._active_backend()
-        selector = self._selector(selector)
-        if not isinstance(value, str):
-            raise ValidationError("Il valore da inserire deve essere testo.")
-        if len(value) > MAX_FILL_CHARS:
-            raise ValidationError(
-                f"Il valore supera {MAX_FILL_CHARS} caratteri."
-            )
         self.policy.assert_interaction_allowed(backend.url)
-        backend.fill(selector, value)
+        self._target(selector, index)
+        text = self._value(value)
+        if index is not None:
+            backend.fill_element(self._target_index(index), text)
+        else:
+            backend.fill(self._selector(selector or ""), text)
+        self.policy.assert_allowed(backend.url)
+        return self._page_info()
+
+    def press(
+        self,
+        key: str,
+        *,
+        selector: str | None = None,
+        index: int | None = None,
+    ) -> dict[str, Any]:
+        """Preme un tasto di controllo, sulla pagina o su un elemento."""
+
+        backend = self._active_backend()
+        self.policy.assert_interaction_allowed(backend.url)
+        if selector is not None and index is not None:
+            raise ValidationError(
+                "Indica un selettore oppure un indice, non entrambi."
+            )
+        pressed = self._key(key)
+        target = self._selector(selector) if selector is not None else None
+        if index is not None:
+            self._target_index(index)
+        backend.press(pressed, selector=target, index=index)
+        self.policy.assert_allowed(backend.url)
+        self._remember(backend.url)
+        return self._page_info()
+
+    def wait(
+        self,
+        *,
+        selector: str | None = None,
+        text: str | None = None,
+        timeout_seconds: float | None = None,
+    ) -> dict[str, Any]:
+        """Attende che un elemento compaia o che un testo sia nella pagina."""
+
+        backend = self._active_backend()
+        self.policy.assert_allowed(backend.url)
+        if selector is None and text is None:
+            raise ValidationError(
+                "Indica un selettore oppure un testo da attendere."
+            )
+        target = self._selector(selector) if selector is not None else None
+        expected: str | None = None
+        if text is not None:
+            if not isinstance(text, str) or not text.strip():
+                raise ValidationError("Il testo da attendere non può essere vuoto.")
+            if len(text) > MAX_WAIT_TEXT:
+                raise ValidationError(
+                    f"Il testo da attendere supera {MAX_WAIT_TEXT} caratteri."
+                )
+            expected = text.strip()
+        backend.wait(
+            selector=target,
+            text=expected,
+            timeout_ms=self._timeout(timeout_seconds),
+        )
         self.policy.assert_allowed(backend.url)
         return self._page_info()
 
@@ -788,10 +1171,17 @@ class BrowserController:
             "allowed_origins": list(self.policy.allowed_origins),
             "navigation_timeout_seconds": self.policy.timeout_seconds,
             "playwright_available": _playwright_available(),
+            "session_saved": bool(
+                self.policy.session_path is not None
+                and self.policy.session_path.is_file()
+            ),
+            "session_file": str(SESSION_RELATIVE_PATH),
+            "service_workers": "block",
             "current_url": self.current_url,
             "history_count": len(self._history),
             "can_go_back": len(self._history) > 1,
             "links_count": len(self._links),
+            "elements_count": getattr(self._backend, "elements_count", 0),
         }
 
 
@@ -831,6 +1221,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Con --open, stampa l'indice numerato dei link consentiti.",
     )
+    parser.add_argument(
+        "--elements",
+        action="store_true",
+        help="Con --open, stampa l'indice numerato degli elementi interattivi.",
+    )
     return parser
 
 
@@ -852,6 +1247,8 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         if args.links:
             print(json.dumps(controller.links(), ensure_ascii=False, indent=2))
+        if args.elements:
+            print(json.dumps(controller.elements(), ensure_ascii=False, indent=2))
         if args.screenshot:
             print(controller.screenshot(args.screenshot))
         return 0

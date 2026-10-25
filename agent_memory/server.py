@@ -567,20 +567,73 @@ def create_server(
             raise ToolError(str(exc)) from exc
 
     @mcp.tool()
-    def browser_click(selector: str) -> dict[str, Any]:
-        """Clicca un elemento della pagina corrente, se le interazioni sono abilitate."""
+    def browser_elements(limit: int = 40) -> dict[str, Any]:
+        """Elenca gli elementi interattivi della pagina come indice numerato.
+
+        Restituisce campi, aree di scrittura e bottoni visibili con indice,
+        ruolo ed etichetta. Usa quell'indice con ``browser_click``,
+        ``browser_fill`` e ``browser_press``: nessun selettore da inventare e
+        nessuna configurazione per sito.
+        """
 
         try:
-            return browser_controller.click(selector)
+            return browser_controller.elements(limit=limit)
         except AgentMemoryError as exc:
             raise ToolError(str(exc)) from exc
 
     @mcp.tool()
-    def browser_fill(selector: str, value: str) -> dict[str, Any]:
-        """Compila un campo della pagina corrente, se le interazioni sono abilitate."""
+    def browser_click(
+        selector: str | None = None, index: int | None = None
+    ) -> dict[str, Any]:
+        """Clicca un elemento per selettore o per indice di ``browser_elements``."""
 
         try:
-            return browser_controller.fill(selector, value)
+            return browser_controller.click(selector, index=index)
+        except AgentMemoryError as exc:
+            raise ToolError(str(exc)) from exc
+
+    @mcp.tool()
+    def browser_fill(
+        selector: str | None = None,
+        value: str = "",
+        index: int | None = None,
+    ) -> dict[str, Any]:
+        """Scrive in un campo scelto per selettore o per indice."""
+
+        try:
+            return browser_controller.fill(selector, value, index=index)
+        except AgentMemoryError as exc:
+            raise ToolError(str(exc)) from exc
+
+    @mcp.tool()
+    def browser_press(
+        key: str,
+        selector: str | None = None,
+        index: int | None = None,
+    ) -> dict[str, Any]:
+        """Preme un tasto di controllo (Enter, Tab, Escape, frecce).
+
+        Senza selettore e senza indice il tasto va alla pagina; l'Invio dopo un
+        ``browser_fill`` è il modo più comune per inviare un messaggio.
+        """
+
+        try:
+            return browser_controller.press(key, selector=selector, index=index)
+        except AgentMemoryError as exc:
+            raise ToolError(str(exc)) from exc
+
+    @mcp.tool()
+    def browser_wait(
+        selector: str | None = None,
+        text: str | None = None,
+        timeout_seconds: float | None = None,
+    ) -> dict[str, Any]:
+        """Attende che un elemento compaia o che un testo sia nella pagina."""
+
+        try:
+            return browser_controller.wait(
+                selector=selector, text=text, timeout_seconds=timeout_seconds
+            )
         except AgentMemoryError as exc:
             raise ToolError(str(exc)) from exc
 

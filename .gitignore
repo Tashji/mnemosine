@@ -20,6 +20,10 @@ profiles/*/files/
 # Messaggi consegnati dall'esecutore: contengono testi privati.
 profiles/*/data/outbox/
 
+# Sessione del browser: cookie e token di accesso ai siti.
+data/browser/
+profiles/*/data/browser/
+
 # Artefatti di build del pacchetto.
 build/
 dist/

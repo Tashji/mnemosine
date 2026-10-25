@@ -58,6 +58,9 @@ class McpServerTests(unittest.TestCase):
         self.assertIn("browser_links", names)
         self.assertIn("browser_open_link", names)
         self.assertIn("browser_back", names)
+        self.assertIn("browser_elements", names)
+        self.assertIn("browser_press", names)
+        self.assertIn("browser_wait", names)
         self.assertIn("list_files", names)
         self.assertIn("read_file", names)
         self.assertIn("write_file", names)
@@ -249,6 +252,55 @@ class McpServerTests(unittest.TestCase):
             def fill(self, selector: str, value: str) -> None:
                 self.url = f"{self.url}#{selector}"
 
+            def elements(self, limit: int) -> dict[str, Any]:
+                return {
+                    "elements": [
+                        {
+                            "index": 1,
+                            "tag": "input",
+                            "role": "",
+                            "type": "search",
+                            "label": "Cerca",
+                            "value": "",
+                            "multiline": False,
+                        },
+                        {
+                            "index": 2,
+                            "tag": "div",
+                            "role": "textbox",
+                            "type": "",
+                            "label": "Scrivi",
+                            "value": "",
+                            "multiline": True,
+                        },
+                    ][:limit],
+                    "total": 2,
+                }
+
+            def click_element(self, index: int) -> None:
+                self.url = f"{self.url}#elemento{index}"
+
+            def fill_element(self, index: int, value: str) -> None:
+                self.url = f"{self.url}#elemento{index}"
+
+            def press(
+                self,
+                key: str,
+                *,
+                selector: str | None = None,
+                index: int | None = None,
+            ) -> None:
+                self.url = f"{self.url}#tasto{key}"
+
+            def wait(
+                self,
+                *,
+                selector: str | None = None,
+                text: str | None = None,
+                timeout_ms: int | None = None,
+            ) -> None:
+                return None
+
             def links(self) -> list[dict[str, str]]:
                 return [
                     {"text": "Forum", "url": "https://example.com/forum"},
@@ -295,8 +347,20 @@ class McpServerTests(unittest.TestCase):
         self.assertEqual(previous["url"], "https://example.com")
         self.assertFalse(call_tool(mcp, "browser_status", {})["can_go_back"])
 
+        elements = call_tool(mcp, "browser_elements", {"limit": 5})
+        self.assertEqual(elements["count"], 2)
+        self.assertFalse(elements["truncated"])
+        self.assertEqual(
+            [item["index"] for item in elements["elements"]], [1, 2]
+        )
+
+        waited = call_tool(mcp, "browser_wait", {"text": "Testo"})
+        self.assertEqual(waited["url"], "https://example.com")
+
         with self.assertRaises(ToolError):
             call_tool(mcp, "browser_click", {"selector": "#send"})
+        with self.assertRaises(ToolError):
+            call_tool(mcp, "browser_press", {"key": "Enter"})
         call_tool(mcp, "browser_close", {})
         self.assertIsNone(controller.current_url)
 
