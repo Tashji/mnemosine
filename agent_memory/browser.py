@@ -59,6 +59,16 @@ MAX_ELEMENT_LABEL = 120
 MAX_ELEMENT_VALUE = 60
 MAX_WAIT_TEXT = 300
 SESSION_RELATIVE_PATH = Path("data") / "browser" / "session.json"
+MAX_USER_AGENT_CHARS = 512
+# I service worker restano disattivati per impostazione predefinita: le richieste
+# che partono da un service worker non passano da ``context.route``, quindi
+# abilitarli esclude quel traffico dal filtro delle origini. Il flag
+# ``browser.service_workers`` è l'unico modo per accettare quel rischio.
+SERVICE_WORKERS_WARNING = (
+    "Service worker abilitati per scelta esplicita: le richieste che partono "
+    "da un service worker non passano dal filtro delle origini, quindi la "
+    "whitelist copre la pagina ma non tutto il traffico del sito."
+)
 
 # Elementi con cui si può interagire: campi, aree di scrittura, menu e bottoni.
 _ELEMENTS_SELECTOR = (
@@ -209,6 +219,27 @@ class OriginRule:
         return host == self.host
 
 
+def _parse_user_agent(value: Any, label: str) -> str | None:
+    """Valida lo user agent del profilo; ``None`` lascia quello di Playwright.
+
+    L'identità è una sola per tutto il profilo: se cambia tra la finestra di
+    login e la sessione headless, i cookie salvati possono non valere più.
+    """
+
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ConfigError(f"{label} deve essere una stringa o null.")
+    text = value.strip()
+    if not text:
+        raise ConfigError(f"{label} non può essere vuoto.")
+    if len(text) > MAX_USER_AGENT_CHARS:
+        raise ConfigError(f"{label} supera {MAX_USER_AGENT_CHARS} caratteri.")
+    if any(ord(char) < 32 or ord(char) == 127 for char in text):
+        raise ConfigError(f"{label} contiene caratteri di controllo.")
+    return text
+
+
 class BrowserPolicy:
     """Whitelist e regole di sicurezza per il browser."""
 
@@ -218,6 +249,8 @@ class BrowserPolicy:
         *,
         enabled: bool = False,
         interaction_enabled: bool = False,
+        service_workers: bool = False,
+        user_agent: str | None = None,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
         executable_path: str | None = None,
         resolver: Callable[[str], Iterable[str]] | None = None,
@@ -236,6 +269,8 @@ class BrowserPolicy:
             )
         self.enabled = bool(enabled)
         self.interaction_enabled = bool(interaction_enabled)
+        self.service_workers = bool(service_workers)
+        self.user_agent = _parse_user_agent(user_agent, "browser.user_agent")
         self.timeout_seconds = float(timeout_seconds)
         self.executable_path = (
             executable_path
@@ -252,6 +287,12 @@ class BrowserPolicy:
     @property
     def allowed_origins(self) -> tuple[str, ...]:
         return tuple(rule.source for rule in self._rules)
+
+    @property
+    def service_worker_mode(self) -> str:
+        """Modalità da passare a Playwright: ``block`` salvo opt-in esplicito."""
+
+        return "allow" if self.service_workers else "block"
 
     @classmethod
     def from_root(cls, root: str | Path | None = None) -> BrowserPolicy:
@@ -278,11 +319,19 @@ class BrowserPolicy:
             raise ConfigError(f"{path}: 'browser' deve essere un oggetto.")
         enabled = browser.get("enabled", False)
         interaction_enabled = browser.get("interaction_enabled", False)
+        service_workers = browser.get("service_workers", False)
+        user_agent = _parse_user_agent(
+            browser.get("user_agent"), f"{path}: browser.user_agent"
+        )
         if not isinstance(enabled, bool):
             raise ConfigError(f"{path}: browser.enabled deve essere booleano.")
         if not isinstance(interaction_enabled, bool):
             raise ConfigError(
                 f"{path}: browser.interaction_enabled deve essere booleano."
+            )
+        if not isinstance(service_workers, bool):
+            raise ConfigError(
+                f"{path}: browser.service_workers deve essere booleano."
             )
         origins = browser.get("allowed_origins", [])
         if not isinstance(origins, list):
@@ -301,6 +350,8 @@ class BrowserPolicy:
             origins,
             enabled=enabled,
             interaction_enabled=interaction_enabled,
+            service_workers=service_workers,
+            user_agent=user_agent,
             timeout_seconds=timeout,
             executable_path=executable_path or None,
             session_path=base / SESSION_RELATIVE_PATH,
@@ -531,7 +582,8 @@ class PlaywrightBackend:
             self._context = self._browser.new_context(
                 accept_downloads=False,
                 ignore_https_errors=False,
-                service_workers="block",
+                service_workers=policy.service_worker_mode,
+                user_agent=policy.user_agent,
                 storage_state=_storage_state(policy),
             )
             self._context.set_default_timeout(self._timeout_ms)
@@ -1176,7 +1228,11 @@ class BrowserController:
                 and self.policy.session_path.is_file()
             ),
             "session_file": str(SESSION_RELATIVE_PATH),
-            "service_workers": "block",
+            "user_agent": self.policy.user_agent,
+            "service_workers": self.policy.service_worker_mode,
+            "service_workers_warning": (
+                SERVICE_WORKERS_WARNING if self.policy.service_workers else None
+            ),
             "current_url": self.current_url,
             "history_count": len(self._history),
             "can_go_back": len(self._history) > 1,

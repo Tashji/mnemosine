@@ -894,7 +894,7 @@ Il modulo `agent_memory/browser.py` implementa il livello descritto sopra:
 
 - intercetta ogni richiesta della pagina: le risorse di domini non elencati vengono bloccate, non solo la navigazione principale;
 
-- chiude i WebSocket verso server non elencati e disattiva i service worker, che altrimenti potrebbero aggirare l'intercettazione;
+- chiude i WebSocket verso server non elencati e disattiva i service worker, che altrimenti potrebbero aggirare l'intercettazione; si riattivano solo con `browser.service_workers`, spento per default (vedi sotto);
 
 - controlla l'URL finale dopo redirect e click, e chiude le finestre aperte da script;
 
@@ -908,6 +908,8 @@ Esempio di configurazione:
   "browser": {
     "enabled": true,
     "interaction_enabled": false,
+    "service_workers": false,
+    "user_agent": null,
     "allowed_origins": [
       "https://it.wikipedia.org",
       "https://forum.example.org"
@@ -919,6 +921,49 @@ Esempio di configurazione:
 
 `interaction_enabled` abilita click, compilazione e tasti; resta `false` per impostazione predefinita. La whitelist dei contatti WhatsApp è prevista dal modello di sicurezza, ma non viene dedotta automaticamente dal contenuto della pagina: l'interazione con WhatsApp Web va abilitata solo dopo aver configurato la sessione e i contatti.
 
+#### Service worker: opt-in esplicito
+
+Alcune applicazioni web non funzionano senza service worker: li usano per le notifiche, per lavorare offline o per mantenere una connessione in background. Sono però anche l'unico punto in cui la whitelist non arriva: le richieste che partono da un service worker non passano da `context.route`, quindi il filtro delle origini copre la pagina e le sue richieste normali, ma non quel traffico.
+
+Per questo restano spenti. Abilitarli è una decisione dell'amministratore, esplicita e per profilo:
+
+```json
+{
+  "browser": {
+    "enabled": true,
+    "allowed_origins": [
+      "https://web.whatsapp.com",
+      "https://static.whatsapp.net"
+    ],
+    "service_workers": true
+  }
+}
+```
+
+Con `service_workers` a `true` il browser passa `allow` a Playwright, sia nella sessione headless sia in `mnemosine-browser-login`; con la chiave assente o a `false` passa `block`. `browser_status` riporta la modalità attiva e, quando è `allow`, anche un avviso con il rischio. Le altre regole non cambiano: solo origini in whitelist, solo HTTPS, nessun accesso a indirizzi privati o locali, URL finale ricontrollato dopo ogni redirect.
+
+Cosa si accetta: un sito in whitelist può, tramite il suo service worker, contattare server che la whitelist non elenca, e il browser non lo vede. Ha senso solo per un sito preciso, già autorizzato, di cui ci si fida; non va acceso "in generale" per far funzionare qualche pagina in più.
+
+Il flag toglie un ostacolo, non garantisce il sito. Nei test su WhatsApp Web non ha cambiato nulla: la pagina di accesso compare sia con `allow` sia con `block`. Il blocco vero, lì, è lo user agent: WhatsApp rifiuta `HeadlessChrome` e mostra «WhatsApp works with Google Chrome 100+». La finestra visibile di `mnemosine-browser-login` ha lo user agent normale di Chrome e carica la pagina; la sessione headless no, perché oggi non c'è un modo per dichiararne uno diverso. In un ambiente minimale senza font di sistema, come questa VM, manca anche il presupposto del mount: senza fontconfig l'applicazione non viene montata affatto.
+
+#### User agent del profilo
+
+L'identità del browser è una sola per profilo, non una per sito: `browser.user_agent` vale sia per la sessione headless sia per la finestra visibile di `mnemosine-browser-login`. Con `null`, o con la chiave assente, si usa quello di Playwright.
+
+```json
+{
+  "browser": {
+    "enabled": true,
+    "allowed_origins": ["https://web.whatsapp.com"],
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36"
+  }
+}
+```
+
+Serve perché i siti cambiano comportamento in base al browser dichiarato: Chromium headless si presenta come `HeadlessChrome/...`, e alcuni servizi lo rifiutano con un messaggio sulla versione di Chrome. Con un valore realistico la pagina di accesso compare. Il valore va tenuto stabile: se cambia tra login e sessione, i cookie salvati possono non essere più validi. `browser_status` e `mnemosine-browser-login --check` riportano quello attivo.
+
+Non è un modo per superare i controlli anti-automazione veri — challenge, captcha, fingerprinting del dispositivo: quelli restano un limite e vanno trattati come tali, non come configurazione.
+
 La sessione non è una configurazione per sito: cookie e storage locale vengono salvati in `data/browser/session.json` con permessi `600` e ricaricati a ogni apertura del browser headless. Il primo accesso si fa una volta, con una finestra visibile:
 
 ```bash
@@ -929,7 +974,7 @@ mnemosine-browser-login --check
 mnemosine-browser-login --origin https://web.whatsapp.com
 ```
 
-Il comando richiede uno schermo e un terminale interattivo, perché l'accesso (password, QR, secondo fattore) lo completa una persona. Il file che produce contiene credenziali: è escluso dal repository, va cancellato quando revochi l'accesso e non va copiato in un backup condiviso. Il browser headless blocca i service worker: le pagine che ne hanno bisogno per funzionare possono non caricarsi, e il limite è voluto, perché le richieste partite da un service worker non passano dal filtro delle origini.
+Il comando richiede uno schermo e un terminale interattivo, perché l'accesso (password, QR, secondo fattore) lo completa una persona. Il file che produce contiene credenziali: è escluso dal repository, va cancellato quando revochi l'accesso e non va copiato in un backup condiviso. Il browser headless blocca i service worker per impostazione predefinita: le pagine che ne hanno bisogno per funzionare possono non caricarsi. Il limite è voluto, perché le richieste partite da un service worker non passano dal filtro delle origini; si revoca solo con `browser.service_workers` a `true` (sezione precedente).
 
 Comandi:
 

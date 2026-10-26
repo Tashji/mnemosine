@@ -19,6 +19,7 @@ from contextlib import suppress
 from pathlib import Path
 
 from .browser import (
+    SERVICE_WORKERS_WARNING,
     SESSION_RELATIVE_PATH,
     BrowserPolicy,
     _playwright_available,
@@ -87,6 +88,8 @@ def _run(policy: BrowserPolicy, origin: str) -> int:
             )
             context = browser.new_context(
                 accept_downloads=False,
+                service_workers=policy.service_worker_mode,
+                user_agent=policy.user_agent,
                 storage_state=_storage_state(policy),
             )
             try:
@@ -146,6 +149,13 @@ def main(argv: list[str] | None = None) -> int:
                         "session_file": str(SESSION_RELATIVE_PATH),
                         "session_saved": bool(
                             session_file is not None and session_file.is_file()
+                        ),
+                        "user_agent": policy.user_agent,
+                        "service_workers": policy.service_worker_mode,
+                        "service_workers_warning": (
+                            SERVICE_WORKERS_WARNING
+                            if policy.service_workers
+                            else None
                         ),
                         "playwright_available": _playwright_available(),
                     },

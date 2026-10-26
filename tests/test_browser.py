@@ -144,12 +144,16 @@ def make_policy(
     *,
     enabled: bool = True,
     interaction: bool = False,
+    service_workers: bool = False,
+    user_agent: str | None = None,
     resolver=public_resolver,
 ) -> BrowserPolicy:
     return BrowserPolicy(
         origins if origins is not None else ["https://example.com"],
         enabled=enabled,
         interaction_enabled=interaction,
+        service_workers=service_workers,
+        user_agent=user_agent,
         resolver=resolver,
     )
 
@@ -303,6 +307,78 @@ class BrowserPolicyTests(unittest.TestCase):
             (root / "config").mkdir()
             (root / "config" / "integrations.json").write_text(
                 json.dumps({"browser": {"enabled": "yes"}}),
+                encoding="utf-8",
+            )
+            with self.assertRaises(ConfigError):
+                BrowserPolicy.from_root(root)
+
+    def test_service_workers_are_blocked_by_default(self) -> None:
+        policy = make_policy()
+        self.assertFalse(policy.service_workers)
+        self.assertEqual(policy.service_worker_mode, "block")
+
+    def test_config_enables_service_workers_only_on_opt_in(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "config").mkdir()
+            (root / "config" / "integrations.json").write_text(
+                json.dumps(
+                    {
+                        "browser": {
+                            "enabled": True,
+                            "allowed_origins": ["https://example.com"],
+                            "service_workers": True,
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            policy = BrowserPolicy.from_root(root)
+        self.assertTrue(policy.service_workers)
+        self.assertEqual(policy.service_worker_mode, "allow")
+
+    def test_user_agent_defaults_to_browser_value(self) -> None:
+        self.assertIsNone(make_policy().user_agent)
+
+    def test_config_reads_user_agent(self) -> None:
+        agent = "Mozilla/5.0 (X11; Linux x86_64) Chrome/156.0.0.0"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "config").mkdir()
+            (root / "config" / "integrations.json").write_text(
+                json.dumps(
+                    {
+                        "browser": {
+                            "enabled": True,
+                            "allowed_origins": ["https://example.com"],
+                            "user_agent": f"  {agent}  ",
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            policy = BrowserPolicy.from_root(root)
+        self.assertEqual(policy.user_agent, agent)
+
+    def test_config_rejects_invalid_user_agent(self) -> None:
+        invalid: list[object] = [42, ["x"], "   ", "Chrome\nSafari", "x" * 513]
+        for value in invalid:
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                (root / "config").mkdir()
+                (root / "config" / "integrations.json").write_text(
+                    json.dumps({"browser": {"user_agent": value}}),
+                    encoding="utf-8",
+                )
+                with self.assertRaises(ConfigError):
+                    BrowserPolicy.from_root(root)
+
+    def test_config_rejects_non_boolean_service_workers(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "config").mkdir()
+            (root / "config" / "integrations.json").write_text(
+                json.dumps({"browser": {"service_workers": "allow"}}),
                 encoding="utf-8",
             )
             with self.assertRaises(ConfigError):
@@ -615,6 +691,26 @@ class BrowserControllerTests(unittest.TestCase):
         self.assertFalse(status["session_saved"])
         self.assertEqual(status["session_file"], "data/browser/session.json")
         self.assertEqual(status["service_workers"], "block")
+        self.assertIsNone(status["service_workers_warning"])
+        self.assertIsNone(status["user_agent"])
+
+    def test_status_exposes_user_agent(self) -> None:
+        agent = "Mozilla/5.0 (X11; Linux x86_64) Chrome/156.0.0.0"
+        controller = BrowserController(
+            policy=make_policy(user_agent=agent), backend=FakeBackend()
+        )
+        self.assertEqual(controller.status()["user_agent"], agent)
+
+    def test_status_warns_when_service_workers_are_allowed(self) -> None:
+        controller = BrowserController(
+            policy=make_policy(service_workers=True), backend=FakeBackend()
+        )
+        status = controller.status()
+        self.assertEqual(status["service_workers"], "allow")
+        self.assertIn(
+            "non passano dal filtro delle origini",
+            status["service_workers_warning"],
+        )
 
     def test_close_releases_backend(self) -> None:
         backend = FakeBackend()
@@ -725,6 +821,9 @@ class BrowserLoginTests(unittest.TestCase):
         self.assertTrue(payload["enabled"])
         self.assertEqual(payload["session_file"], "data/browser/session.json")
         self.assertFalse(payload["session_saved"])
+        self.assertEqual(payload["service_workers"], "block")
+        self.assertIsNone(payload["service_workers_warning"])
+        self.assertIsNone(payload["user_agent"])
 
     def test_disabled_browser_refuses_to_open(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

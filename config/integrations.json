@@ -3,6 +3,8 @@
   "browser": {
     "enabled": false,
     "interaction_enabled": false,
+    "service_workers": false,
+    "user_agent": null,
     "allowed_origins": [],
     "navigation_timeout_seconds": 30
   },
