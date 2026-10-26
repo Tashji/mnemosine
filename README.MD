@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-342%20passing-2ea043?logo=githubactions&logoColor=white" alt="342 test superati"></a>
+  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-349%20passing-2ea043?logo=githubactions&logoColor=white" alt="349 test superati"></a>
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12">
   <img src="https://img.shields.io/badge/MCP-Model%20Context%20Protocol-6ee7d8" alt="Model Context Protocol">
   <img src="https://img.shields.io/badge/storage-SQLite%20%2B%20FAISS-0b1422" alt="SQLite e FAISS">
@@ -908,7 +908,9 @@ Il modulo `agent_memory/browser.py` implementa il livello descritto sopra:
 
 - carica Playwright solo alla prima apertura, quindi il server MCP parte anche senza il pacchetto opzionale;
 
-- quando una pagina si ricarica mentre la si sta leggendo, aspetta la fine della navigazione per un massimo di 3 secondi, ripete una volta l'operazione e poi risponde con un errore esplicito («la pagina si sta ricaricando») invece di restituire un contenuto vuoto o vecchio. Le letture usano `evaluate` con un limite breve, non il timeout delle azioni, così un ricaricamento continuo non blocca il server per 30 secondi.
+- quando una pagina si ricarica mentre la si sta leggendo, aspetta la fine della navigazione per un massimo di 3 secondi, ripete una volta l'operazione e poi risponde con un errore esplicito («la pagina si sta ricaricando») invece di restituire un contenuto vuoto o vecchio. Le letture usano `evaluate` con un limite breve, così un ricaricamento continuo non blocca il server per 30 secondi;
+
+- click, compilazione, tasti e screenshot usano lo stesso limite breve di 3 secondi per l'azione: se la pagina non è pronta rispondono con un errore esplicito («la pagina non è pronta, riprova tra poco») invece di attendere il timeout pieno della policy.
 
 Esempio di configurazione:
 

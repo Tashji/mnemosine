@@ -13,8 +13,10 @@ from unittest import mock
 
 from agent_memory import browser_login
 from agent_memory.browser import (
+    ACTION_TIMEOUT_MS,
     READ_ATTEMPTS,
     READ_RETRY_DELAY_SECONDS,
+    READY_TIMEOUT_MS,
     BrowserController,
     BrowserPolicy,
     PlaywrightBackend,
@@ -576,6 +578,20 @@ class BrowserControllerTests(unittest.TestCase):
             controller.click("a.forum")
         self.assertIn("browser_links", str(caught.exception))
 
+    def test_click_busy_is_not_treated_as_a_bad_selector(self) -> None:
+        backend = FakeBackend(
+            click_error=BrowserBusyError(
+                "Click non riuscito: la pagina non è pronta, riprova tra poco."
+            )
+        )
+        controller = BrowserController(
+            policy=make_policy(interaction=True), backend=backend
+        )
+        controller.open("https://example.com")
+        with self.assertRaises(BrowserBusyError) as caught:
+            controller.click("a.forum")
+        self.assertNotIn("browser_links", str(caught.exception))
+
     def test_elements_are_numbered_and_truncated(self) -> None:
         backend = FakeBackend(
             elements=[
@@ -956,6 +972,112 @@ class BrowserReloadTests(unittest.TestCase):
         backend = object.__new__(PlaywrightBackend)
         backend._page = NoBodyPage()
         self.assertEqual(backend.text(), "")
+
+
+class BrowserActionTimeoutTests(unittest.TestCase):
+    """Click e screenshot non devono attendere il timeout pieno della policy."""
+
+    class TimeoutError(Exception):
+        pass
+
+    def make_backend(
+        self,
+        *,
+        click_error: Exception | None = None,
+        screenshot_error: Exception | None = None,
+    ) -> tuple[PlaywrightBackend, dict[str, Any]]:
+        calls: dict[str, Any] = {
+            "waits": 0,
+            "click": [],
+            "fill": [],
+            "press": [],
+            "screenshot": [],
+        }
+
+        class Page:
+            url = "https://example.com"
+
+            def wait_for_load_state(self, _state: str, timeout: int) -> None:
+                calls["waits"] += 1
+
+            def evaluate(self, _script: str) -> str:
+                return "complete"
+
+            def click(self, selector: str, timeout: int | None = None) -> None:
+                calls["click"].append((selector, timeout))
+                if click_error is not None:
+                    raise click_error
+
+            def fill(
+                self, selector: str, value: str, timeout: int | None = None
+            ) -> None:
+                calls["fill"].append((selector, value, timeout))
+
+            def press(self, selector: str, key: str, timeout: int | None = None) -> None:
+                calls["press"].append((selector, key, timeout))
+
+            def screenshot(
+                self,
+                path: str,
+                full_page: bool = False,
+                timeout: int | None = None,
+            ) -> None:
+                calls["screenshot"].append((path, full_page, timeout))
+                if screenshot_error is not None:
+                    raise screenshot_error
+
+        backend = object.__new__(PlaywrightBackend)
+        backend._page = Page()
+        return backend, calls
+
+    def test_limit_is_the_same_as_the_read_limit(self) -> None:
+        self.assertEqual(ACTION_TIMEOUT_MS, READY_TIMEOUT_MS)
+
+    def test_click_waits_for_the_page_but_uses_the_short_limit(self) -> None:
+        backend, calls = self.make_backend()
+        backend.click("a.forum")
+        self.assertEqual(calls["waits"], 1)
+        self.assertEqual(calls["click"], [("a.forum", ACTION_TIMEOUT_MS)])
+
+    def test_click_timeout_is_an_explicit_error(self) -> None:
+        backend, _ = self.make_backend(
+            click_error=self.TimeoutError("Timeout 3000ms exceeded.")
+        )
+        with self.assertRaises(BrowserBusyError) as caught:
+            backend.click("a.forum")
+        self.assertIn("pronta", str(caught.exception))
+        self.assertIn("riprova", str(caught.exception))
+
+    def test_fill_and_press_use_the_short_limit(self) -> None:
+        backend, calls = self.make_backend()
+        backend.fill("#cerca", "mnemosine")
+        backend.press("Enter", selector="#cerca")
+        self.assertEqual(calls["fill"], [("#cerca", "mnemosine", ACTION_TIMEOUT_MS)])
+        self.assertEqual(calls["press"], [("#cerca", "Enter", ACTION_TIMEOUT_MS)])
+
+    def test_screenshot_waits_for_the_page_and_uses_the_short_limit(self) -> None:
+        backend, calls = self.make_backend()
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "schermata.png"
+            backend.screenshot(target)
+        self.assertEqual(calls["waits"], 1)
+        self.assertEqual(len(calls["screenshot"]), 1)
+        path, full_page, timeout = calls["screenshot"][0]
+        self.assertEqual(path, str(target))
+        self.assertTrue(full_page)
+        self.assertEqual(timeout, ACTION_TIMEOUT_MS)
+
+    def test_screenshot_timeout_is_an_explicit_error(self) -> None:
+        backend, _ = self.make_backend(
+            screenshot_error=self.TimeoutError("Timeout 3000ms exceeded.")
+        )
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            self.assertRaises(BrowserBusyError) as caught,
+        ):
+            backend.screenshot(Path(tmp) / "schermata.png")
+        self.assertIn("pronta", str(caught.exception))
+        self.assertIn("riprova", str(caught.exception))
 
 
 class FakeRoute:

@@ -64,6 +64,9 @@ SESSION_RELATIVE_PATH = Path("data") / "browser" / "session.json"
 MAX_USER_AGENT_CHARS = 512
 # Quanto aspettare che una navigazione in corso finisca prima di leggere.
 READY_TIMEOUT_MS = 3_000
+# Lo stesso limite per le azioni: un click o uno screenshot non devono aspettare
+# il timeout pieno della policy quando la pagina non è pronta.
+ACTION_TIMEOUT_MS = READY_TIMEOUT_MS
 # Un tentativo in più quando la pagina cambia documento sotto la lettura.
 READ_ATTEMPTS = 2
 READ_RETRY_DELAY_SECONDS = 0.2
@@ -576,6 +579,12 @@ def _is_transient_navigation_error(exc: BaseException) -> bool:
     return any(marker in message for marker in _TRANSIENT_NAVIGATION_MARKERS)
 
 
+def _is_timeout_error(exc: BaseException) -> bool:
+    """Vero per il TimeoutError di Playwright, senza importarlo nel modulo."""
+
+    return isinstance(exc, TimeoutError) or type(exc).__name__ == "TimeoutError"
+
+
 def _call_with_navigation_retry(
     call: Callable[[], Any],
     *,
@@ -738,6 +747,10 @@ class PlaywrightBackend:
         except AgentMemoryError:
             raise
         except Exception as exc:
+            if _is_timeout_error(exc):
+                raise BrowserBusyError(
+                    f"{message}: la pagina non è pronta, riprova tra poco."
+                ) from exc
             if _is_transient_navigation_error(exc):
                 raise BrowserBusyError(
                     f"{message}: la pagina si sta ricaricando, riprova tra poco."
@@ -785,14 +798,14 @@ class PlaywrightBackend:
 
     def click(self, selector: str) -> None:
         self._with_page(
-            lambda page: page.click(selector, timeout=self._timeout_ms),
+            lambda page: page.click(selector, timeout=ACTION_TIMEOUT_MS),
             message="Click non riuscito",
         )
         self.url = self._require_page().url
 
     def fill(self, selector: str, value: str) -> None:
         self._with_page(
-            lambda page: page.fill(selector, value, timeout=self._timeout_ms),
+            lambda page: page.fill(selector, value, timeout=ACTION_TIMEOUT_MS),
             message="Compilazione non riuscita",
         )
         self.url = self._require_page().url
@@ -857,16 +870,25 @@ class PlaywrightBackend:
     def click_element(self, index: int) -> None:
         handle = self._element(index)
         try:
-            handle.click(timeout=self._timeout_ms)
+            handle.click(timeout=ACTION_TIMEOUT_MS)
         except Exception as exc:
+            if _is_timeout_error(exc):
+                raise BrowserBusyError(
+                    "Click non riuscito: la pagina non è pronta, riprova tra poco."
+                ) from exc
             raise BrowserError(f"Click non riuscito: {exc}") from exc
         self.url = self._require_page().url
 
     def fill_element(self, index: int, value: str) -> None:
         handle = self._element(index)
         try:
-            handle.fill(value, timeout=self._timeout_ms)
+            handle.fill(value, timeout=ACTION_TIMEOUT_MS)
         except Exception as exc:
+            if _is_timeout_error(exc):
+                raise BrowserBusyError(
+                    "Compilazione non riuscita: la pagina non è pronta, "
+                    "riprova tra poco."
+                ) from exc
             raise BrowserError(f"Compilazione non riuscita: {exc}") from exc
         self.url = self._require_page().url
 
@@ -879,9 +901,9 @@ class PlaywrightBackend:
     ) -> None:
         def act(page: Any) -> None:
             if index is not None:
-                self._element(index).press(key, timeout=self._timeout_ms)
+                self._element(index).press(key, timeout=ACTION_TIMEOUT_MS)
             elif selector is not None:
-                page.press(selector, key, timeout=self._timeout_ms)
+                page.press(selector, key, timeout=ACTION_TIMEOUT_MS)
             else:
                 page.keyboard.press(key)
 
@@ -929,10 +951,16 @@ class PlaywrightBackend:
         ]
 
     def screenshot(self, path: Path) -> None:
-        page = self._require_page()
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            page.screenshot(path=str(path), full_page=True)
+            self._with_page(
+                lambda page: page.screenshot(
+                    path=str(path), full_page=True, timeout=ACTION_TIMEOUT_MS
+                ),
+                message="Screenshot non riuscito",
+            )
+        except AgentMemoryError:
+            raise
         except Exception as exc:
             raise BrowserError(f"Screenshot non riuscito: {exc}") from exc
 
@@ -1219,6 +1247,8 @@ class BrowserController:
                 backend.click_element(self._target_index(index))
             else:
                 backend.click(self._selector(selector or ""))
+        except BrowserBusyError:
+            raise
         except BrowserError as exc:
             raise BrowserError(
                 f"{exc} Se non conosci il selettore, usa browser_links per i "
