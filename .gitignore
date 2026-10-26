@@ -28,3 +28,9 @@ profiles/*/data/browser/
 build/
 dist/
 *.egg-info/
+
+# Artefatti locali di sviluppo (screenshot, log, script di prova).
+artifacts/
+
+# Profili locali creati con il wizard: dati personali e cache del modello.
+profiles/
