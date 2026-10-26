@@ -9,11 +9,12 @@ import threading
 import unittest
 import urllib.error
 import urllib.request
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 from agent_memory.dashboard import DashboardData, create_server
 from agent_memory.evolution import EvolutionService
+from agent_memory.heartbeat import HeartbeatEngine
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 AS_OF = date(2026, 10, 24)
@@ -109,6 +110,50 @@ class DashboardDataTests(DashboardFixture):
         self.assertGreaterEqual(len(detail["revisions"]), 1)
         self.assertTrue(detail["links"] or detail["semantic_links"])
 
+    def test_overview_contacts_expose_last_interaction_and_count(self) -> None:
+        overview = DashboardData(self.root).overview()
+
+        contacts = overview["contacts"]
+        self.assertEqual(
+            [contact["user_id"] for contact in contacts],
+            ["user_davide", "user_marco", "user_giulia"],
+        )
+        davide = contacts[0]
+        self.assertEqual(davide["display_name"], "Davide")
+        self.assertEqual(davide["interaction_count"], 23)
+        self.assertEqual(
+            davide["last_interaction_at"], "2026-10-20T22:10:00+02:00"
+        )
+        self.assertEqual(
+            davide["last_interaction_summary"],
+            "Serata gaming cooperativo con voce.",
+        )
+        self.assertEqual(davide["trust"], 63)
+        self.assertEqual(davide["intimacy"], 44)
+
+    def test_recorded_interaction_refreshes_contact_in_overview(self) -> None:
+        data = DashboardData(self.root)
+        data.overview()  # crea i servizi: la lettura successiva non deve usare cache
+
+        at = datetime.fromisoformat("2026-10-26T10:00:00+01:00")
+        HeartbeatEngine(self.root, at=at).record_interaction(
+            user_id="user_giulia", summary="Aggiornamento sul progetto di tesi."
+        )
+
+        contacts = data.overview()["contacts"]
+        giulia = next(
+            contact for contact in contacts if contact["user_id"] == "user_giulia"
+        )
+        self.assertEqual(contacts[0]["user_id"], "user_giulia")
+        self.assertEqual(giulia["interaction_count"], 8)
+        self.assertEqual(
+            giulia["last_interaction_at"], "2026-10-26T10:00:00+01:00"
+        )
+        self.assertEqual(
+            giulia["last_interaction_summary"],
+            "Aggiornamento sul progetto di tesi.",
+        )
+
     def test_evolution_history_after_seed(self) -> None:
         self._apply_seed()
         data = DashboardData(self.root).evolution()
@@ -171,6 +216,8 @@ class DashboardHTTPTests(DashboardFixture):
         self.assertEqual(status, 200)
         overview = json.loads(body)
         self.assertEqual(overview["counts"]["memories"], 40)
+        self.assertEqual(len(overview["contacts"]), 3)
+        self.assertEqual(overview["contacts"][0]["user_id"], "user_davide")
 
         status, _headers, body = self._get("/api/timeline")
         self.assertEqual(status, 200)

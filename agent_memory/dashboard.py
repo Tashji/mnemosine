@@ -623,6 +623,47 @@ class DashboardData:
 
     # -- panoramica ---------------------------------------------------------
 
+    def _contacts(self) -> list[dict[str, Any]]:
+        graph = self.memory.get_social_graph()
+        people = graph.get("people")
+        contacts: list[dict[str, Any]] = []
+        if not isinstance(people, list):
+            return contacts
+        for person in people:
+            if not isinstance(person, dict):
+                continue
+            user_id = person.get("user_id")
+            if not isinstance(user_id, str) or not user_id:
+                continue
+            count = person.get("interaction_count", 0)
+            if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+                count = 0
+            last_summary = ""
+            history = person.get("interaction_history")
+            if isinstance(history, list) and history:
+                latest = history[0]
+                if isinstance(latest, dict):
+                    summary = latest.get("summary")
+                    if isinstance(summary, str):
+                        last_summary = summary
+            contacts.append(
+                {
+                    "user_id": user_id,
+                    "display_name": person.get("display_name") or user_id,
+                    "relation": person.get("relation"),
+                    "trust": person.get("trust"),
+                    "intimacy": person.get("intimacy"),
+                    "last_interaction_at": person.get("last_interaction_at"),
+                    "last_interaction_summary": last_summary,
+                    "interaction_count": count,
+                }
+            )
+        contacts.sort(
+            key=lambda contact: str(contact["last_interaction_at"] or ""),
+            reverse=True,
+        )
+        return contacts
+
     def overview(self) -> dict[str, Any]:
         identity = self.memory.get_identity()
         personal = identity.get("personal_data", {})
@@ -720,6 +761,7 @@ class DashboardData:
             },
             "last_memory_update": last_updated,
             "recent_memories": recent_memories,
+            "contacts": self._contacts(),
             "recent_history": sorted(
                 history,
                 key=lambda change: str(change.get("changed_at", "")),

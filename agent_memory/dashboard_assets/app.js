@@ -415,11 +415,75 @@ function renderOverview(data) {
     )
   );
 
+  const contacts = Array.isArray(data.contacts) ? data.contacts : [];
+  const contactsPanel = h(
+    "section",
+    { class: "panel contacts-panel" },
+    h(
+      "div",
+      { class: "panel-header" },
+      h("h3", { text: "Relazioni" }),
+      h("span", { class: "count-chip", text: `${contacts.length}` })
+    ),
+    contacts.length
+      ? h(
+          "div",
+          { class: "contact-grid" },
+          contacts.map((contact) =>
+            h(
+              "article",
+              { class: "contact-card" },
+              h(
+                "div",
+                { class: "contact-top" },
+                h(
+                  "div",
+                  {},
+                  h("div", { class: "contact-name", text: text(contact.display_name, contact.user_id) }),
+                  h("div", { class: "contact-relation", text: text(contact.relation) })
+                ),
+                h(
+                  "div",
+                  { class: "contact-count", title: "Interazioni registrate" },
+                  h("strong", { text: String(contact.interaction_count ?? 0) }),
+                  h("span", { text: "interazioni" })
+                )
+              ),
+              h(
+                "div",
+                { class: "contact-last" },
+                h("span", { class: "contact-label", text: "Ultima interazione" }),
+                h("strong", {
+                  text: contact.last_interaction_at
+                    ? fmtDate(contact.last_interaction_at, { time: true })
+                    : "Nessuna registrata",
+                }),
+                contact.last_interaction_summary
+                  ? h("p", { class: "contact-summary", text: contact.last_interaction_summary })
+                  : null
+              ),
+              h(
+                "div",
+                { class: "contact-meta" },
+                h("span", { text: `Fiducia ${text(contact.trust)}/100` }),
+                h("span", { text: `Intimità ${text(contact.intimacy)}/100` })
+              )
+            )
+          )
+        )
+      : h(
+          "div",
+          { class: "panel-body" },
+          emptyState("Nessuna relazione", "Il grafo delle relazioni è vuoto.")
+        )
+  );
+
   clear(
     $("#overview-content"),
     h("div", { class: "hero-grid" }, identityCard, stateCard),
     metrics,
-    h("div", { class: "overview-columns" }, recentPanel, historyPanel)
+    h("div", { class: "overview-columns" }, recentPanel, historyPanel),
+    contactsPanel
   );
 
   $("#footer-generated").textContent = `Aggiornata ${fmtDate(data.generated_at, { time: true })}`;
