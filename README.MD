@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/mnemosine-hero.svg" alt="Mnemosine — memoria, identità e iniziativa per agenti AI" width="100%">
+  <img src="assets/mnemosine-banner.svg" alt="Mnemosine — architettura cognitiva per agenti AI" width="100%">
 </p>
 
 <h1 align="center">Memoria, identità e iniziativa per agenti AI</h1>
@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-326%20passing-2ea043?logo=githubactions&logoColor=white" alt="326 test superati"></a>
+  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-342%20passing-2ea043?logo=githubactions&logoColor=white" alt="342 test superati"></a>
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12">
   <img src="https://img.shields.io/badge/MCP-Model%20Context%20Protocol-6ee7d8" alt="Model Context Protocol">
   <img src="https://img.shields.io/badge/storage-SQLite%20%2B%20FAISS-0b1422" alt="SQLite e FAISS">
@@ -120,7 +120,9 @@ python -m unittest discover -s tests
 - [Piano di sviluppo](#piano)
 - [Identità visiva](#identita-visiva)
 
----
+<p align="center">
+  <img src="assets/mnemosine-divider.svg" alt="" width="100%">
+</p>
 
 <a id="architettura" name="architettura"></a>
 
@@ -350,7 +352,9 @@ Se invece usi il repository senza installarlo, il modulo si trova solo dalla car
 
 `--root` è sempre la directory del profilo: quella che contiene `config/`, `data/` e la sandbox `files/`. Il dataset demo è la radice del repository stesso, quindi per provare subito si può usare `--root .` dalla cartella del progetto. Senza `--root`, un pacchetto installato non trova nessuna configurazione e il server si ferma con un errore esplicito, invece di partire con dati casuali.
 
----
+<p align="center">
+  <img src="assets/mnemosine-divider.svg" alt="" width="100%">
+</p>
 
 <a id="memoria" name="memoria"></a>
 
@@ -578,7 +582,9 @@ La prima richiesta cercherà principalmente ricordi episodici; la terza cercher�
 
 Il recupero dovrà essere valutato in base alla pertinenza dei risultati, senza assumere che una ricerca vettoriale restituisca sempre il ricordo corretto.
 
----
+<p align="center">
+  <img src="assets/mnemosine-divider.svg" alt="" width="100%">
+</p>
 
 <a id="passato" name="passato"></a>
 
@@ -724,7 +730,9 @@ Durante il ciclo "Sleep/Consolidation", il sistema:
 
 Il sonno rappresenterà una simulazione funzionale della riorganizzazione della memoria, non una riproduzione letterale dei processi biologici.
 
----
+<p align="center">
+  <img src="assets/mnemosine-divider.svg" alt="" width="100%">
+</p>
 
 <a id="autonomia" name="autonomia"></a>
 
@@ -1037,7 +1045,9 @@ Il server MCP può essere collegato a qualunque client e a qualunque modello, co
 
 Nessun ramo del codice dipende dal modello usato: sono i client MCP a variare (alcuni troncano i risultati, altri non mostrano il contenuto strutturato), quindi la regola è tenere stato e sicurezza sul server e output prevedibili.
 
----
+<p align="center">
+  <img src="assets/mnemosine-divider.svg" alt="" width="100%">
+</p>
 
 <a id="requisiti" name="requisiti"></a>
 
@@ -1178,6 +1188,10 @@ Il sistema sarà composto dai seguenti moduli:
 20. Server MCP: coordinamento dei moduli e comunicazione con l'LLM.
 
 21. Gestione operativa: backup, logging, monitoraggio e ripristino.
+
+<p align="center">
+  <img src="assets/mnemosine-divider.svg" alt="" width="100%">
+</p>
 
 <a id="piano" name="piano"></a>
 
@@ -1585,6 +1599,10 @@ Realizzare un agente AI persistente che combini:
 La struttura finale unirà tre dimensioni fondamentali: la cronologia degli eventi tramite SQLite, l'identità e gli stati tramite JSON e il recupero basato sul significato tramite il Vector Database.
 
 Il sistema non si limiterà quindi a conservare una cronologia di conversazioni: potrà recuperare ricordi pertinenti, distinguere le conoscenze generali dalle esperienze personali e utilizzare entrambe per produrre risposte coerenti con la propria storia simulata.
+
+<p align="center">
+  <img src="assets/mnemosine-divider.svg" alt="" width="100%">
+</p>
 
 <a id="identita-visiva" name="identita-visiva"></a>
 
