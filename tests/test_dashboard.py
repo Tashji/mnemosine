@@ -261,6 +261,7 @@ class DashboardHTTPTests(DashboardFixture):
         self.assertIn("text/javascript", headers["Content-Type"])
         self.assertIn(b"loadTimeline", body)
         self.assertIn(b"loadRelations", body)
+        self.assertIn(b"openRelation", body)
 
         status, _headers, body = self._get("/static/../config/identity.json")
         self.assertEqual(status, 404)

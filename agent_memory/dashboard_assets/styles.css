@@ -655,6 +655,30 @@ h3 {
   background: var(--panel-soft);
 }
 
+.contact-card-action {
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.contact-card-action:hover {
+  border-color: var(--line);
+  background: var(--panel-strong);
+}
+
+.contact-card-action:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.contact-open {
+  display: inline-flex;
+  margin-top: 10px;
+  color: var(--gold);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
 .contact-top {
   display: flex;
   gap: 12px;

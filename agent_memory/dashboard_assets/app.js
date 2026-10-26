@@ -437,7 +437,19 @@ function renderOverview(data) {
           contacts.map((contact) =>
             h(
               "article",
-              { class: "contact-card" },
+              {
+                class: "contact-card contact-card-action",
+                role: "button",
+                tabindex: "0",
+                "aria-label": `Apri la relazione con ${text(contact.display_name, contact.user_id)}`,
+                onClick: () => openRelation(contact.user_id),
+                onKeydown: (event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    openRelation(contact.user_id);
+                  }
+                },
+              },
               h(
                 "div",
                 { class: "contact-top" },
@@ -472,7 +484,8 @@ function renderOverview(data) {
                 { class: "contact-meta" },
                 h("span", { text: `Fiducia ${text(contact.trust)}/100` }),
                 h("span", { text: `Intimità ${text(contact.intimacy)}/100` })
-              )
+              ),
+              h("span", { class: "contact-open", text: "Apri scheda →", "aria-hidden": "true" })
             )
           )
         )
@@ -530,6 +543,11 @@ async function loadOverview(force = false) {
 }
 
 /* -- relazioni ----------------------------------------------------------- */
+
+function openRelation(userId) {
+  state.relationId = userId;
+  navigate("relations");
+}
 
 function relationStat(labelText, valueText) {
   return h(
@@ -742,7 +760,10 @@ function renderRelations(data) {
 }
 
 async function loadRelations(force = false) {
-  if (state.loaded.relations && !force) return;
+  if (state.loaded.relations && !force) {
+    renderRelations(state.loaded.relations);
+    return;
+  }
   const content = $("#relations-content");
   setLoading(content, "Caricamento delle relazioni…");
   try {
