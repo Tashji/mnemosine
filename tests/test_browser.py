@@ -9,18 +9,24 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 from agent_memory import browser_login
 from agent_memory.browser import (
+    READ_ATTEMPTS,
+    READ_RETRY_DELAY_SECONDS,
     BrowserController,
     BrowserPolicy,
     PlaywrightBackend,
+    _call_with_navigation_retry,
     _element_info,
+    _is_transient_navigation_error,
     _save_storage_state,
     _storage_state,
 )
 from agent_memory.errors import (
     BrowserBlockedError,
+    BrowserBusyError,
     BrowserError,
     BrowserUnavailableError,
     ConfigError,
@@ -832,6 +838,124 @@ class BrowserLoginTests(unittest.TestCase):
                 code = browser_login.main(["--root", tmp])
         self.assertEqual(code, 1)
         self.assertIn("ERRORE", buffer.getvalue())
+
+
+class BrowserReloadTests(unittest.TestCase):
+    """Comportamento quando la pagina cambia documento durante una lettura."""
+
+    def test_navigation_errors_are_recognized(self) -> None:
+        for message in (
+            "Execution context was destroyed.",
+            "Cannot find context with specified id",
+            "Element is not attached to the DOM",
+        ):
+            with self.subTest(message=message):
+                self.assertTrue(
+                    _is_transient_navigation_error(RuntimeError(message))
+                )
+        self.assertFalse(
+            _is_transient_navigation_error(RuntimeError("selettore inesistente"))
+        )
+
+    def test_retries_once_after_a_navigation(self) -> None:
+        calls: list[int] = []
+        sleeps: list[float] = []
+
+        def call() -> str:
+            calls.append(len(calls) + 1)
+            if len(calls) == 1:
+                raise RuntimeError("Execution context was destroyed.")
+            return "ok"
+
+        result = _call_with_navigation_retry(call, sleep=sleeps.append)
+        self.assertEqual(result, "ok")
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(sleeps, [READ_RETRY_DELAY_SECONDS])
+
+    def test_other_errors_are_not_retried(self) -> None:
+        calls: list[int] = []
+
+        def call() -> None:
+            calls.append(len(calls) + 1)
+            raise RuntimeError("selettore inesistente")
+
+        with self.assertRaises(RuntimeError):
+            _call_with_navigation_retry(call, sleep=lambda _seconds: None)
+        self.assertEqual(len(calls), 1)
+
+    def test_page_still_reloading_becomes_an_explicit_error(self) -> None:
+        class ChangingPage:
+            def __init__(self) -> None:
+                self.waits = 0
+
+            def wait_for_load_state(self, _state: str, timeout: int) -> None:
+                self.waits += 1
+                raise RuntimeError("Execution context was destroyed.")
+
+        backend = object.__new__(PlaywrightBackend)
+        page = ChangingPage()
+        backend._page = page
+        with self.assertRaises(BrowserBusyError) as caught:
+            backend._with_page(lambda _page: "x", message="Lettura")
+        self.assertIn("ricaricando", str(caught.exception))
+        self.assertEqual(page.waits, READ_ATTEMPTS)
+
+    def test_settled_page_is_read_normally(self) -> None:
+        class SettledPage:
+            def wait_for_load_state(self, _state: str, timeout: int) -> None:
+                return None
+
+            def evaluate(self, _script: str) -> str:
+                return "complete"
+
+        backend = object.__new__(PlaywrightBackend)
+        backend._page = SettledPage()
+        self.assertEqual(
+            backend._with_page(lambda _page: "letto", message="Lettura"),
+            "letto",
+        )
+
+    def test_page_stuck_in_loading_is_reported(self) -> None:
+        class LoadingPage:
+            def wait_for_load_state(self, _state: str, timeout: int) -> None:
+                return None
+
+            def evaluate(self, _script: str) -> str:
+                return "loading"
+
+        backend = object.__new__(PlaywrightBackend)
+        backend._page = LoadingPage()
+        with (
+            mock.patch("agent_memory.browser.READY_TIMEOUT_MS", 50),
+            self.assertRaises(BrowserBusyError) as caught,
+        ):
+            backend._with_page(lambda _page: "x", message="Lettura")
+        self.assertIn("caricamento", str(caught.exception))
+
+    def test_text_reports_a_reload_instead_of_an_empty_page(self) -> None:
+        class ChangingPage:
+            def wait_for_load_state(self, _state: str, timeout: int) -> None:
+                raise RuntimeError("Execution context was destroyed.")
+
+            def evaluate(self, _script: str) -> str:
+                raise RuntimeError("Execution context was destroyed.")
+
+        backend = object.__new__(PlaywrightBackend)
+        backend._page = ChangingPage()
+        with self.assertRaises(BrowserBusyError):
+            backend.text()
+
+    def test_text_without_a_body_is_empty(self) -> None:
+        class NoBodyPage:
+            def wait_for_load_state(self, _state: str, timeout: int) -> None:
+                return None
+
+            def evaluate(self, script: str) -> str:
+                return "complete" if script == "document.readyState" else ""
+
+        backend = object.__new__(PlaywrightBackend)
+        backend._page = NoBodyPage()
+        self.assertEqual(backend.text(), "")
 
 
 class FakeRoute:

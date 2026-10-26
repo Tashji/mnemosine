@@ -29,6 +29,7 @@ import os
 import re
 import socket
 import sys
+import time
 from collections.abc import Callable, Iterable
 from contextlib import suppress
 from dataclasses import dataclass
@@ -40,6 +41,7 @@ from .config import project_root
 from .errors import (
     AgentMemoryError,
     BrowserBlockedError,
+    BrowserBusyError,
     BrowserError,
     BrowserUnavailableError,
     ConfigError,
@@ -60,6 +62,22 @@ MAX_ELEMENT_VALUE = 60
 MAX_WAIT_TEXT = 300
 SESSION_RELATIVE_PATH = Path("data") / "browser" / "session.json"
 MAX_USER_AGENT_CHARS = 512
+# Quanto aspettare che una navigazione in corso finisca prima di leggere.
+READY_TIMEOUT_MS = 3_000
+# Un tentativo in più quando la pagina cambia documento sotto la lettura.
+READ_ATTEMPTS = 2
+READ_RETRY_DELAY_SECONDS = 0.2
+# Errori che significano «il documento è cambiato mentre lo leggevo», non
+# «il browser è rotto»: valgono un secondo tentativo, poi un errore esplicito.
+_TRANSIENT_NAVIGATION_MARKERS = (
+    "Execution context was destroyed",
+    "Execution context is not available",
+    "Cannot find context with specified id",
+    "Frame was detached",
+    "Navigating frame was detached",
+    "Element is not attached to the DOM",
+    "is interrupted by another navigation",
+)
 # I service worker restano disattivati per impostazione predefinita: le richieste
 # che partono da un service worker non passano da ``context.route``, quindi
 # abilitarli esclude quel traffico dal filtro delle origini. Il flag
@@ -96,6 +114,10 @@ _ELEMENTS_JS = (
         "MAX_VALUE", str(MAX_ELEMENT_VALUE)
     )
 )
+# Letture via ``evaluate``: ``page.title()`` e ``inner_text`` attendono il
+# documento e possono bloccare per il timeout dell'azione (30 secondi).
+_READ_TITLE_JS = "document.title"
+_READ_TEXT_JS = "() => (document.body ? document.body.innerText : '')"
 _TEXT_PRESENT_JS = (
     "t => !!(document.body && "
     "document.body.innerText.toLowerCase().includes(t))"
@@ -547,6 +569,37 @@ def _save_storage_state(policy: BrowserPolicy, context: Any) -> bool:
     return True
 
 
+def _is_transient_navigation_error(exc: BaseException) -> bool:
+    """Vero se l'errore nasce da un documento cambiato durante la lettura."""
+
+    message = str(exc)
+    return any(marker in message for marker in _TRANSIENT_NAVIGATION_MARKERS)
+
+
+def _call_with_navigation_retry(
+    call: Callable[[], Any],
+    *,
+    sleep: Callable[[float], None] = time.sleep,
+) -> Any:
+    """Esegue ``call``, ripetendola una volta se il documento è cambiato.
+
+    Gli errori che non dipendono da una navigazione risalgono subito: ripetere
+    un click perché il selettore non esiste non aiuta nessuno.
+    """
+
+    for attempt in range(READ_ATTEMPTS):
+        try:
+            return call()
+        except Exception as exc:
+            last = exc
+            if attempt + 1 >= READ_ATTEMPTS or not _is_transient_navigation_error(
+                exc
+            ):
+                raise
+            sleep(READ_RETRY_DELAY_SECONDS)
+    raise last  # pragma: no cover - il ciclo esce sempre con return o raise
+
+
 class PlaywrightBackend:
     """Backend Playwright caricato solo alla prima apertura."""
 
@@ -638,49 +691,111 @@ class PlaywrightBackend:
             raise BrowserUnavailableError("Nessuna pagina browser aperta.")
         return self._page
 
+    def _wait_until_settled(self, page: Any) -> None:
+        """Aspetta un documento leggibile, con un limite di tempo esplicito.
+
+        Non basta attendere il caricamento: una pagina che si ricarica di
+        continuo può avere un documento presente ma ancora vuoto. Si controlla
+        ``readyState`` e, se resta ``loading`` oltre il limite, si restituisce
+        un errore chiaro invece di un contenuto vuoto spacciato per attuale.
+        """
+
+        deadline = time.monotonic() + READY_TIMEOUT_MS / 1000
+        while True:
+            remaining_ms = max(1, int((deadline - time.monotonic()) * 1000))
+            state: str | None = None
+            try:
+                page.wait_for_load_state("domcontentloaded", timeout=remaining_ms)
+                state = str(page.evaluate("document.readyState"))
+            except Exception as exc:
+                if _is_transient_navigation_error(exc):
+                    raise
+            if state in ("interactive", "complete"):
+                return
+            if time.monotonic() >= deadline:
+                raise BrowserBusyError(
+                    "La pagina è ancora in caricamento: riprova tra poco."
+                )
+            time.sleep(0.05)
+
+    def _with_page(self, action: Callable[[Any], Any], *, message: str) -> Any:
+        """Esegue un'azione sulla pagina gestendo un ricaricamento in corso.
+
+        Prima aspetta che il documento si stabilizzi, poi agisce; se nel
+        frattempo la pagina cambia, riprova una volta. Se anche il secondo
+        tentativo cade sulla stessa navigazione, l'errore dice che la pagina si
+        sta ricaricando invece di restituire un contenuto vecchio o vuoto.
+        """
+
+        page = self._require_page()
+
+        def attempt() -> Any:
+            self._wait_until_settled(page)
+            return action(page)
+
+        try:
+            return _call_with_navigation_retry(attempt)
+        except AgentMemoryError:
+            raise
+        except Exception as exc:
+            if _is_transient_navigation_error(exc):
+                raise BrowserBusyError(
+                    f"{message}: la pagina si sta ricaricando, riprova tra poco."
+                ) from exc
+            raise BrowserError(f"{message}: {exc}") from exc
+
     def open(self, url: str) -> None:
         page = self._require_page()
         try:
-            page.goto(
-                url,
-                wait_until="domcontentloaded",
-                timeout=self._timeout_ms,
+            _call_with_navigation_retry(
+                lambda: page.goto(
+                    url,
+                    wait_until="domcontentloaded",
+                    timeout=self._timeout_ms,
+                )
             )
         except Exception as exc:
+            if _is_transient_navigation_error(exc):
+                # La pagina precedente si è ricaricata mentre partiva la nuova
+                # navigazione: non è un URL sbagliato, è un momento sbagliato.
+                raise BrowserBusyError(
+                    "Navigazione non riuscita: la pagina stava cambiando, "
+                    "riprova tra poco."
+                ) from exc
             raise BrowserError(f"Navigazione non riuscita: {exc}") from exc
         self.url = page.url
         self._elements = []
         self._elements_url = ""
 
     def title(self) -> str:
-        page = self._require_page()
-        try:
-            return str(page.title())
-        except Exception as exc:
-            raise BrowserError(f"Titolo non leggibile: {exc}") from exc
+        return str(
+            self._with_page(
+                lambda page: page.evaluate(_READ_TITLE_JS),
+                message="Titolo non leggibile",
+            )
+        )
 
     def text(self) -> str:
-        page = self._require_page()
-        try:
-            return str(page.inner_text("body"))
-        except Exception:  # noqa: BLE001 - pagina senza body leggibile
-            return ""
+        return str(
+            self._with_page(
+                lambda page: page.evaluate(_READ_TEXT_JS),
+                message="Testo non leggibile",
+            )
+        )
 
     def click(self, selector: str) -> None:
-        page = self._require_page()
-        try:
-            page.click(selector, timeout=self._timeout_ms)
-        except Exception as exc:
-            raise BrowserError(f"Click non riuscito: {exc}") from exc
-        self.url = page.url
+        self._with_page(
+            lambda page: page.click(selector, timeout=self._timeout_ms),
+            message="Click non riuscito",
+        )
+        self.url = self._require_page().url
 
     def fill(self, selector: str, value: str) -> None:
-        page = self._require_page()
-        try:
-            page.fill(selector, value, timeout=self._timeout_ms)
-        except Exception as exc:
-            raise BrowserError(f"Compilazione non riuscita: {exc}") from exc
-        self.url = page.url
+        self._with_page(
+            lambda page: page.fill(selector, value, timeout=self._timeout_ms),
+            message="Compilazione non riuscita",
+        )
+        self.url = self._require_page().url
 
     @property
     def elements_count(self) -> int:
@@ -694,36 +809,35 @@ class PlaywrightBackend:
         pagina sia ancora quella dell'elenco.
         """
 
-        page = self._require_page()
-        try:
+        def collect(page: Any) -> dict[str, Any]:
             handles = page.query_selector_all(_ELEMENTS_SELECTOR)
-        except Exception as exc:
-            raise BrowserError(f"Elementi non leggibili: {exc}") from exc
-        collected: list[dict[str, Any]] = []
-        kept: list[Any] = []
-        total = 0
-        for handle in handles:
-            info = _element_info(handle)
-            if info is None:
-                continue
-            total += 1
-            if len(collected) >= limit:
-                continue
-            kept.append(handle)
-            collected.append(
-                {
-                    "index": len(collected) + 1,
-                    "tag": str(info.get("tag") or ""),
-                    "role": str(info.get("role") or ""),
-                    "type": str(info.get("type") or ""),
-                    "label": str(info.get("label") or ""),
-                    "value": str(info.get("value") or ""),
-                    "multiline": bool(info.get("multiline")),
-                }
-            )
-        self._elements = kept
-        self._elements_url = page.url
-        return {"elements": collected, "total": total}
+            collected: list[dict[str, Any]] = []
+            kept: list[Any] = []
+            total = 0
+            for handle in handles:
+                info = _element_info(handle)
+                if info is None:
+                    continue
+                total += 1
+                if len(collected) >= limit:
+                    continue
+                kept.append(handle)
+                collected.append(
+                    {
+                        "index": len(collected) + 1,
+                        "tag": str(info.get("tag") or ""),
+                        "role": str(info.get("role") or ""),
+                        "type": str(info.get("type") or ""),
+                        "label": str(info.get("label") or ""),
+                        "value": str(info.get("value") or ""),
+                        "multiline": bool(info.get("multiline")),
+                    }
+                )
+            self._elements = kept
+            self._elements_url = page.url
+            return {"elements": collected, "total": total}
+
+        return self._with_page(collect, message="Elementi non leggibili")
 
     def _element(self, index: int) -> Any:
         page = self._require_page()
@@ -763,19 +877,16 @@ class PlaywrightBackend:
         selector: str | None = None,
         index: int | None = None,
     ) -> None:
-        page = self._require_page()
-        try:
+        def act(page: Any) -> None:
             if index is not None:
                 self._element(index).press(key, timeout=self._timeout_ms)
             elif selector is not None:
                 page.press(selector, key, timeout=self._timeout_ms)
             else:
                 page.keyboard.press(key)
-        except AgentMemoryError:
-            raise
-        except Exception as exc:
-            raise BrowserError(f"Tasto non premuto: {exc}") from exc
-        self.url = page.url
+
+        self._with_page(act, message="Tasto non premuto")
+        self.url = self._require_page().url
 
     def wait(
         self,
@@ -784,31 +895,30 @@ class PlaywrightBackend:
         text: str | None = None,
         timeout_ms: int | None = None,
     ) -> None:
-        page = self._require_page()
         timeout = self._timeout_ms if timeout_ms is None else timeout_ms
-        try:
+
+        def attend(page: Any) -> None:
             if selector is not None:
                 page.wait_for_selector(selector, state="visible", timeout=timeout)
             if text is not None:
                 page.wait_for_function(
                     _TEXT_PRESENT_JS, arg=text.lower(), timeout=timeout
                 )
-        except Exception as exc:
-            raise BrowserError(f"Attesa non soddisfatta: {exc}") from exc
-        self.url = page.url
+
+        self._with_page(attend, message="Attesa non soddisfatta")
+        self.url = self._require_page().url
 
     def links(self) -> list[dict[str, str]]:
-        page = self._require_page()
-        try:
-            raw = page.eval_on_selector_all(
+        raw = self._with_page(
+            lambda page: page.eval_on_selector_all(
                 "a[href]",
                 """els => els.map(el => ({
                     text: (el.innerText || el.getAttribute('aria-label') || '').trim(),
                     url: el.href,
                 }))""",
-            )
-        except Exception as exc:
-            raise BrowserError(f"Link non leggibili: {exc}") from exc
+            ),
+            message="Link non leggibili",
+        )
         return [
             {
                 "text": str(item.get("text") or ""),

@@ -898,7 +898,9 @@ Il modulo `agent_memory/browser.py` implementa il livello descritto sopra:
 
 - controlla l'URL finale dopo redirect e click, e chiude le finestre aperte da script;
 
-- carica Playwright solo alla prima apertura, quindi il server MCP parte anche senza il pacchetto opzionale.
+- carica Playwright solo alla prima apertura, quindi il server MCP parte anche senza il pacchetto opzionale;
+
+- quando una pagina si ricarica mentre la si sta leggendo, aspetta la fine della navigazione per un massimo di 3 secondi, ripete una volta l'operazione e poi risponde con un errore esplicito («la pagina si sta ricaricando») invece di restituire un contenuto vuoto o vecchio. Le letture usano `evaluate` con un limite breve, non il timeout delle azioni, così un ricaricamento continuo non blocca il server per 30 secondi.
 
 Esempio di configurazione:
 

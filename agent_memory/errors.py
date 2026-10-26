@@ -47,6 +47,10 @@ class BrowserError(AgentMemoryError):
     """Errore del browser controllato."""
 
 
+class BrowserBusyError(BrowserError):
+    """La pagina sta cambiando documento: la lettura va ripetuta."""
+
+
 class BrowserBlockedError(BrowserError):
     """URL o azione non consentiti dalla whitelist."""
 
