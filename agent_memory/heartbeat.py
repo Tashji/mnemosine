@@ -56,8 +56,10 @@ MAX_ELAPSED_MINUTES = 24 * 60.0
 FULL_NIGHT_MINUTES = 360.0
 MAX_MESSAGES_PER_CALL = 100
 MAX_INTERACTION_SUMMARY_CHARS = 500
+MAX_INTERACTION_META_CHARS = 80
 MAX_INTERACTION_HISTORY = 100
 DEFAULT_INTERACTION_SUMMARY = "Interazione registrata."
+DEFAULT_INTERACTION_CHANNEL = "chat"
 
 # Quanto pesa un messaggio sul carico cognitivo, secondo la complessità.
 COMPLEXITY_LOAD: dict[str, float] = {
@@ -226,8 +228,32 @@ class HeartbeatEngine:
             raise ValidationError("summary: contiene caratteri non ammessi.")
         return cleaned or DEFAULT_INTERACTION_SUMMARY
 
+    @staticmethod
+    def _clean_optional_token(
+        value: Any, label: str, *, default: str | None = None
+    ) -> str | None:
+        if value is None:
+            return default
+        if not isinstance(value, str):
+            raise ValidationError(f"{label}: attesa una stringa.")
+        cleaned = value.strip()
+        if len(cleaned) > MAX_INTERACTION_META_CHARS:
+            raise ValidationError(
+                f"{label}: massimo {MAX_INTERACTION_META_CHARS} caratteri."
+            )
+        if "\x00" in cleaned or "\n" in cleaned or "\r" in cleaned:
+            raise ValidationError(f"{label}: contiene caratteri non ammessi.")
+        return cleaned or default
+
     def _record_social_interaction(
-        self, user_id: str, stamp: str, summary: str
+        self,
+        user_id: str,
+        stamp: str,
+        summary: str,
+        *,
+        channel: str = DEFAULT_INTERACTION_CHANNEL,
+        sentiment: str | None = None,
+        memory_id: str | None = None,
     ) -> dict[str, Any]:
         """Aggiorna il contatto e fa ripartire la finestra di silenzio."""
 
@@ -262,10 +288,10 @@ class HeartbeatEngine:
         person["interaction_history"] = [
             {
                 "timestamp": stamp,
-                "channel": "chat",
+                "channel": channel,
                 "summary": summary,
-                "memory_id": None,
-                "sentiment": None,
+                "memory_id": memory_id,
+                "sentiment": sentiment,
             },
             *history,
         ][:MAX_INTERACTION_HISTORY]
@@ -276,6 +302,9 @@ class HeartbeatEngine:
             "display_name": person.get("display_name"),
             "last_interaction_at": stamp,
             "interaction_count": person["interaction_count"],
+            "channel": channel,
+            "sentiment": sentiment,
+            "memory_id": memory_id,
         }
 
     def record_interaction(
@@ -285,6 +314,9 @@ class HeartbeatEngine:
         *,
         user_id: str | None = None,
         summary: str = "",
+        channel: str = DEFAULT_INTERACTION_CHANNEL,
+        sentiment: str | None = None,
+        memory_id: str | None = None,
     ) -> dict[str, Any]:
         """Aumenta il carico e, se c'è un contatto, aggiorna la relazione.
 
@@ -300,10 +332,19 @@ class HeartbeatEngine:
             if not isinstance(user_id, str) or not user_id.strip():
                 raise ValidationError("user_id: attesa una stringa non vuota.")
             user_id = user_id.strip()
+            clean_channel = self._clean_optional_token(
+                channel, "channel", default=DEFAULT_INTERACTION_CHANNEL
+            )
+            assert clean_channel is not None
+            clean_sentiment = self._clean_optional_token(sentiment, "sentiment")
+            clean_memory_id = self._clean_optional_token(memory_id, "memory_id")
             relationship = self._record_social_interaction(
                 user_id,
                 stamp,
                 self._clean_interaction_summary(summary),
+                channel=clean_channel,
+                sentiment=clean_sentiment,
+                memory_id=clean_memory_id,
             )
 
         state = self.config.update_current_state(
@@ -713,6 +754,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Nota facoltativa per lo storico dell'interazione.",
     )
     parser.add_argument(
+        "--channel",
+        default=DEFAULT_INTERACTION_CHANNEL,
+        metavar="CANALE",
+        help="Canale dell'interazione (default: chat).",
+    )
+    parser.add_argument(
+        "--sentiment",
+        default=None,
+        metavar="TONO",
+        help="Tono facoltativo dell'interazione (es. positivo, neutro).",
+    )
+    parser.add_argument(
+        "--memory-id",
+        default=None,
+        metavar="ID",
+        help="Ricordo episodico facoltativo collegato all'interazione.",
+    )
+    parser.add_argument(
         "--deliver",
         default=None,
         metavar="TESTO",
@@ -774,6 +833,9 @@ def main(argv: list[str] | None = None) -> int:
                 complexity=args.complexity,
                 user_id=args.user_id,
                 summary=args.summary,
+                channel=args.channel,
+                sentiment=args.sentiment,
+                memory_id=args.memory_id,
             )
             if args.json:
                 print(json.dumps(result, ensure_ascii=False, indent=2))

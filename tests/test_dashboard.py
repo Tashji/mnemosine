@@ -14,6 +14,7 @@ from pathlib import Path
 
 from agent_memory.dashboard import DashboardData, create_server
 from agent_memory.evolution import EvolutionService
+from agent_memory.files import FileSandbox
 from agent_memory.heartbeat import HeartbeatEngine
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -157,7 +158,49 @@ class DashboardDataTests(DashboardFixture):
             ["programmazione", "videogiochi", "serie TV"],
         )
         self.assertTrue(marco["confirmed_facts"])
+        self.assertTrue(marco["boundaries"])
         self.assertTrue(marco["notes"])
+
+    def test_overview_exposes_heartbeat_outbox_and_files(self) -> None:
+        data = DashboardData(self.root)
+        initial = data.overview()
+
+        self.assertIn("heartbeat", initial["state"])
+        self.assertEqual(initial["outbox"]["count"], 0)
+        self.assertEqual(initial["files"]["count"], 0)
+        self.assertFalse((self.root / "files").exists())
+
+        FileSandbox(self.root).write_file("appunti.txt", "promemoria")
+        outbox_dir = self.root / "data" / "outbox"
+        outbox_dir.mkdir(parents=True, exist_ok=True)
+        (outbox_dir / "messages.jsonl").write_text(
+            json.dumps(
+                {
+                    "message_id": "msg_test01",
+                    "delivered_at": "2026-10-26T11:00:00+01:00",
+                    "channel": "whatsapp",
+                    "trigger": "relazione",
+                    "target": {
+                        "user_id": "user_marco",
+                        "display_name": "Marco",
+                    },
+                    "text": "Ciao Marco, come procede?",
+                },
+                ensure_ascii=False,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        refreshed = data.overview()
+        self.assertEqual(refreshed["counts"]["files"], 1)
+        self.assertEqual(refreshed["files"]["entries"][0]["name"], "appunti.txt")
+        self.assertEqual(refreshed["counts"]["outbox_messages"], 1)
+        self.assertEqual(refreshed["outbox"]["recent"][0]["target_name"], "Marco")
+        self.assertEqual(
+            refreshed["outbox"]["recent"][0]["text"],
+            "Ciao Marco, come procede?",
+        )
 
     def test_recorded_interaction_refreshes_relations_history(self) -> None:
         data = DashboardData(self.root)

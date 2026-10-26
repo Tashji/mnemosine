@@ -108,6 +108,9 @@ def create_server(
         complexity: str = "normale",
         user_id: str | None = None,
         summary: str = "",
+        channel: str = "chat",
+        sentiment: str | None = None,
+        memory_id: str | None = None,
     ) -> dict[str, Any]:
         """Registra i messaggi appena scambiati e aggiorna il carico cognitivo.
 
@@ -115,8 +118,8 @@ def create_server(
         risultante decide lo stile di risposta in ``availability``: oltre la
         soglia morbida diventa più asciutto, oltre quella dura ancora di più.
         Se indichi ``user_id``, l'interazione aggiorna anche ``last_interaction_at``,
-        ``interaction_count`` e lo storico nel grafo relazionale. ``summary`` è
-        una nota facoltativa per quella voce; un id sconosciuto viene rifiutato.
+        ``interaction_count`` e lo storico nel grafo relazionale con ``summary``,
+        ``channel``, ``sentiment`` e ``memory_id``; un id sconosciuto viene rifiutato.
         """
 
         try:
@@ -125,6 +128,9 @@ def create_server(
                 complexity=complexity,
                 user_id=user_id,
                 summary=summary,
+                channel=channel,
+                sentiment=sentiment,
+                memory_id=memory_id,
             )
         except AgentMemoryError as exc:
             raise ToolError(str(exc)) from exc

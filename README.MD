@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-369%20passing-2ea043?logo=githubactions&logoColor=white" alt="369 test superati"></a>
+  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-370%20passing-2ea043?logo=githubactions&logoColor=white" alt="370 test superati"></a>
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12">
   <img src="https://img.shields.io/badge/MCP-Model%20Context%20Protocol-6ee7d8" alt="Model Context Protocol">
   <img src="https://img.shields.io/badge/storage-SQLite%20%2B%20FAISS-0b1422" alt="SQLite e FAISS">
@@ -1476,9 +1476,11 @@ Impostazioni dalla dashboard:
 
 - Ogni scrittura passa dalla sessione autenticata e da un token CSRF monouso; i valori vengono riletti con le classi del runtime prima di sostituire il file. Un archivio non cancella i dati: resta nella cartella di backup e può essere ripristinato a mano.
 
-La dashboard espone sei viste:
+La dashboard espone sette viste:
 
-- **Panoramica**: identità, stato corrente, conteggi e ultimi ricordi.
+- **Panoramica**: identità, stato corrente, conteggi, ultimi ricordi, riepilogo cliccabile delle relazioni, stato del ciclo autonomo con l'outbox e contenuto della sandbox `files/`.
+
+- **Relazioni**: elenco dei contatti ordinato per ultima interazione e scheda completa con fiducia, intimità, preferenze, fatti confermati, confini relazionali e storico delle interazioni (con apertura diretta dei ricordi collegati).
 
 - **Timeline**: ricerca e filtri per fonte e livello di accesso; i ricordi latenti e repressi sono visibili solo attivando esplicitamente l'opzione dedicata. Il dettaglio mostra revisioni, collegamenti episodici e conoscenze collegate.
 
@@ -1565,7 +1567,7 @@ Il trasporto verso WhatsApp Web resta fuori da questo modulo: qui si produce una
 
 I messaggi aumentano il carico: `record_interaction` via MCP, oppure `mnemosine-heartbeat --interaction`, aggiunge 2 punti per un messaggio leggero, 4 normale e 7 complesso. Oltre la soglia morbida `availability.response_style` diventa `ridotta`, oltre quella dura `breve`.
 
-Quando l'interazione riguarda un contatto del grafo, passa anche `user_id`: il comando aggiorna `last_interaction_at`, `interaction_count` e `interaction_history` in `social_graph.json`, così il trigger di silenzio riparte da quell'istante. Un id assente dal grafo viene rifiutato senza scrivere né il carico né il contatto. Lo stesso parametro è disponibile nel tool MCP `record_interaction`.
+Quando l'interazione riguarda un contatto del grafo, passa anche `user_id` (e facoltativamente `summary`, `channel`, `sentiment`, `memory_id`): il comando aggiorna `last_interaction_at`, `interaction_count` e `interaction_history` in `social_graph.json`, così il trigger di silenzio riparte da quell'istante. Un id assente dal grafo viene rifiutato senza scrivere né il carico né il contatto. Gli stessi parametri sono disponibili nel tool MCP `record_interaction`.
 
 ```bash
 # Anteprima di un battito a un'ora precisa
@@ -1581,7 +1583,7 @@ python -m agent_memory.heartbeat --loop --interval 30
 python -m agent_memory.heartbeat --interaction 2 --complexity complessa
 
 # Interazione con un contatto del grafo relazionale
-python -m agent_memory.heartbeat --interaction 1 --user-id user_marco --summary "Ciao Marco"
+python -m agent_memory.heartbeat --interaction 1 --user-id user_marco --summary "Ciao Marco" --channel whatsapp --sentiment positivo --memory-id mem_0004
 
 # Consegna il messaggio all'impulso in attesa (whitelist e flag permettendo)
 python -m agent_memory.heartbeat --deliver "Ciao Marco, come stai?"

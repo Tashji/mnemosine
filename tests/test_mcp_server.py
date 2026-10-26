@@ -112,16 +112,29 @@ class McpServerTests(unittest.TestCase):
         result = call_tool(
             self.mcp,
             "record_interaction",
-            {"user_id": "user_marco", "summary": "Messaggio di prova"},
+            {
+                "user_id": "user_marco",
+                "summary": "Messaggio di prova",
+                "channel": "whatsapp",
+                "sentiment": "positivo",
+                "memory_id": "mem_0004",
+            },
         )
 
         self.assertEqual(result["relationship"]["user_id"], "user_marco")
+        self.assertEqual(result["relationship"]["channel"], "whatsapp")
+        self.assertEqual(result["relationship"]["sentiment"], "positivo")
+        self.assertEqual(result["relationship"]["memory_id"], "mem_0004")
         graph = call_tool(self.mcp, "get_social_graph", {})
         marco = next(
             person for person in graph["people"] if person["user_id"] == "user_marco"
         )
         self.assertEqual(marco["interaction_count"], 19)
-        self.assertEqual(marco["interaction_history"][0]["summary"], "Messaggio di prova")
+        latest = marco["interaction_history"][0]
+        self.assertEqual(latest["summary"], "Messaggio di prova")
+        self.assertEqual(latest["channel"], "whatsapp")
+        self.assertEqual(latest["sentiment"], "positivo")
+        self.assertEqual(latest["memory_id"], "mem_0004")
         self.assertEqual(
             marco["last_interaction_at"],
             result["relationship"]["last_interaction_at"],

@@ -300,6 +300,14 @@ function renderOverview(data) {
   const activity = current.activity || {};
   const emotion = current.emotion || {};
   const routine = current.routine || {};
+  const heartbeat = current.heartbeat || {};
+  const pendingImpulse =
+    heartbeat.pending_impulse && typeof heartbeat.pending_impulse === "object"
+      ? heartbeat.pending_impulse
+      : null;
+  const heartbeatSummary = pendingImpulse
+    ? `Impulso in attesa (${text(pendingImpulse.trigger)})`
+    : text(heartbeat.last_decision, "inattivo");
   const place = identity.residence || {};
   const birth = identity.birth_place || {};
 
@@ -350,7 +358,8 @@ function renderOverview(data) {
         )
       ),
       h("div", { class: "state-line" }, h("dt", { text: "Routine" }), h("dd", { text: text(routine.day_label || routine.mode) })),
-      h("div", { class: "state-line" }, h("dt", { text: "Luogo" }), h("dd", { text: text(activity.location) }))
+      h("div", { class: "state-line" }, h("dt", { text: "Luogo" }), h("dd", { text: text(activity.location) })),
+      h("div", { class: "state-line" }, h("dt", { text: "Battito" }), h("dd", { text: heartbeatSummary }))
     )
   );
 
@@ -496,12 +505,128 @@ function renderOverview(data) {
         )
   );
 
+  const outbox = data.outbox || {};
+  const outboxRecent = Array.isArray(outbox.recent) ? outbox.recent : [];
+  const impulsesToday = (heartbeat.impulses_today || {}).count ?? 0;
+  const maxImpulses = heartbeat.max_impulses_per_day ?? "—";
+  const pendingTarget = pendingImpulse && pendingImpulse.target ? pendingImpulse.target : {};
+  const outboxPanel = h(
+    "section",
+    { class: "panel" },
+    h(
+      "div",
+      { class: "panel-header" },
+      h("h3", { text: "Ciclo autonomo e outbox" }),
+      h("span", { class: "count-chip", text: `${outbox.count || 0} consegne` })
+    ),
+    h(
+      "div",
+      { class: "panel-body" },
+      h(
+        "div",
+        { class: "autonomy-summary" },
+        h(
+          "div",
+          { class: "autonomy-stat" },
+          h("span", { text: "Ultimo battito" }),
+          h("strong", { text: fmtDate(heartbeat.last_run_at, { time: true }) })
+        ),
+        h(
+          "div",
+          { class: "autonomy-stat" },
+          h("span", { text: "Prossimo battito" }),
+          h("strong", { text: fmtDate(heartbeat.next_run_at, { time: true }) })
+        ),
+        h(
+          "div",
+          { class: "autonomy-stat" },
+          h("span", { text: "Impulsi oggi" }),
+          h("strong", { text: `${impulsesToday} / ${maxImpulses}` })
+        )
+      ),
+      pendingImpulse
+        ? h(
+            "div",
+            { class: "pending-impulse-box" },
+            h(
+              "strong",
+              {
+                text: `Impulso in attesa · ${text(pendingImpulse.trigger)}${
+                  pendingTarget.display_name || pendingTarget.user_id
+                    ? ` → ${pendingTarget.display_name || pendingTarget.user_id}`
+                    : ""
+                }`,
+              }
+            ),
+            h("span", { text: text(pendingImpulse.reason, "") })
+          )
+        : null,
+      outboxRecent.length
+        ? outboxRecent.map((msg) =>
+            h(
+              "div",
+              { class: "recent-item" },
+              h("div", { class: "recent-date", text: fmtDate(msg.delivered_at, { time: true }) }),
+              h(
+                "div",
+                {},
+                h("div", {
+                  class: "recent-title",
+                  text: `${text(msg.target_name, "Destinatario")} · ${text(msg.channel, "whatsapp")}`,
+                }),
+                h("div", { class: "recent-desc", text: text(msg.text, "") })
+              )
+            )
+          )
+        : emptyState("Outbox vuota", "Nessun messaggio spontaneo consegnato.")
+    )
+  );
+
+  const files = data.files || {};
+  const fileEntries = Array.isArray(files.entries) ? files.entries : [];
+  const filesPanel = h(
+    "section",
+    { class: "panel" },
+    h(
+      "div",
+      { class: "panel-header" },
+      h("h3", { text: "Sandbox file (files/)" }),
+      h("span", { class: "count-chip", text: `${files.count || 0}` })
+    ),
+    h(
+      "div",
+      { class: "panel-body" },
+      fileEntries.length
+        ? fileEntries.map((entry) =>
+            h(
+              "div",
+              { class: "recent-item" },
+              h("div", { class: "recent-date", text: fmtDate(entry.modified_at) }),
+              h(
+                "div",
+                {},
+                h("div", { class: "recent-title mono", text: text(entry.path || entry.name) }),
+                h("div", {
+                  class: "recent-desc",
+                  text:
+                    entry.type === "directory"
+                      ? "Cartella"
+                      : `${entry.size ?? 0} byte · ${text(entry.type, "file")}`,
+                })
+              )
+            )
+          )
+        : emptyState("Sandbox vuota", "Nessun file presente in files/.")
+    )
+  );
+
   clear(
     $("#overview-content"),
     h("div", { class: "hero-grid" }, identityCard, stateCard),
     metrics,
     h("div", { class: "overview-columns" }, recentPanel, historyPanel),
-    contactsPanel
+    contactsPanel,
+    h("div", { class: "overview-columns overview-autonomy-columns" }, outboxPanel, filesPanel)
   );
 
   $("#footer-generated").textContent = `Aggiornata ${fmtDate(data.generated_at, { time: true })}`;
@@ -570,9 +695,21 @@ function interactionCount(value) {
 }
 
 function relationEvent(entry) {
-  const meta = [];
-  if (entry.sentiment) meta.push(`Tono ${text(entry.sentiment)}`);
-  if (entry.memory_id) meta.push(`Ricordo ${entry.memory_id}`);
+  const metaNodes = [];
+  if (entry.sentiment) {
+    metaNodes.push(h("span", { text: `Tono ${text(entry.sentiment)}` }));
+  }
+  if (entry.memory_id) {
+    metaNodes.push(
+      h("button", {
+        class: "relation-memory-link",
+        type: "button",
+        title: `Apri il dettaglio del ricordo ${entry.memory_id}`,
+        onClick: () => openMemory(entry.memory_id),
+        text: `Ricordo ${entry.memory_id} →`,
+      })
+    );
+  }
   return h(
     "li",
     { class: "relation-event" },
@@ -589,12 +726,8 @@ function relationEvent(entry) {
         class: "relation-event-summary",
         text: text(entry.summary, "Nessun riassunto registrato."),
       }),
-      meta.length
-        ? h(
-            "div",
-            { class: "relation-event-meta" },
-            meta.map((item) => h("span", { text: item }))
-          )
+      metaNodes.length
+        ? h("div", { class: "relation-event-meta" }, metaNodes)
         : null
     )
   );
@@ -603,7 +736,8 @@ function relationEvent(entry) {
 function relationAbout(contact) {
   const preferences = Array.isArray(contact.preferences) ? contact.preferences : [];
   const facts = Array.isArray(contact.confirmed_facts) ? contact.confirmed_facts : [];
-  if (!preferences.length && !facts.length && !contact.notes) return null;
+  const boundaries = Array.isArray(contact.boundaries) ? contact.boundaries : [];
+  if (!preferences.length && !facts.length && !boundaries.length && !contact.notes) return null;
   return h(
     "div",
     { class: "relation-about" },
@@ -628,6 +762,18 @@ function relationAbout(contact) {
             "ul",
             { class: "relation-facts" },
             facts.map((item) => h("li", { text: item }))
+          )
+        )
+      : null,
+    boundaries.length
+      ? h(
+          "div",
+          { class: "relation-about-block relation-about-wide" },
+          h("span", { class: "relation-about-label", text: "Confini relazionali" }),
+          h(
+            "ul",
+            { class: "relation-facts" },
+            boundaries.map((item) => h("li", { text: item }))
           )
         )
       : null,

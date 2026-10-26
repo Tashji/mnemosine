@@ -426,6 +426,12 @@ class HeartbeatCommandTests(HeartbeatTestCase):
             "user_marco",
             "--summary",
             "Ciao Marco",
+            "--channel",
+            "whatsapp",
+            "--sentiment",
+            "positivo",
+            "--memory-id",
+            "mem_0004",
         )
 
         self.assertEqual(code, 0)
@@ -433,7 +439,11 @@ class HeartbeatCommandTests(HeartbeatTestCase):
         graph = self.read_json("social_graph")
         marco = next(person for person in graph["people"] if person["user_id"] == "user_marco")
         self.assertEqual(marco["interaction_count"], 19)
-        self.assertEqual(marco["interaction_history"][0]["summary"], "Ciao Marco")
+        latest = marco["interaction_history"][0]
+        self.assertEqual(latest["summary"], "Ciao Marco")
+        self.assertEqual(latest["channel"], "whatsapp")
+        self.assertEqual(latest["sentiment"], "positivo")
+        self.assertEqual(latest["memory_id"], "mem_0004")
 
     def test_loop_stops_after_the_requested_ticks(self) -> None:
         self.set_people([])

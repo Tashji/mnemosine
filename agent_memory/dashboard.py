@@ -45,6 +45,8 @@ from .dashboard_tls import DashboardTLS, ensure_dashboard_tls
 from .db import decode_memory
 from .errors import AgentMemoryError, ConfigError, NotFoundError, ValidationError
 from .evolution import EvolutionService
+from .executor import delivered_messages
+from .files import SANDBOX_DIRNAME, FileSandbox
 from .profile import (
     PROFILE_STATE_INCOMPLETE,
     PROFILE_STATE_MISSING,
@@ -702,6 +704,9 @@ class DashboardData:
                         "confirmed_facts": self._text_list(
                             person.get("confirmed_facts")
                         ),
+                        "boundaries": self._text_list(
+                            person.get("boundaries")
+                        ),
                         "notes": person.get("notes"),
                         "interactions": history,
                     }
@@ -712,6 +717,51 @@ class DashboardData:
             reverse=True,
         )
         return contacts
+
+    def _outbox_summary(self, *, limit: int = 5) -> dict[str, Any]:
+        try:
+            messages = delivered_messages(self.root)
+        except AgentMemoryError:
+            messages = []
+        recent: list[dict[str, Any]] = []
+        for item in reversed(messages):
+            if not isinstance(item, dict):
+                continue
+            target = item.get("target")
+            target = target if isinstance(target, dict) else {}
+            recent.append(
+                {
+                    "message_id": item.get("message_id"),
+                    "delivered_at": item.get("delivered_at"),
+                    "channel": item.get("channel"),
+                    "trigger": item.get("trigger"),
+                    "target_user_id": target.get("user_id"),
+                    "target_name": target.get("display_name")
+                    or target.get("user_id"),
+                    "text": item.get("text"),
+                }
+            )
+            if len(recent) >= limit:
+                break
+        return {
+            "count": len(messages),
+            "recent": recent,
+        }
+
+    def _files_summary(self, *, limit: int = 10) -> dict[str, Any]:
+        sandbox_dir = self.root / SANDBOX_DIRNAME
+        if not sandbox_dir.exists() or sandbox_dir.is_symlink() or not sandbox_dir.is_dir():
+            return {"count": 0, "truncated": False, "entries": []}
+        try:
+            listing = FileSandbox(self.root).list_files(limit=limit)
+            total = sum(1 for _ in sandbox_dir.iterdir())
+        except (AgentMemoryError, OSError):
+            return {"count": 0, "truncated": False, "entries": []}
+        return {
+            "count": total,
+            "truncated": total > len(listing["entries"]),
+            "entries": listing["entries"],
+        }
 
     def relations(self) -> dict[str, Any]:
         contacts = self._contacts(include_details=True)
@@ -780,6 +830,8 @@ class DashboardData:
         }
         history = self.evolution_service.history().get("changes", [])
         recent_memories = self.timeline(limit=5)["memories"]
+        outbox = self._outbox_summary()
+        files = self._files_summary()
 
         return {
             "generated_at": datetime.now().astimezone().isoformat(
@@ -807,6 +859,8 @@ class DashboardData:
                     "mental_load_thresholds", {}
                 ),
                 "routine": state.get("routine", {}),
+                "availability": state.get("availability", {}),
+                "heartbeat": state.get("heartbeat", {}),
             },
             "counts": {
                 "memories": int(timeline_total),
@@ -820,10 +874,14 @@ class DashboardData:
                 "identity_traits": len(personality.get("traits", {})),
                 "cascades": len(memory_cascades | semantic_cascades),
                 "history_changes": len(history),
+                "outbox_messages": outbox["count"],
+                "files": files["count"],
             },
             "last_memory_update": last_updated,
             "recent_memories": recent_memories,
             "contacts": self._contacts(),
+            "outbox": outbox,
+            "files": files,
             "recent_history": sorted(
                 history,
                 key=lambda change: str(change.get("changed_at", "")),
