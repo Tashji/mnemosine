@@ -462,12 +462,20 @@ class ConfigStore:
             self._atomic_write(self.path_for("identity"), identity)
             return copy.deepcopy(identity)
 
-    def update_current_state(self, patch: dict[str, Any]) -> dict[str, Any]:
+    def update_current_state(
+        self,
+        patch: dict[str, Any],
+        *,
+        allow_whatsapp_sending: bool = False,
+    ) -> dict[str, Any]:
         """Applica un patch ricorsivo a ``current_state.json``.
 
         I campi di sicurezza non possono essere alterati dal server: in
         particolare la lettura diretta dell'ombra e l'invio WhatsApp restano
         disabilitati finché non li abilita l'amministratore del profilo.
+        ``allow_whatsapp_sending`` è riservato alla dashboard autenticata, che
+        ha già chiesto una conferma esplicita all'amministratore; nessun tool
+        MCP lo passa. La lettura diretta dell'ombra resta bloccata in ogni caso.
         """
 
         if not isinstance(patch, dict) or not patch:
@@ -488,9 +496,12 @@ class ConfigStore:
                 raise ValidationError(
                     "shadow_direct_read_enabled non può essere abilitato dal server."
                 )
-            if isinstance(flags_patch, dict) and flags_patch.get(
-                "whatsapp_sending_enabled"
-            ) not in (None, False):
+            if (
+                isinstance(flags_patch, dict)
+                and flags_patch.get("whatsapp_sending_enabled")
+                not in (None, False)
+                and not allow_whatsapp_sending
+            ):
                 raise ValidationError(
                     "whatsapp_sending_enabled non può essere abilitato dal server: "
                     "l'invio va autorizzato dall'amministratore nel profilo."

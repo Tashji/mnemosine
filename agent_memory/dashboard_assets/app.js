@@ -21,6 +21,10 @@ const VIEW_META = {
     title: "Evoluzioni",
     subtitle: "Seed, variazioni dei tratti e riconsolidamenti.",
   },
+  settings: {
+    title: "Impostazioni",
+    subtitle: "Integrazioni, comportamento e ciclo di vita del profilo.",
+  },
 };
 
 const SOURCE_LABELS = {
@@ -63,6 +67,12 @@ const RELATION_LABELS = {
   explains: "Spiega",
   illustrates: "Illustra",
   derived_from: "Derivata da",
+};
+
+const PROFILE_STATUS_LABELS = {
+  ready: "Pronto",
+  missing: "Assente",
+  incomplete: "Incompleto",
 };
 
 const DEFENSE_LABELS = {
@@ -198,15 +208,17 @@ function setLoading(container, message) {
   clear(container, loadingBlock(message));
 }
 
-function setNotice(message) {
+function setNotice(message, kind = "error") {
   const notice = $("#notice");
   if (!message) {
     notice.hidden = true;
     notice.textContent = "";
+    notice.classList.remove("is-success");
     return;
   }
   notice.hidden = false;
   notice.textContent = message;
+  notice.classList.toggle("is-success", kind === "success");
 }
 
 async function api(path) {
@@ -221,6 +233,38 @@ async function api(path) {
     body = null;
   }
   if (response.status === 401 && path !== "/api/session") {
+    const next = window.location.pathname + window.location.search;
+    window.location.assign(`/login?next=${encodeURIComponent(next)}`);
+    throw new Error("Sessione scaduta.");
+  }
+  if (!response.ok) {
+    throw new Error((body && body.error) || `Errore HTTP ${response.status}`);
+  }
+  return body;
+}
+
+
+async function postJson(path, payload) {
+  const session = await api("/api/session");
+  if (!session.csrf) {
+    throw new Error("Sessione non valida: ricarica la pagina.");
+  }
+  const response = await fetch(path, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    cache: "no-store",
+    body: JSON.stringify({ ...payload, csrf: session.csrf }),
+  });
+  let body = null;
+  try {
+    body = await response.json();
+  } catch (_error) {
+    body = null;
+  }
+  if (response.status === 401) {
     const next = window.location.pathname + window.location.search;
     window.location.assign(`/login?next=${encodeURIComponent(next)}`);
     throw new Error("Sessione scaduta.");
@@ -1047,6 +1091,532 @@ async function loadEvolution(force = false) {
   }
 }
 
+/* -- impostazioni -------------------------------------------------------- */
+
+function settingsCard(title, description, content) {
+  return h(
+    "article",
+    { class: "settings-card" },
+    h(
+      "div",
+      { class: "settings-card-head" },
+      h("h3", { text: title }),
+      h("p", { text: description })
+    ),
+    content
+  );
+}
+
+function settingsCheck(name, labelText, checked, hint, disabled = false) {
+  return h(
+    "label",
+    { class: `settings-check${disabled ? " is-locked" : ""}` },
+    h("input", { type: "checkbox", name, checked, disabled }),
+    h(
+      "span",
+      { class: "settings-check-text" },
+      h("strong", { text: labelText }),
+      hint ? h("small", { text: hint }) : null
+    )
+  );
+}
+
+function settingsField(labelText, control, hint) {
+  return h(
+    "label",
+    { class: "settings-field" },
+    h("span", { text: labelText }),
+    control,
+    hint ? h("small", { class: "settings-hint", text: hint }) : null
+  );
+}
+
+function settingsForm(buttonText, content, handler, { danger = false } = {}) {
+  const button = h("button", {
+    class: `button${danger ? " button-danger" : ""}`,
+    type: "submit",
+    text: buttonText,
+  });
+  const form = h(
+    "form",
+    { class: "settings-form" },
+    content,
+    h("div", { class: "settings-actions" }, button)
+  );
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const original = button.textContent;
+    button.disabled = true;
+    button.textContent = "Salvataggio…";
+    try {
+      await handler(new FormData(form), form);
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      button.disabled = false;
+      button.textContent = original;
+    }
+  });
+  return form;
+}
+
+async function saveSettings(path, payload, message) {
+  const data = await postJson(path, payload);
+  state.loaded.settings = data;
+  renderSettings(data);
+  setNotice(message, "success");
+}
+
+function settingsInput(name, value, type = "text", attrs = {}) {
+  return h("input", {
+    type,
+    name,
+    value: value === null || value === undefined ? "" : value,
+    ...attrs,
+  });
+}
+
+function browserSettings(browser) {
+  const origins = (browser.allowed_origins || []).join("\n");
+  const form = settingsForm(
+    "Salva browser",
+    [
+      settingsCheck(
+        "enabled",
+        "Browser controllato attivo",
+        Boolean(browser.enabled),
+        "Senza questo flag la whitelist non apre nulla."
+      ),
+      settingsCheck(
+        "interaction_enabled",
+        "Consenti click, compilazione e tasti",
+        Boolean(browser.interaction_enabled),
+        "Abilita le azioni sulla pagina; richiede il browser attivo."
+      ),
+      settingsCheck(
+        "service_workers",
+        "Permetti i service worker",
+        Boolean(browser.service_workers),
+        "Allarga il traffico oltre il filtro delle origini: attivalo solo per un sito già autorizzato e fidato."
+      ),
+      settingsField(
+        "User agent del profilo",
+        settingsInput("user_agent", browser.user_agent || "", "text", {
+          placeholder: "Vuoto = user agent predefinito di Playwright",
+          spellcheck: "false",
+        }),
+        "È condiviso tra la sessione headless e il login visibile: cambiarli separatamente invalida i cookie."
+      ),
+      settingsField(
+        "Timeout di navigazione (secondi)",
+        settingsInput("navigation_timeout_seconds", browser.navigation_timeout_seconds, "number", {
+          min: "1",
+          max: "120",
+          step: "1",
+        })
+      ),
+      settingsField(
+        "Whitelist delle origini",
+        h("textarea", {
+          name: "allowed_origins",
+          rows: "7",
+          spellcheck: "false",
+          placeholder: "example.org\nhttps://*.wikipedia.org",
+        }, origins),
+        "Una per riga. Solo HTTPS; senza percorso. Il wildcard copre soltanto i sottodomini, non il dominio nudo. Il server MCP legge la nuova whitelist al riavvio."
+      ),
+      h(
+        "div",
+        { class: "settings-status" },
+        h("span", { class: `status-pill${browser.session_saved ? " is-ok" : ""}` }),
+        browser.session_saved ? "Sessione browser salvata su disco." : "Nessuna sessione browser salvata."
+      ),
+    ],
+    async (formData) => {
+      const originsValue = String(formData.get("allowed_origins") || "");
+      const timeout = Number(formData.get("navigation_timeout_seconds"));
+      if (!Number.isFinite(timeout)) {
+        throw new Error("Il timeout deve essere un numero.");
+      }
+      await saveSettings(
+        "/api/settings/browser",
+        {
+          enabled: formData.has("enabled"),
+          interaction_enabled: formData.has("interaction_enabled"),
+          service_workers: formData.has("service_workers"),
+          user_agent: String(formData.get("user_agent") || "").trim() || null,
+          allowed_origins: originsValue
+            .split(/\r?\n/)
+            .map((origin) => origin.trim())
+            .filter(Boolean),
+          navigation_timeout_seconds: timeout,
+        },
+        "Browser aggiornato. Riavvia il server MCP per applicare la nuova whitelist."
+      );
+    }
+  );
+  return form;
+}
+
+function contactRow(contact = {}) {
+  const row = h(
+    "div",
+    { class: "settings-contact" },
+    h(
+      "label",
+      { class: "settings-field" },
+      h("span", { text: "ID relazione" }),
+      settingsInput("contact_user_id", contact.user_id || "", "text", { placeholder: "es. marco" })
+    ),
+    h(
+      "label",
+      { class: "settings-field" },
+      h("span", { text: "Nome" }),
+      settingsInput("contact_display_name", contact.display_name || "", "text", { placeholder: "Nome visibile" })
+    ),
+    h(
+      "label",
+      { class: "settings-field" },
+      h("span", { text: "Telefono" }),
+      settingsInput("contact_phone", contact.phone || "", "text", { placeholder: "+39…" })
+    ),
+    h("button", {
+      class: "icon-button settings-remove",
+      type: "button",
+      text: "×",
+      "aria-label": "Rimuovi contatto",
+      onClick: () => row.remove(),
+    })
+  );
+  return row;
+}
+
+function whatsappSettings(whatsapp, behavior) {
+  const contacts = h("div", { class: "settings-contacts" });
+  for (const contact of whatsapp.allowed_contacts || []) {
+    contacts.append(contactRow(contact));
+  }
+  const add = h("button", {
+    class: "button button-quiet",
+    type: "button",
+    text: "Aggiungi contatto",
+  });
+  add.addEventListener("click", () => {
+    const row = contactRow();
+    contacts.append(row);
+    row.querySelector("input").focus();
+  });
+  const quiet = whatsapp.quiet_hours || {};
+  const sending = Boolean(behavior.flags && behavior.flags.whatsapp_sending_enabled);
+  const form = settingsForm(
+    "Salva WhatsApp",
+    [
+      settingsCheck(
+        "enabled",
+        "Integrazione WhatsApp attiva",
+        Boolean(whatsapp.enabled),
+        "Abilita la whitelist dei contatti; l'invio resta comunque subordinato al flag di sicurezza."
+      ),
+      h(
+        "div",
+        { class: "settings-inline-fields" },
+        settingsField(
+          "Massimo al giorno",
+          settingsInput("max_per_day", whatsapp.max_per_day, "number", {
+            min: "0",
+            max: "24",
+            step: "1",
+          })
+        ),
+        settingsField(
+          "Silenzio dalle",
+          settingsInput("quiet_start", quiet.start || "00:00", "text", {
+            placeholder: "HH:MM",
+            pattern: "[0-2][0-9]:[0-5][0-9]",
+            inputmode: "numeric",
+            maxlength: "5",
+          })
+        ),
+        settingsField(
+          "Silenzio alle",
+          settingsInput("quiet_end", quiet.end || "07:00", "text", {
+            placeholder: "HH:MM",
+            pattern: "[0-2][0-9]:[0-5][0-9]",
+            inputmode: "numeric",
+            maxlength: "5",
+          })
+        )
+      ),
+      h(
+        "div",
+        { class: "settings-list-head" },
+        h("span", { text: "Contatti autorizzati" }),
+        add
+      ),
+      contacts,
+      h(
+        "p",
+        { class: "settings-hint" },
+        sending
+          ? "Il flag di invio è attivo: l'executor può scrivere nell'outbox, ma il trasporto verso WhatsApp Web non è implementato."
+          : "Il flag di invio è spento: i messaggi restano bloccati anche con l'integrazione attiva. Si abilita dalla sezione Comportamento, con conferma esplicita."
+      ),
+    ],
+    async (formData, form) => {
+      const rows = [...form.querySelectorAll(".settings-contact")];
+      const contactsPayload = rows
+        .map((item) => ({
+          user_id: item.querySelector("[name='contact_user_id']").value.trim(),
+          display_name: item.querySelector("[name='contact_display_name']").value.trim(),
+          phone: item.querySelector("[name='contact_phone']").value.trim(),
+        }))
+        .filter((item) => item.user_id);
+      const max = Number(formData.get("max_per_day"));
+      if (!Number.isInteger(max)) {
+        throw new Error("Il limite giornaliero deve essere un intero.");
+      }
+      await saveSettings(
+        "/api/settings/whatsapp",
+        {
+          enabled: formData.has("enabled"),
+          allowed_contacts: contactsPayload,
+          quiet_hours: {
+            start: String(formData.get("quiet_start") || ""),
+            end: String(formData.get("quiet_end") || ""),
+          },
+          max_per_day: max,
+        },
+        "WhatsApp aggiornato."
+      );
+    }
+  );
+  return form;
+}
+
+function behaviorSettings(behavior) {
+  const flags = behavior.flags || {};
+  const heartbeat = behavior.heartbeat || {};
+  const form = settingsForm(
+    "Salva comportamento",
+    [
+      h(
+        "div",
+        { class: "settings-checks-grid" },
+        settingsCheck(
+          "visual_generation_enabled",
+          "Generazione visiva",
+          Boolean(flags.visual_generation_enabled),
+          "Consente le richieste di immagini quando il modello visivo sarà disponibile."
+        ),
+        settingsCheck(
+          "shadow_engine_enabled",
+          "Motore dell'ombra",
+          Boolean(flags.shadow_engine_enabled),
+          "Mantiene attivi tratti latenti e riconsolidamenti."
+        ),
+        settingsCheck(
+          "maintenance_mode",
+          "Modalità manutenzione",
+          Boolean(flags.maintenance_mode),
+          "Sospende le iniziative automatiche senza spegnere la dashboard."
+        ),
+        settingsCheck(
+          "whatsapp_sending_enabled",
+          "Invio WhatsApp",
+          Boolean(flags.whatsapp_sending_enabled),
+          "Autorizza l'executor a consegnare gli impulsi ai contatti in whitelist."
+        ),
+        settingsCheck(
+          "shadow_direct_read_enabled",
+          "Lettura diretta dell'ombra",
+          Boolean(flags.shadow_direct_read_enabled),
+          "Bloccato per progetto: l'ombra non è leggibile direttamente dal server.",
+          true
+        )
+      ),
+      h(
+        "p",
+        { class: "settings-warning" },
+        "Attivando l'invio, l'executor potrà depositare messaggi per i contatti autorizzati nell'outbox del profilo. Il trasporto verso WhatsApp Web non è ancora implementato, ma il permesso resta scritto in current_state.json. Attivalo solo con la whitelist dei contatti e la sessione browser sotto controllo."
+      ),
+      settingsField(
+        "Conferma per attivare l'invio",
+        settingsInput("sending_confirmation", "", "text", {
+          placeholder: "Scrivi ABILITA",
+          autocomplete: "off",
+        }),
+        flags.whatsapp_sending_enabled
+          ? "Il flag è già attivo: lascia vuoto per mantenerlo, spunta o deseleziona per cambiarlo."
+          : "Serve solo quando passi da spento ad attivo; per disattivarlo non è richiesta."
+      ),
+      h(
+        "div",
+        { class: "settings-inline-fields" },
+        settingsField(
+          "Intervallo battito (minuti)",
+          settingsInput("interval_minutes", heartbeat.interval_minutes, "number", {
+            min: "1",
+            max: "1440",
+            step: "1",
+          })
+        ),
+        settingsField(
+          "Pausa dopo un impulso (minuti)",
+          settingsInput("cooldown_minutes", heartbeat.cooldown_minutes, "number", {
+            min: "0",
+            max: "10080",
+            step: "1",
+          })
+        ),
+        settingsField(
+          "Massimo impulsi al giorno",
+          settingsInput("max_impulses_per_day", heartbeat.max_impulses_per_day, "number", {
+            min: "0",
+            max: "24",
+            step: "1",
+          })
+        )
+      ),
+    ],
+    async (formData) => {
+      const number = (name) => Number(formData.get(name));
+      const values = [
+        number("interval_minutes"),
+        number("cooldown_minutes"),
+        number("max_impulses_per_day"),
+      ];
+      if (values.some((value) => !Number.isInteger(value))) {
+        throw new Error("Intervallo, pausa e limite devono essere interi.");
+      }
+      await saveSettings(
+        "/api/settings/behavior",
+        {
+          flags: {
+            visual_generation_enabled: formData.has("visual_generation_enabled"),
+            shadow_engine_enabled: formData.has("shadow_engine_enabled"),
+            maintenance_mode: formData.has("maintenance_mode"),
+            whatsapp_sending_enabled: formData.has("whatsapp_sending_enabled"),
+          },
+          confirmation: String(formData.get("sending_confirmation") || ""),
+          heartbeat: {
+            interval_minutes: values[0],
+            cooldown_minutes: values[1],
+            max_impulses_per_day: values[2],
+          },
+        },
+        "Comportamento aggiornato."
+      );
+    }
+  );
+  return form;
+}
+
+function profileSettings(profile) {
+  const content = [
+    h(
+      "dl",
+      { class: "settings-meta" },
+      h("dt", { text: "Directory" }),
+      h("dd", { class: "mono", text: text(profile.root) }),
+      h("dt", { text: "Identità" }),
+      h("dd", { text: `${text(profile.full_name)} · ${text(profile.identity_id)}` }),
+      h("dt", { text: "Stato" }),
+      h("dd", { text: label(PROFILE_STATUS_LABELS, profile.status) }),
+      h("dt", { text: "Backup" }),
+      h("dd", { class: "mono", text: text(profile.backup_dir) })
+    ),
+  ];
+  if (!profile.can_archive) {
+    content.push(
+      h("p", {
+        class: "settings-blocked",
+        text: text(profile.archive_blocked, "Archiviazione non disponibile."),
+      })
+    );
+    return content;
+  }
+  content.push(
+    h("p", {
+      class: "settings-warning",
+      text:
+        "L'archiviazione sposta configurazione, database e file in una cartella di backup, " +
+        "poi riporta la dashboard al wizard. Il profilo non viene cancellato: il certificato " +
+        "TLS e la cache del modello restano nel profilo.",
+    }),
+    settingsForm(
+      "Archivia e crea nuovo",
+      [
+        settingsField(
+          "Conferma",
+          settingsInput("confirmation", "", "text", {
+            placeholder: "Scrivi ELIMINA",
+            autocomplete: "off",
+          }),
+          "La frase deve essere esattamente ELIMINA."
+        ),
+      ],
+      async (formData) => {
+        const result = await postJson("/api/profile/archive", {
+          confirmation: String(formData.get("confirmation") || ""),
+        });
+        setNotice("Profilo archiviato. Creane uno nuovo dal wizard.", "success");
+        window.location.assign(result.redirect || "/setup");
+      },
+      { danger: true }
+    )
+  );
+  return content;
+}
+
+function renderSettings(data) {
+  const browser = data.browser || {};
+  const whatsapp = data.whatsapp || {};
+  const behavior = data.behavior || {};
+  const profile = data.profile || {};
+  clear(
+    $("#settings-content"),
+    h(
+      "div",
+      { class: "settings-grid" },
+      settingsCard(
+        "Browser controllato",
+        "Whitelist, interazione, service worker e identità del browser.",
+        browserSettings(browser)
+      ),
+      settingsCard(
+        "WhatsApp",
+        "Integrazione, contatti autorizzati e finestra di silenzio.",
+        whatsappSettings(whatsapp, behavior)
+      ),
+      settingsCard(
+        "Comportamento",
+        "Flag del profilo e ritmo del battito autonomo.",
+        behaviorSettings(behavior)
+      ),
+      settingsCard(
+        "Profilo",
+        "Ciclo di vita dei dati e nuova configurazione.",
+        profileSettings(profile)
+      )
+    )
+  );
+}
+
+async function loadSettings(force = false) {
+  if (state.loaded.settings && !force) return;
+  const content = $("#settings-content");
+  setLoading(content, "Caricamento delle impostazioni…");
+  try {
+    const data = await api("/api/settings");
+    state.loaded.settings = data;
+    renderSettings(data);
+    setNotice("");
+  } catch (error) {
+    setNotice(`Impossibile caricare le impostazioni: ${error.message}`);
+    clear(content, emptyState("Impostazioni non disponibili", error.message));
+  }
+}
+
 /* -- navigazione --------------------------------------------------------- */
 
 const LOADERS = {
@@ -1055,6 +1625,7 @@ const LOADERS = {
   traits: loadTraits,
   semantic: loadSemantic,
   evolution: loadEvolution,
+  settings: loadSettings,
 };
 
 function navigate(view) {

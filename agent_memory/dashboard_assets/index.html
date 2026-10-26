@@ -39,12 +39,16 @@
             <span class="nav-number">05</span>
             <span>Evoluzioni</span>
           </button>
+          <button class="nav-item" type="button" data-view="settings">
+            <span class="nav-number">06</span>
+            <span>Impostazioni</span>
+          </button>
         </nav>
 
         <div class="sidebar-footer">
           <span class="status-dot" aria-hidden="true"></span>
           <div>
-            <strong>Sola lettura</strong>
+            <strong>Lettura e amministrazione</strong>
             <span>Server locale · loopback</span>
           </div>
         </div>
@@ -75,9 +79,11 @@
 
         <main class="content">
           <section class="view is-active" id="view-overview" aria-labelledby="page-title">
-            <div class="loading-block" id="overview-content">
-              <span class="spinner" aria-hidden="true"></span>
-              Caricamento della panoramica…
+            <div id="overview-content">
+              <div class="loading-block">
+                <span class="spinner" aria-hidden="true"></span>
+                Caricamento della panoramica…
+              </div>
             </div>
           </section>
 
@@ -202,10 +208,19 @@
               </div>
             </div>
           </section>
+
+          <section class="view" id="view-settings" hidden>
+            <div id="settings-content">
+              <div class="loading-block">
+                <span class="spinner" aria-hidden="true"></span>
+                Caricamento delle impostazioni…
+              </div>
+            </div>
+          </section>
         </main>
 
         <footer class="footer">
-          <span>Mnemosine · dashboard di sola lettura</span>
+          <span>Mnemosine · dashboard amministrativa</span>
           <span id="footer-generated">—</span>
         </footer>
       </div>

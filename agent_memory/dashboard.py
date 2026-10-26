@@ -1,13 +1,13 @@
 """Dashboard amministrativa locale.
 
 Il modulo espone una piccola applicazione HTTP su loopback che legge i
-database e i file di configurazione già usati dai servizi. Le uniche
-scritture applicative sono la creazione iniziale del profilo e, su richiesta
-dal passaggio finale del wizard, la generazione della biografia e la
-costruzione dell'indice vettoriale. Queste ultime due vengono eseguite in un
-thread di background: la pagina di completamento segue lo stato con polling.
-Ricordi, conoscenze, tratti e storico non vengono modificati dalle altre
-viste.
+database e i file di configurazione già usati dai servizi. Le scritture
+applicative sono la creazione iniziale del profilo, la generazione della
+biografia e dell'indice vettoriale dal passaggio finale del wizard, le
+impostazioni di browser, WhatsApp e comportamento, e l'archiviazione esplicita
+del profilo. Biografia e indice vengono eseguiti in un thread di background:
+la pagina di completamento segue lo stato con polling. Ricordi, conoscenze,
+tratti e storico non vengono modificati dalle altre viste.
 
 Uso:
     python -m agent_memory.dashboard
@@ -40,6 +40,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 from .biography import BiographyService
 from .config import project_root
 from .dashboard_auth import SESSION_COOKIE, DashboardAuth, resolve_auth
+from .dashboard_settings import ARCHIVE_CONFIRMATION, DashboardSettings
 from .dashboard_tls import DashboardTLS, ensure_dashboard_tls
 from .db import decode_memory
 from .errors import AgentMemoryError, ConfigError, NotFoundError, ValidationError
@@ -79,6 +80,17 @@ SETUP_PATH = "/setup"
 FINALIZE_PATH = "/setup/finalize"
 FINALIZE_STATUS_PATH = "/setup/finalize/status"
 SESSION_PATH = "/api/session"
+SETTINGS_PATH = "/api/settings"
+SETTINGS_BROWSER_PATH = "/api/settings/browser"
+SETTINGS_WHATSAPP_PATH = "/api/settings/whatsapp"
+SETTINGS_BEHAVIOR_PATH = "/api/settings/behavior"
+PROFILE_ARCHIVE_PATH = "/api/profile/archive"
+SETTINGS_POST_PATHS = {
+    SETTINGS_BROWSER_PATH,
+    SETTINGS_WHATSAPP_PATH,
+    SETTINGS_BEHAVIOR_PATH,
+    PROFILE_ARCHIVE_PATH,
+}
 FORM_TOKEN_TTL = 30 * 60
 FINALIZE_ACTIONS = ("biography", "index")
 FINALIZE_LABELS = {
@@ -1216,7 +1228,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 self._redirect(LOGIN_PATH if self.server.auth else "/")
                 return
             if path == SESSION_PATH:
-                self._send_json(self._session_payload())
+                payload = self._session_payload()
+                if payload.get("authenticated"):
+                    payload["csrf"] = self.server.form_tokens.issue()
+                self._send_json(payload)
                 return
             if not self._is_authenticated():
                 if path.startswith("/api/"):
@@ -1267,6 +1282,8 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 self._serve_file("index.html")
             elif path == "/api/overview":
                 self._send_json(self.server.data.overview())
+            elif path == SETTINGS_PATH:
+                self._send_json(DashboardSettings(self.server.data.root).snapshot())
             elif path == "/api/timeline":
                 self._send_json(
                     self.server.data.timeline(
@@ -1361,6 +1378,28 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                     self._handle_finalize_post()
                 else:
                     self._handle_setup_post()
+            elif path in SETTINGS_POST_PATHS:
+                if (
+                    self.server.auth is not None
+                    and not self._is_authenticated()
+                ):
+                    self._discard_body()
+                    self._send_json(
+                        {"error": "Autenticazione richiesta."},
+                        status=HTTPStatus.UNAUTHORIZED,
+                    )
+                    return
+                if self.server.data.profile_status() != PROFILE_STATE_READY:
+                    self._discard_body()
+                    self._send_json(
+                        {
+                            "error": "Profilo non configurato.",
+                            "profile": self.server.data.profile_status(),
+                        },
+                        status=HTTPStatus.SERVICE_UNAVAILABLE,
+                    )
+                    return
+                self._handle_settings_post(path)
             else:
                 self._send_json(
                     {"error": "Metodo non consentito."},
@@ -1464,6 +1503,36 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         auth.reset_failures(client)
         token = auth.issue_session()
         self._redirect(next_path, cookie=self._session_cookie(token))
+
+    def _handle_settings_post(self, path: str) -> None:
+        payload = self._read_json()
+        token = payload.get("csrf")
+        if not isinstance(token, str) or not self.server.form_tokens.consume(token):
+            raise ValidationError("Modulo scaduto o non valido. Riprova.")
+
+        settings = DashboardSettings(self.server.data.root)
+        if path == SETTINGS_BROWSER_PATH:
+            result = settings.save_browser(payload)
+        elif path == SETTINGS_WHATSAPP_PATH:
+            result = settings.save_whatsapp(payload)
+        elif path == SETTINGS_BEHAVIOR_PATH:
+            result = settings.save_behavior(payload)
+        else:
+            confirmation = payload.get("confirmation")
+            if not isinstance(confirmation, str):
+                raise ValidationError(
+                    f"Scrivi {ARCHIVE_CONFIRMATION} per confermare "
+                    "l'archiviazione."
+                )
+            result = settings.archive_profile(confirmation)
+            self.server.data.reload()
+            if not self.server.quiet:
+                sys.stderr.write(
+                    "Profilo archiviato dalla dashboard: "
+                    f"{result.get('archive')}\n"
+                )
+                sys.stderr.flush()
+        self._send_json(result)
 
     def _handle_logout(self) -> None:
         auth = self.server.auth
@@ -1943,6 +2012,20 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         except ValidationError:
             self.close_connection = True
 
+    def _read_json(self) -> dict[str, Any]:
+        if self.headers.get_content_type() != "application/json":
+            raise ValidationError(
+                "La richiesta deve usare application/json."
+            )
+        body = self._read_request_body()
+        try:
+            payload = json.loads(body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValidationError("JSON non valido.") from exc
+        if not isinstance(payload, dict):
+            raise ValidationError("Atteso un oggetto JSON.")
+        return payload
+
     def _read_form(self) -> dict[str, str]:
         if self.headers.get_content_type() != "application/x-www-form-urlencoded":
             raise ValidationError(
@@ -2328,7 +2411,8 @@ def main(argv: list[str] | None = None) -> int:
             flush=True,
         )
     print(
-        "Lettura dati. Scrittura consentita per configurazione, biografia e indice.",
+        "Lettura dati. Scrittura consentita per configurazione, impostazioni, "
+        "biografia, indice e archiviazione del profilo.",
         flush=True,
     )
     print("Premi CTRL+C per terminare.", flush=True)

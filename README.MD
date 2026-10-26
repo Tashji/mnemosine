@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-349%20passing-2ea043?logo=githubactions&logoColor=white" alt="349 test superati"></a>
+  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-359%20passing-2ea043?logo=githubactions&logoColor=white" alt="359 test superati"></a>
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12">
   <img src="https://img.shields.io/badge/MCP-Model%20Context%20Protocol-6ee7d8" alt="Model Context Protocol">
   <img src="https://img.shields.io/badge/storage-SQLite%20%2B%20FAISS-0b1422" alt="SQLite e FAISS">
@@ -854,7 +854,7 @@ La scelta avviene nel ciclo di pianificazione: l'agente valuta l'obiettivo, lo s
 
 #### Whitelist di navigazione
 
-Ogni navigazione passa da una whitelist esplicita, configurata dall'amministratore in un file dedicato (per esempio `config/integrations.json`). La whitelist contiene origini o domini, non URL arbitrari proposti dal modello:
+Ogni navigazione passa da una whitelist esplicita, configurata dall'amministratore in un file dedicato (per esempio `config/integrations.json`) oppure dalla vista **Impostazioni** della dashboard. La whitelist contiene origini o domini, non URL arbitrari proposti dal modello:
 
 - solo HTTPS, con dominio esatto o sottodomini dichiarati;
 
@@ -1364,7 +1364,7 @@ Se l'indice vettoriale non era pronto durante l'applicazione, eseguire `python -
 
 ### 17.3. Dashboard amministrativa locale
 
-La dashboard amministrativa è implementata in `agent_memory/dashboard.py`; l'interfaccia è in `agent_memory/dashboard_assets/`. Usa gli stessi servizi e database del progetto, senza dipendenze web aggiuntive. Le viste sono in sola lettura; le uniche scritture applicative sono la creazione iniziale del profilo e, su richiesta dal wizard o da `/setup/finalize`, la biografia e l'indice vettoriale.
+La dashboard amministrativa è implementata in `agent_memory/dashboard.py`; l'interfaccia è in `agent_memory/dashboard_assets/`. Usa gli stessi servizi e database del progetto, senza dipendenze web aggiuntive. Le viste di consultazione sono in sola lettura; la sezione **Impostazioni** scrive la whitelist e le integrazioni, i flag non bloccati e il ritmo del battito, e può archiviare il profilo per crearne uno nuovo. Restano scritture applicative anche la creazione iniziale del profilo e, su richiesta dal wizard o da `/setup/finalize`, la biografia e l'indice vettoriale.
 
 Avvio:
 
@@ -1464,7 +1464,19 @@ sudo python -m agent_memory.dashboard_cert uninstall --yes
 
 Il certificato è self-signed e locale: non va usato come certificato di produzione. Alcuni browser, in particolare Firefox, mantengono un trust store separato; se l'avviso resta, importa `mnemosine-dashboard.crt` nelle impostazioni del browser.
 
-La dashboard espone cinque viste:
+Impostazioni dalla dashboard:
+
+- **Browser controllato**: whitelist delle origini (una per riga), attivazione del browser e dell'interazione, service worker, user agent e timeout. I valori vengono validati con la stessa policy del runtime e scritti in modo atomico in `config/integrations.json`: non serve modificare il JSON a mano. Il server MCP carica la policy all'avvio, quindi la nuova whitelist si applica al suo riavvio; WhatsApp e comportamento vengono riletti a ogni operazione.
+
+- **WhatsApp**: integrazione, contatti autorizzati (id della relazione, nome e telefono), finestra di silenzio e limite giornaliero. Il flag `whatsapp_sending_enabled` si attiva da **Comportamento** solo digitando `ABILITA`: è un interruttore di sicurezza, non un semplice toggle. Il trasporto verso WhatsApp Web non è ancora implementato; l'outbox resta il confine attuale.
+
+- **Comportamento**: generazione visiva, motore dell'ombra, modalità manutenzione e parametri del battito (`interval_minutes`, `cooldown_minutes`, `max_impulses_per_day`). La lettura diretta dell'ombra resta bloccata per progetto.
+
+- **Profilo**: archiviazione esplicita. Configurazione, database e file vengono spostati in `backups/profile-AAAAmmgg-HHMMSS`; `data/dashboard_tls` e `data/models` vengono conservati, quindi certificato TLS e cache del modello non si perdono; un file della password esterno al profilo resta comunque al suo posto. Dopo l'archiviazione la dashboard torna a `/setup` per creare un nuovo profilo. Il dataset demo del repository non è archiviabile: avvia la dashboard su un profilo separato.
+
+- Ogni scrittura passa dalla sessione autenticata e da un token CSRF monouso; i valori vengono riletti con le classi del runtime prima di sostituire il file. Un archivio non cancella i dati: resta nella cartella di backup e può essere ripristinato a mano.
+
+La dashboard espone sei viste:
 
 - **Panoramica**: identità, stato corrente, conteggi e ultimi ricordi.
 
@@ -1476,7 +1488,9 @@ La dashboard espone cinque viste:
 
 - **Evoluzioni**: storico delle variazioni dei tratti, seed esterni, cascate e revisioni recenti.
 
-Le API dei dati sono in sola lettura; gli unici POST gestiscono accesso, logout, prima configurazione e completamento del profilo (biografia e indice). Il server ascolta su `127.0.0.1` per impostazione predefinita: contiene dati amministrativi e tratti dell'ombra, quindi non va pubblicato su Internet. L'opzione `--host` permette di cambiare l'indirizzo; su un host non loopback l'autenticazione è obbligatoria. Usa `--https` per cifrare il traffico quando la dashboard è raggiungibile da altri dispositivi.
+- **Impostazioni**: browser e whitelist, WhatsApp, flag e battito, archiviazione del profilo.
+
+Le API di consultazione sono in sola lettura; i POST gestiscono accesso, logout, prima configurazione, completamento del profilo (biografia e indice) e le scritture di **Impostazioni** (integrazioni, comportamento e archiviazione del profilo). Ogni POST autenticato richiede un token CSRF monouso. Il server ascolta su `127.0.0.1` per impostazione predefinita: contiene dati amministrativi e tratti dell'ombra, quindi non va pubblicato su Internet. L'opzione `--host` permette di cambiare l'indirizzo; su un host non loopback l'autenticazione è obbligatoria. Usa `--https` per cifrare il traffico quando la dashboard è raggiungibile da altri dispositivi.
 
 ### 17.4. Routine giornaliera e stato corrente
 
@@ -1530,7 +1544,7 @@ L'impulso contiene trigger, eventuale destinatario, contesto e canale suggerito;
 - `whatsapp.enabled` è vero e `current_state.flags.whatsapp_sending_enabled` anche;
 - non sono attivi manutenzione, finestra di sonno, `availability.accepting_messages` falso, fascia di silenzio (`quiet_hours`, predefinita 00:00–07:00) o limite `max_per_day` raggiunto.
 
-Il flag non è modificabile dal server MCP: `update_current_state` rifiuta `whatsapp_sending_enabled: true`, quindi l'autorizzazione resta in mano all'amministratore del profilo.
+Il flag non è modificabile dal server MCP: `update_current_state` rifiuta `whatsapp_sending_enabled: true` per impostazione predefinita. La dashboard autenticata può attivarlo solo con la conferma esplicita `ABILITA`; disattivarlo non richiede conferma. L'autorizzazione resta in mano all'amministratore del profilo.
 
 Il blocco corrispondente in `config/integrations.json`, che in un profilo nuovo nasce spento con whitelist vuota:
 
