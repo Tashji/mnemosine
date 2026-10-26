@@ -104,18 +104,27 @@ def create_server(
 
     @mcp.tool()
     def record_interaction(
-        messages: int = 1, complexity: str = "normale"
+        messages: int = 1,
+        complexity: str = "normale",
+        user_id: str | None = None,
+        summary: str = "",
     ) -> dict[str, Any]:
         """Registra i messaggi appena scambiati e aggiorna il carico cognitivo.
 
         ``complexity`` vale ``leggera``, ``normale`` o ``complessa``. Il carico
         risultante decide lo stile di risposta in ``availability``: oltre la
         soglia morbida diventa più asciutto, oltre quella dura ancora di più.
+        Se indichi ``user_id``, l'interazione aggiorna anche ``last_interaction_at``,
+        ``interaction_count`` e lo storico nel grafo relazionale. ``summary`` è
+        una nota facoltativa per quella voce; un id sconosciuto viene rifiutato.
         """
 
         try:
             return HeartbeatEngine(root, at=None).record_interaction(
-                messages=messages, complexity=complexity
+                messages=messages,
+                complexity=complexity,
+                user_id=user_id,
+                summary=summary,
             )
         except AgentMemoryError as exc:
             raise ToolError(str(exc)) from exc

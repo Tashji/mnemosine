@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-359%20passing-2ea043?logo=githubactions&logoColor=white" alt="359 test superati"></a>
+  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-365%20passing-2ea043?logo=githubactions&logoColor=white" alt="365 test superati"></a>
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12">
   <img src="https://img.shields.io/badge/MCP-Model%20Context%20Protocol-6ee7d8" alt="Model Context Protocol">
   <img src="https://img.shields.io/badge/storage-SQLite%20%2B%20FAISS-0b1422" alt="SQLite e FAISS">
@@ -1565,6 +1565,8 @@ Il trasporto verso WhatsApp Web resta fuori da questo modulo: qui si produce una
 
 I messaggi aumentano il carico: `record_interaction` via MCP, oppure `mnemosine-heartbeat --interaction`, aggiunge 2 punti per un messaggio leggero, 4 normale e 7 complesso. Oltre la soglia morbida `availability.response_style` diventa `ridotta`, oltre quella dura `breve`.
 
+Quando l'interazione riguarda un contatto del grafo, passa anche `user_id`: il comando aggiorna `last_interaction_at`, `interaction_count` e `interaction_history` in `social_graph.json`, così il trigger di silenzio riparte da quell'istante. Un id assente dal grafo viene rifiutato senza scrivere né il carico né il contatto. Lo stesso parametro è disponibile nel tool MCP `record_interaction`.
+
 ```bash
 # Anteprima di un battito a un'ora precisa
 python -m agent_memory.heartbeat --at 2026-10-25T15:00
@@ -1577,6 +1579,9 @@ python -m agent_memory.heartbeat --loop --interval 30
 
 # Interazione appena scambiata
 python -m agent_memory.heartbeat --interaction 2 --complexity complessa
+
+# Interazione con un contatto del grafo relazionale
+python -m agent_memory.heartbeat --interaction 1 --user-id user_marco --summary "Ciao Marco"
 
 # Consegna il messaggio all'impulso in attesa (whitelist e flag permettendo)
 python -m agent_memory.heartbeat --deliver "Ciao Marco, come stai?"

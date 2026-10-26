@@ -108,6 +108,34 @@ class McpServerTests(unittest.TestCase):
         with self.assertRaises(ToolError):
             call_tool(self.mcp, "record_interaction", {"complexity": "enorme"})
 
+    def test_record_interaction_updates_the_relationship(self) -> None:
+        result = call_tool(
+            self.mcp,
+            "record_interaction",
+            {"user_id": "user_marco", "summary": "Messaggio di prova"},
+        )
+
+        self.assertEqual(result["relationship"]["user_id"], "user_marco")
+        graph = call_tool(self.mcp, "get_social_graph", {})
+        marco = next(
+            person for person in graph["people"] if person["user_id"] == "user_marco"
+        )
+        self.assertEqual(marco["interaction_count"], 19)
+        self.assertEqual(marco["interaction_history"][0]["summary"], "Messaggio di prova")
+        self.assertEqual(
+            marco["last_interaction_at"],
+            result["relationship"]["last_interaction_at"],
+        )
+
+    def test_record_interaction_refuses_unknown_user(self) -> None:
+        with self.assertRaises(ToolError) as ctx:
+            call_tool(
+                self.mcp,
+                "record_interaction",
+                {"user_id": "user_sconosciuto"},
+            )
+        self.assertIn("grafo delle relazioni", str(ctx.exception))
+
     def test_deliver_impulse_respects_whitelist_and_flags(self) -> None:
         with self.assertRaises(ToolError) as ctx:
             call_tool(self.mcp, "deliver_impulse", {"text": "Ciao Marco"})

@@ -55,6 +55,9 @@ ANNIVERSARY_MIN_IMPORTANCE = 7
 MAX_ELAPSED_MINUTES = 24 * 60.0
 FULL_NIGHT_MINUTES = 360.0
 MAX_MESSAGES_PER_CALL = 100
+MAX_INTERACTION_SUMMARY_CHARS = 500
+MAX_INTERACTION_HISTORY = 100
+DEFAULT_INTERACTION_SUMMARY = "Interazione registrata."
 
 # Quanto pesa un messaggio sul carico cognitivo, secondo la complessità.
 COMPLEXITY_LOAD: dict[str, float] = {
@@ -208,13 +211,101 @@ class HeartbeatEngine:
         thresholds = self.state.get("mental_load_thresholds")
         return thresholds if isinstance(thresholds, dict) else {}
 
-    def record_interaction(
-        self, messages: int = 1, complexity: str = "normale"
+    @staticmethod
+    def _clean_interaction_summary(summary: Any) -> str:
+        if summary is None:
+            return DEFAULT_INTERACTION_SUMMARY
+        if not isinstance(summary, str):
+            raise ValidationError("summary: attesa una stringa.")
+        cleaned = summary.strip()
+        if len(cleaned) > MAX_INTERACTION_SUMMARY_CHARS:
+            raise ValidationError(
+                f"summary: massimo {MAX_INTERACTION_SUMMARY_CHARS} caratteri."
+            )
+        if "\x00" in cleaned:
+            raise ValidationError("summary: contiene caratteri non ammessi.")
+        return cleaned or DEFAULT_INTERACTION_SUMMARY
+
+    def _record_social_interaction(
+        self, user_id: str, stamp: str, summary: str
     ) -> dict[str, Any]:
-        """Aumenta il carico per i messaggi appena scambiati e lo persiste."""
+        """Aggiorna il contatto e fa ripartire la finestra di silenzio."""
+
+        graph = self.config.get("social_graph")
+        people = graph.get("people")
+        if not isinstance(people, list):
+            raise ValidationError("social_graph.people: attesa una lista.")
+        person = next(
+            (
+                item
+                for item in people
+                if isinstance(item, dict) and item.get("user_id") == user_id
+            ),
+            None,
+        )
+        if person is None:
+            raise ValidationError(
+                f"user_id {user_id!r} non è nel grafo delle relazioni."
+            )
+
+        count = person.get("interaction_count", 0)
+        if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+            count = 0
+        person["interaction_count"] = count + 1
+        person["last_interaction_at"] = stamp
+        first = person.get("first_interaction_at")
+        if not isinstance(first, str) or not first:
+            person["first_interaction_at"] = stamp
+
+        history = person.get("interaction_history")
+        history = history if isinstance(history, list) else []
+        person["interaction_history"] = [
+            {
+                "timestamp": stamp,
+                "channel": "chat",
+                "summary": summary,
+                "memory_id": None,
+                "sentiment": None,
+            },
+            *history,
+        ][:MAX_INTERACTION_HISTORY]
+
+        self.config.write("social_graph", graph)
+        return {
+            "user_id": user_id,
+            "display_name": person.get("display_name"),
+            "last_interaction_at": stamp,
+            "interaction_count": person["interaction_count"],
+        }
+
+    def record_interaction(
+        self,
+        messages: int = 1,
+        complexity: str = "normale",
+        *,
+        user_id: str | None = None,
+        summary: str = "",
+    ) -> dict[str, Any]:
+        """Aumenta il carico e, se c'è un contatto, aggiorna la relazione.
+
+        ``user_id`` è facoltativo per non rompere i chiamanti che registrano
+        soltanto il carico. Quando è presente, il contatto deve esistere nel
+        grafo: un id sconosciuto viene rifiutato prima di qualsiasi scrittura.
+        """
 
         load = apply_interactions(self._load(), messages, complexity)
         stamp = self.now.replace(microsecond=0).isoformat()
+        relationship: dict[str, Any] | None = None
+        if user_id is not None:
+            if not isinstance(user_id, str) or not user_id.strip():
+                raise ValidationError("user_id: attesa una stringa non vuota.")
+            user_id = user_id.strip()
+            relationship = self._record_social_interaction(
+                user_id,
+                stamp,
+                self._clean_interaction_summary(summary),
+            )
+
         state = self.config.update_current_state(
             {
                 "mental_load": load,
@@ -224,13 +315,16 @@ class HeartbeatEngine:
                 "heartbeat": {"last_interaction_at": stamp},
             }
         )
-        return {
+        result: dict[str, Any] = {
             "mental_load": state["mental_load"],
             "availability": state["availability"],
             "last_interaction_at": state["heartbeat"]["last_interaction_at"],
             "messages": messages,
             "complexity": complexity,
         }
+        if relationship is not None:
+            result["relationship"] = relationship
+        return result
 
     def acknowledge_impulse(self, note: str = "") -> dict[str, Any]:
         """Chiude l'impulso in attesa, dopo che qualcuno se n'è occupato."""
@@ -607,6 +701,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Complessità dei messaggi registrati con --interaction.",
     )
     parser.add_argument(
+        "--user-id",
+        default=None,
+        metavar="ID",
+        help="Contatto del grafo da aggiornare con --interaction.",
+    )
+    parser.add_argument(
+        "--summary",
+        default="",
+        metavar="TESTO",
+        help="Nota facoltativa per lo storico dell'interazione.",
+    )
+    parser.add_argument(
         "--deliver",
         default=None,
         metavar="TESTO",
@@ -664,7 +770,10 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.interaction is not None:
             result = HeartbeatEngine(root, at=args.at).record_interaction(
-                messages=args.interaction, complexity=args.complexity
+                messages=args.interaction,
+                complexity=args.complexity,
+                user_id=args.user_id,
+                summary=args.summary,
             )
             if args.json:
                 print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -674,6 +783,13 @@ def main(argv: list[str] | None = None) -> int:
                     f"{result['mental_load']}/100 "
                     f"({result['messages']} × {result['complexity']})."
                 )
+                relationship = result.get("relationship")
+                if relationship:
+                    who = relationship.get("display_name") or relationship["user_id"]
+                    print(
+                        f"Relazione aggiornata: {who} "
+                        f"({relationship['interaction_count']} interazioni)."
+                    )
             return 0
 
         if args.loop:

@@ -311,6 +311,64 @@ class HeartbeatWriteTests(HeartbeatTestCase):
             state["heartbeat"]["last_interaction_at"], "2026-10-25T15:00:00+01:00"
         )
 
+    def test_record_interaction_updates_the_relationship(self) -> None:
+        result = self.engine().record_interaction(
+            user_id="user_marco", summary="Conversazione serale"
+        )
+
+        self.assertEqual(result["relationship"]["user_id"], "user_marco")
+        self.assertEqual(
+            result["relationship"]["last_interaction_at"],
+            "2026-10-25T15:00:00+01:00",
+        )
+        graph = self.read_json("social_graph")
+        marco = next(person for person in graph["people"] if person["user_id"] == "user_marco")
+        self.assertEqual(marco["interaction_count"], 19)
+        self.assertEqual(marco["last_interaction_at"], "2026-10-25T15:00:00+01:00")
+        self.assertEqual(marco["interaction_history"][0]["summary"], "Conversazione serale")
+        self.assertEqual(
+            marco["interaction_history"][0]["timestamp"],
+            "2026-10-25T15:00:00+01:00",
+        )
+
+    def test_unknown_contact_does_not_change_state(self) -> None:
+        state_before = self.read_json("current_state")
+        graph_before = self.read_json("social_graph")
+
+        with self.assertRaises(ValidationError):
+            self.engine().record_interaction(user_id="user_sconosciuto")
+
+        self.assertEqual(self.read_json("current_state"), state_before)
+        self.assertEqual(self.read_json("social_graph"), graph_before)
+
+    def test_interaction_restarts_the_silence_window(self) -> None:
+        self.set_people(
+            [
+                {
+                    "user_id": "user_marco",
+                    "display_name": "Marco",
+                    "trust": 74,
+                    "intimacy": 61,
+                    "first_interaction_at": "2024-10-05T18:20:00+02:00",
+                    "last_interaction_at": "2026-10-18T21:40:00+02:00",
+                    "interaction_count": 18,
+                }
+            ]
+        )
+        self.plan_day(start="14:30")
+
+        before = self.engine().preview()
+        self.assertEqual(before["impulse"]["trigger"], "relazione")
+
+        self.engine().record_interaction(user_id="user_marco")
+        after = self.engine().preview()
+        self.assertIsNone(after["impulse"])
+        self.assertEqual(after["decision"], "continuare_l_attivita")
+
+        later = self.engine("2026-10-29T15:00").preview()
+        self.assertEqual(later["impulse"]["trigger"], "relazione")
+        self.assertEqual(later["impulse"]["target"]["user_id"], "user_marco")
+
     def test_interaction_pushes_availability_over_the_soft_threshold(self) -> None:
         self.patch_state(mental_load=58)
 
@@ -357,6 +415,25 @@ class HeartbeatCommandTests(HeartbeatTestCase):
         self.assertEqual(code, 0)
         self.assertIn("Interazione registrata", output)
         self.assertEqual(self.read_json("current_state")["mental_load"], 45)
+
+    def test_interaction_from_command_line_updates_the_relationship(self) -> None:
+        code, output = self.run_cli(
+            "--at",
+            NOW,
+            "--interaction",
+            "1",
+            "--user-id",
+            "user_marco",
+            "--summary",
+            "Ciao Marco",
+        )
+
+        self.assertEqual(code, 0)
+        self.assertIn("Relazione aggiornata: Marco", output)
+        graph = self.read_json("social_graph")
+        marco = next(person for person in graph["people"] if person["user_id"] == "user_marco")
+        self.assertEqual(marco["interaction_count"], 19)
+        self.assertEqual(marco["interaction_history"][0]["summary"], "Ciao Marco")
 
     def test_loop_stops_after_the_requested_ticks(self) -> None:
         self.set_people([])
