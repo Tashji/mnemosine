@@ -131,6 +131,60 @@ class DashboardDataTests(DashboardFixture):
         self.assertEqual(davide["trust"], 63)
         self.assertEqual(davide["intimacy"], 44)
 
+    def test_relations_expose_full_interaction_history(self) -> None:
+        relations = DashboardData(self.root).relations()
+
+        self.assertEqual(relations["count"], 3)
+        self.assertEqual(relations["total_interactions"], 48)
+        marco = next(
+            contact
+            for contact in relations["contacts"]
+            if contact["user_id"] == "user_marco"
+        )
+        self.assertEqual(marco["display_name"], "Marco")
+        self.assertEqual(marco["interaction_count"], 18)
+        self.assertEqual(
+            [entry["timestamp"] for entry in marco["interactions"]],
+            ["2026-10-18T21:40:00+02:00", "2026-10-02T19:10:00+02:00"],
+        )
+        latest = marco["interactions"][0]
+        self.assertEqual(latest["channel"], "chat")
+        self.assertEqual(latest["memory_id"], "mem_0004")
+        self.assertEqual(latest["sentiment"], "positivo")
+        self.assertIn("Python", latest["summary"])
+        self.assertEqual(
+            marco["preferences"],
+            ["programmazione", "videogiochi", "serie TV"],
+        )
+        self.assertTrue(marco["confirmed_facts"])
+        self.assertTrue(marco["notes"])
+
+    def test_recorded_interaction_refreshes_relations_history(self) -> None:
+        data = DashboardData(self.root)
+        data.relations()
+
+        at = datetime.fromisoformat("2026-10-26T10:00:00+01:00")
+        HeartbeatEngine(self.root, at=at).record_interaction(
+            user_id="user_giulia", summary="Aggiornamento sul progetto di tesi."
+        )
+
+        relations = data.relations()
+        giulia = next(
+            contact
+            for contact in relations["contacts"]
+            if contact["user_id"] == "user_giulia"
+        )
+        self.assertEqual(giulia["interaction_count"], 8)
+        self.assertEqual(len(giulia["interactions"]), 2)
+        self.assertEqual(
+            giulia["interactions"][0]["timestamp"],
+            "2026-10-26T10:00:00+01:00",
+        )
+        self.assertEqual(
+            giulia["interactions"][0]["summary"],
+            "Aggiornamento sul progetto di tesi.",
+        )
+
     def test_recorded_interaction_refreshes_contact_in_overview(self) -> None:
         data = DashboardData(self.root)
         data.overview()  # crea i servizi: la lettura successiva non deve usare cache
@@ -206,6 +260,7 @@ class DashboardHTTPTests(DashboardFixture):
         self.assertEqual(status, 200)
         self.assertIn("text/javascript", headers["Content-Type"])
         self.assertIn(b"loadTimeline", body)
+        self.assertIn(b"loadRelations", body)
 
         status, _headers, body = self._get("/static/../config/identity.json")
         self.assertEqual(status, 404)
@@ -218,6 +273,16 @@ class DashboardHTTPTests(DashboardFixture):
         self.assertEqual(overview["counts"]["memories"], 40)
         self.assertEqual(len(overview["contacts"]), 3)
         self.assertEqual(overview["contacts"][0]["user_id"], "user_davide")
+
+        status, _headers, body = self._get("/api/relations")
+        self.assertEqual(status, 200)
+        relations = json.loads(body)
+        self.assertEqual(relations["count"], 3)
+        self.assertEqual(relations["total_interactions"], 48)
+        self.assertEqual(relations["contacts"][0]["user_id"], "user_davide")
+        self.assertEqual(
+            len(relations["contacts"][0]["interactions"]), 1
+        )
 
         status, _headers, body = self._get("/api/timeline")
         self.assertEqual(status, 200)

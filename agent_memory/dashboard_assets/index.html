@@ -23,24 +23,28 @@
             <span class="nav-number">01</span>
             <span>Panoramica</span>
           </button>
-          <button class="nav-item" type="button" data-view="timeline">
+          <button class="nav-item" type="button" data-view="relations">
             <span class="nav-number">02</span>
+            <span>Relazioni</span>
+          </button>
+          <button class="nav-item" type="button" data-view="timeline">
+            <span class="nav-number">03</span>
             <span>Timeline</span>
           </button>
           <button class="nav-item" type="button" data-view="traits">
-            <span class="nav-number">03</span>
+            <span class="nav-number">04</span>
             <span>Tratti</span>
           </button>
           <button class="nav-item" type="button" data-view="semantic">
-            <span class="nav-number">04</span>
+            <span class="nav-number">05</span>
             <span>Conoscenze</span>
           </button>
           <button class="nav-item" type="button" data-view="evolution">
-            <span class="nav-number">05</span>
+            <span class="nav-number">06</span>
             <span>Evoluzioni</span>
           </button>
           <button class="nav-item" type="button" data-view="settings">
-            <span class="nav-number">06</span>
+            <span class="nav-number">07</span>
             <span>Impostazioni</span>
           </button>
         </nav>
@@ -83,6 +87,23 @@
               <div class="loading-block">
                 <span class="spinner" aria-hidden="true"></span>
                 Caricamento della panoramica…
+              </div>
+            </div>
+          </section>
+
+          <section class="view" id="view-relations" hidden>
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Grafo relazionale</p>
+                <h2>Relazioni</h2>
+                <p>Contatti, fiducia e storico completo delle interazioni.</p>
+              </div>
+              <span class="count-chip" id="relations-count">—</span>
+            </div>
+            <div id="relations-content">
+              <div class="loading-block">
+                <span class="spinner" aria-hidden="true"></span>
+                Caricamento delle relazioni…
               </div>
             </div>
           </section>

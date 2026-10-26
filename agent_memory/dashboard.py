@@ -80,6 +80,7 @@ SETUP_PATH = "/setup"
 FINALIZE_PATH = "/setup/finalize"
 FINALIZE_STATUS_PATH = "/setup/finalize/status"
 SESSION_PATH = "/api/session"
+RELATIONS_PATH = "/api/relations"
 SETTINGS_PATH = "/api/settings"
 SETTINGS_BROWSER_PATH = "/api/settings/browser"
 SETTINGS_WHATSAPP_PATH = "/api/settings/whatsapp"
@@ -623,7 +624,41 @@ class DashboardData:
 
     # -- panoramica ---------------------------------------------------------
 
-    def _contacts(self) -> list[dict[str, Any]]:
+    @staticmethod
+    def _text_list(value: Any) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        return [
+            item.strip()
+            for item in value
+            if isinstance(item, str) and item.strip()
+        ]
+
+    @staticmethod
+    def _interaction_history(person: dict[str, Any]) -> list[dict[str, Any]]:
+        raw = person.get("interaction_history")
+        if not isinstance(raw, list):
+            return []
+        entries: list[dict[str, Any]] = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            entries.append(
+                {
+                    "timestamp": item.get("timestamp"),
+                    "channel": item.get("channel"),
+                    "summary": item.get("summary"),
+                    "memory_id": item.get("memory_id"),
+                    "sentiment": item.get("sentiment"),
+                }
+            )
+        entries.sort(
+            key=lambda entry: str(entry["timestamp"] or ""),
+            reverse=True,
+        )
+        return entries
+
+    def _contacts(self, *, include_details: bool = False) -> list[dict[str, Any]]:
         graph = self.memory.get_social_graph()
         people = graph.get("people")
         contacts: list[dict[str, Any]] = []
@@ -638,31 +673,58 @@ class DashboardData:
             count = person.get("interaction_count", 0)
             if isinstance(count, bool) or not isinstance(count, int) or count < 0:
                 count = 0
+            history = self._interaction_history(person)
             last_summary = ""
-            history = person.get("interaction_history")
-            if isinstance(history, list) and history:
-                latest = history[0]
-                if isinstance(latest, dict):
-                    summary = latest.get("summary")
-                    if isinstance(summary, str):
-                        last_summary = summary
-            contacts.append(
-                {
-                    "user_id": user_id,
-                    "display_name": person.get("display_name") or user_id,
-                    "relation": person.get("relation"),
-                    "trust": person.get("trust"),
-                    "intimacy": person.get("intimacy"),
-                    "last_interaction_at": person.get("last_interaction_at"),
-                    "last_interaction_summary": last_summary,
-                    "interaction_count": count,
-                }
-            )
+            if history:
+                summary = history[0].get("summary")
+                if isinstance(summary, str):
+                    last_summary = summary
+            contact: dict[str, Any] = {
+                "user_id": user_id,
+                "display_name": person.get("display_name") or user_id,
+                "relation": person.get("relation"),
+                "trust": person.get("trust"),
+                "intimacy": person.get("intimacy"),
+                "last_interaction_at": person.get("last_interaction_at"),
+                "last_interaction_summary": last_summary,
+                "interaction_count": count,
+            }
+            if include_details:
+                contact.update(
+                    {
+                        "full_name": person.get("full_name"),
+                        "first_interaction_at": person.get(
+                            "first_interaction_at"
+                        ),
+                        "preferences": self._text_list(
+                            person.get("preferences")
+                        ),
+                        "confirmed_facts": self._text_list(
+                            person.get("confirmed_facts")
+                        ),
+                        "notes": person.get("notes"),
+                        "interactions": history,
+                    }
+                )
+            contacts.append(contact)
         contacts.sort(
             key=lambda contact: str(contact["last_interaction_at"] or ""),
             reverse=True,
         )
         return contacts
+
+    def relations(self) -> dict[str, Any]:
+        contacts = self._contacts(include_details=True)
+        return {
+            "generated_at": datetime.now().astimezone().isoformat(
+                timespec="seconds"
+            ),
+            "count": len(contacts),
+            "total_interactions": sum(
+                contact["interaction_count"] for contact in contacts
+            ),
+            "contacts": contacts,
+        }
 
     def overview(self) -> dict[str, Any]:
         identity = self.memory.get_identity()
@@ -1324,6 +1386,8 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 self._serve_file("index.html")
             elif path == "/api/overview":
                 self._send_json(self.server.data.overview())
+            elif path == RELATIONS_PATH:
+                self._send_json(self.server.data.relations())
             elif path == SETTINGS_PATH:
                 self._send_json(DashboardSettings(self.server.data.root).snapshot())
             elif path == "/api/timeline":

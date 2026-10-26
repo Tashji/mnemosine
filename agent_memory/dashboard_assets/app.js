@@ -5,6 +5,10 @@ const VIEW_META = {
     title: "Panoramica",
     subtitle: "Stato, memoria e identità in un'unica vista.",
   },
+  relations: {
+    title: "Relazioni",
+    subtitle: "Contatti, fiducia e storico completo delle interazioni.",
+  },
   timeline: {
     title: "Timeline",
     subtitle: "Ricordi episodici, fonti e livelli di accesso.",
@@ -89,6 +93,7 @@ const state = {
   view: "overview",
   loaded: {},
   sequence: { timeline: 0, semantic: 0 },
+  relationId: null,
   lastFocus: null,
 };
 
@@ -521,6 +526,233 @@ async function loadOverview(force = false) {
     if (!content.querySelector(".hero-grid")) {
       clear(content, emptyState("Dati non disponibili", error.message));
     }
+  }
+}
+
+/* -- relazioni ----------------------------------------------------------- */
+
+function relationStat(labelText, valueText) {
+  return h(
+    "div",
+    { class: "relation-stat" },
+    h("span", { text: labelText }),
+    h("strong", { text: valueText })
+  );
+}
+
+function scoreValue(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  const number = Number(value);
+  return Number.isFinite(number) ? `${number}/100` : "—";
+}
+
+function interactionCount(value) {
+  const number = Math.max(0, Number(value) || 0);
+  return `${number} ${number === 1 ? "interazione" : "interazioni"}`;
+}
+
+function relationEvent(entry) {
+  const meta = [];
+  if (entry.sentiment) meta.push(`Tono ${text(entry.sentiment)}`);
+  if (entry.memory_id) meta.push(`Ricordo ${entry.memory_id}`);
+  return h(
+    "li",
+    { class: "relation-event" },
+    h(
+      "div",
+      { class: "relation-event-when" },
+      h("span", { class: "relation-event-date", text: fmtDate(entry.timestamp, { time: true }) }),
+      h("span", { class: "relation-event-channel", text: text(entry.channel, "chat") })
+    ),
+    h(
+      "div",
+      { class: "relation-event-body" },
+      h("p", {
+        class: "relation-event-summary",
+        text: text(entry.summary, "Nessun riassunto registrato."),
+      }),
+      meta.length
+        ? h(
+            "div",
+            { class: "relation-event-meta" },
+            meta.map((item) => h("span", { text: item }))
+          )
+        : null
+    )
+  );
+}
+
+function relationAbout(contact) {
+  const preferences = Array.isArray(contact.preferences) ? contact.preferences : [];
+  const facts = Array.isArray(contact.confirmed_facts) ? contact.confirmed_facts : [];
+  if (!preferences.length && !facts.length && !contact.notes) return null;
+  return h(
+    "div",
+    { class: "relation-about" },
+    preferences.length
+      ? h(
+          "div",
+          { class: "relation-about-block" },
+          h("span", { class: "relation-about-label", text: "Preferenze" }),
+          h(
+            "div",
+            { class: "tag-list" },
+            preferences.map((item) => h("span", { class: "tag", text: item }))
+          )
+        )
+      : null,
+    facts.length
+      ? h(
+          "div",
+          { class: "relation-about-block" },
+          h("span", { class: "relation-about-label", text: "Fatti confermati" }),
+          h(
+            "ul",
+            { class: "relation-facts" },
+            facts.map((item) => h("li", { text: item }))
+          )
+        )
+      : null,
+    contact.notes
+      ? h("p", { class: "relation-notes", text: contact.notes })
+      : null
+  );
+}
+
+function relationDetail(contact) {
+  const interactions = Array.isArray(contact.interactions) ? contact.interactions : [];
+  const identity = [contact.full_name, contact.user_id].filter(Boolean).join(" · ");
+  return h(
+    "div",
+    { class: "relation-detail-inner" },
+    h(
+      "div",
+      { class: "relation-detail-head" },
+      h(
+        "div",
+        {},
+        h("p", { class: "eyebrow", text: text(contact.relation, "Contatto") }),
+        h("h2", { class: "relation-detail-name", text: text(contact.display_name, contact.user_id) }),
+        h("p", { class: "relation-detail-sub", text: identity || "—" })
+      ),
+      h("span", { class: "count-chip", text: interactionCount(contact.interaction_count) })
+    ),
+    h(
+      "div",
+      { class: "relation-stats" },
+      relationStat("Fiducia", scoreValue(contact.trust)),
+      relationStat("Intimità", scoreValue(contact.intimacy)),
+      relationStat("Prima interazione", fmtDate(contact.first_interaction_at)),
+      relationStat("Ultima interazione", fmtDate(contact.last_interaction_at, { time: true }))
+    ),
+    relationAbout(contact),
+    h(
+      "div",
+      { class: "relation-history" },
+      h(
+        "div",
+        { class: "relation-history-head" },
+        h("h3", { text: "Storico interazioni" }),
+        h("span", { class: "count-chip", text: `${interactions.length}` })
+      ),
+      interactions.length
+        ? h("ol", { class: "relation-events" }, interactions.map(relationEvent))
+        : emptyState("Storico vuoto", "Nessuna interazione registrata per questo contatto.")
+    )
+  );
+}
+
+function renderRelations(data) {
+  const contacts = Array.isArray(data.contacts) ? data.contacts : [];
+  const total = Number(data.total_interactions) || 0;
+  $("#relations-count").textContent = `${contacts.length} contatti · ${total} interazioni`;
+
+  if (!contacts.length) {
+    clear(
+      $("#relations-content"),
+      emptyState("Nessuna relazione", "Il grafo delle relazioni è vuoto.")
+    );
+    return;
+  }
+
+  const initial = contacts.find((contact) => contact.user_id === state.relationId) || contacts[0];
+  const buttons = [];
+  const detailHost = h("div", { class: "relation-detail-host" });
+
+  function select(userId) {
+    const selected = contacts.find((contact) => contact.user_id === userId);
+    if (!selected) return;
+    state.relationId = selected.user_id;
+    for (const button of buttons) {
+      const active = button.dataset.userId === selected.user_id;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-pressed", active ? "true" : "false");
+    }
+    clear(detailHost, relationDetail(selected));
+  }
+
+  for (const contact of contacts) {
+    const button = h(
+      "button",
+      {
+        class: "relation-select",
+        type: "button",
+        dataset: { userId: contact.user_id },
+        "aria-pressed": "false",
+      },
+      h(
+        "span",
+        { class: "relation-select-top" },
+        h("span", { class: "relation-select-name", text: text(contact.display_name, contact.user_id) }),
+        h("span", { class: "relation-select-count", text: String(contact.interaction_count ?? 0) })
+      ),
+      h("span", { class: "relation-select-relation", text: text(contact.relation, "contatto") }),
+      h("span", {
+        class: "relation-select-date",
+        text: contact.last_interaction_at
+          ? `Ultima ${fmtDate(contact.last_interaction_at)}`
+          : "Nessuna interazione",
+      })
+    );
+    button.addEventListener("click", () => select(contact.user_id));
+    buttons.push(button);
+  }
+
+  select(initial.user_id);
+
+  clear(
+    $("#relations-content"),
+    h(
+      "div",
+      { class: "relations-layout" },
+      h(
+        "aside",
+        { class: "panel relations-index" },
+        h(
+          "div",
+          { class: "panel-header" },
+          h("h3", { text: "Contatti" }),
+          h("span", { class: "count-chip", text: `${contacts.length}` })
+        ),
+        h("div", { class: "relation-list" }, buttons)
+      ),
+      h("section", { class: "panel relations-detail" }, detailHost)
+    )
+  );
+}
+
+async function loadRelations(force = false) {
+  if (state.loaded.relations && !force) return;
+  const content = $("#relations-content");
+  setLoading(content, "Caricamento delle relazioni…");
+  try {
+    const data = await api("/api/relations");
+    state.loaded.relations = data;
+    renderRelations(data);
+    setNotice("");
+  } catch (error) {
+    setNotice(`Impossibile caricare le relazioni: ${error.message}`);
+    clear(content, emptyState("Relazioni non disponibili", error.message));
   }
 }
 
@@ -1685,6 +1917,7 @@ async function loadSettings(force = false) {
 
 const LOADERS = {
   overview: loadOverview,
+  relations: loadRelations,
   timeline: loadTimeline,
   traits: loadTraits,
   semantic: loadSemantic,
