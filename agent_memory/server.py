@@ -23,6 +23,7 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
 
+from .autonomy import AutonomyService
 from .browser import BrowserController
 from .config import project_root
 from .embeddings import Embedder
@@ -48,6 +49,7 @@ def create_server(
     """Costruisce il server MCP con i tool della memoria conscia."""
 
     browser_controller = browser or BrowserController(root)
+    autonomy = AutonomyService(root, browser_controller)
     files = FileSandbox(root)
     service = MemoryService(root)
     semantic = SemanticService(root)
@@ -64,7 +66,10 @@ def create_server(
             "tratti latenti o il diario dell'ombra: quei contenuti sono mediati "
             "dal motore dell'ombra. Sono disponibili anche i tool ``browser_*`` "
             "per le origini HTTPS in whitelist e i tool ``list_files``, "
-            "``read_file`` e ``write_file`` per la cartella di lavoro del profilo."
+            "``read_file`` e ``write_file`` per la cartella di lavoro del profilo. "
+            "Il client può pianificare autonomous_claim per prendere incarichi pendenti. "
+            "Usa autonomous_observe, autonomous_act con action_id stabile e autonomous_verify; "
+            "non ripetere effetti incerti. La verifica UI non certifica un invio remoto."
         ),
         host=host,
         port=port,
@@ -111,6 +116,7 @@ def create_server(
         channel: str = "chat",
         sentiment: str | None = None,
         memory_id: str | None = None,
+        interaction_id: str | None = None,
     ) -> dict[str, Any]:
         """Registra i messaggi appena scambiati e aggiorna il carico cognitivo.
 
@@ -131,7 +137,65 @@ def create_server(
                 channel=channel,
                 sentiment=sentiment,
                 memory_id=memory_id,
+                interaction_id=interaction_id,
             )
+        except AgentMemoryError as exc:
+            raise ToolError(str(exc)) from exc
+
+    @mcp.tool()
+    def interaction_history(user_id: str, offset: int = 0, limit: int = 50) -> dict[str, Any]:
+        """Legge una pagina SQL dello storico, senza espandere tutto il grafo."""
+        try:
+            service.config.load_all()
+            return service.config.operational.history(user_id, offset=offset, limit=limit)
+        except AgentMemoryError as exc:
+            raise ToolError(str(exc)) from exc
+
+    @mcp.tool()
+    def autonomous_claim(url: str) -> dict[str, Any]:
+        """Acquisisce un impulso senza aprire siti. Il client pianifica questa chiamata."""
+        try:
+            return autonomy.claim(url)
+        except AgentMemoryError as exc:
+            raise ToolError(str(exc)) from exc
+
+    @mcp.tool()
+    def autonomous_status(run_id: str) -> dict[str, Any]:
+        """Legge stato durevole; un'azione interrotta resta incerta e non va ripetuta."""
+        try:
+            return autonomy.status(run_id)
+        except AgentMemoryError as exc:
+            raise ToolError(str(exc)) from exc
+
+    @mcp.tool()
+    def autonomous_observe(run_id: str) -> dict[str, Any]:
+        """Legge pagina ed elementi senza compiere azioni sul sito."""
+        try:
+            return autonomy.observe(run_id)
+        except AgentMemoryError as exc:
+            raise ToolError(str(exc)) from exc
+
+    @mcp.tool()
+    def autonomous_act(run_id: str, action_id: str, action: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Esegue open/click/fill/press/wait una sola volta per action_id; incerto significa non ripetere."""
+        try:
+            return autonomy.act(run_id, action_id, action, arguments)
+        except AgentMemoryError as exc:
+            raise ToolError(str(exc)) from exc
+
+    @mcp.tool()
+    def autonomous_verify(run_id: str, text: str) -> dict[str, Any]:
+        """Verifica testo nella UI e chiude l'impulso originale; non certifica la consegna remota."""
+        try:
+            return autonomy.verify(run_id, text)
+        except AgentMemoryError as exc:
+            raise ToolError(str(exc)) from exc
+
+    @mcp.tool()
+    def autonomous_abort(run_id: str) -> dict[str, Any]:
+        """Interrompe un incarico senza dichiarare eseguito il suo obiettivo."""
+        try:
+            return autonomy.abort(run_id)
         except AgentMemoryError as exc:
             raise ToolError(str(exc)) from exc
 

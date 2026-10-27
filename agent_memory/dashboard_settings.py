@@ -119,7 +119,7 @@ class DashboardSettings:
         if not isinstance(user_id, str) or not user_id.strip() or len(user_id) > 100:
             raise ValidationError("user_id: attesa una stringa di 1–100 caratteri.")
         user_id = user_id.strip()
-        with self.config._lock:
+        with self.config.transaction() as conn:
             graph = self.config.get("social_graph")
             person = next((p for p in graph["people"] if p["user_id"] == user_id), None)
             if action == "create" and person is not None:
@@ -130,6 +130,7 @@ class DashboardSettings:
                 if payload.get("confirmation") != "RIMUOVI":
                     raise ValidationError("Scrivi RIMUOVI per confermare.")
                 graph["people"] = [p for p in graph["people"] if p["user_id"] != user_id]
+                conn.execute("DELETE FROM interaction_events WHERE user_id=?", (user_id,))
             else:
                 candidate = copy.deepcopy(person) if person is not None else {
                     "user_id": user_id,

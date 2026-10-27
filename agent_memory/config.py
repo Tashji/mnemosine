@@ -16,6 +16,7 @@ import copy
 import json
 import os
 import threading
+from contextlib import contextmanager
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .errors import ConfigError, ValidationError
 from .migrations import migrate_json_document, write_json_atomic
+from .operational import OPERATIONAL_NAMES, OperationalStore
 
 CONFIG_FILENAMES: dict[str, str] = {
     "identity": "identity.json",
@@ -352,6 +354,8 @@ class ConfigStore:
         self.root = Path(root).expanduser().resolve() if root else project_root()
         self.config_dir = self.root / "config"
         self._lock = threading.RLock()
+        self._transaction_conn = None
+        self.operational = OperationalStore(self.root)
 
     def path_for(self, name: str) -> Path:
         if name not in CONFIG_FILENAMES:
@@ -374,10 +378,15 @@ class ConfigStore:
                     "Indica la directory del profilo con --root (quella che "
                     "contiene config/ e data/)."
                 )
+            database = self.root / "data" / "timeline_episodic.db"
+            if self._transaction_conn is not None:
+                operational = self.operational.documents(self._transaction_conn)
+            else:
+                operational = self.operational.read() if database.exists() else {}
             configs: dict[str, Any] = {}
             migrated: dict[str, dict[str, Any]] = {}
             for name, filename in CONFIG_FILENAMES.items():
-                raw = _read_json(self.config_dir / filename)
+                raw = operational[name] if name in operational else _read_json(self.config_dir / filename)
                 if not isinstance(raw, dict):
                     raise ConfigError(f"{filename}: atteso un oggetto JSON.")
                 document, changed = migrate_json_document(name, raw)
@@ -393,7 +402,50 @@ class ConfigStore:
                         f"{name}: il profilo è a una versione precedente e va riscritto, "
                         f"ma la directory non è scrivibile: {exc}"
                     ) from exc
+            if database.exists() and not operational and self._transaction_conn is None:
+                self.operational.initialize(configs)
+                configs.update(self.operational.read())
+                self.operational.export(configs)
             return configs
+
+    @contextmanager
+    def transaction(self):
+        """Unica transazione per documenti operativi, storico e ricevute."""
+        with self._lock:
+            if self._transaction_conn is not None:
+                yield self._transaction_conn
+                return
+            self.load_all()
+            if not (self.root / "data" / "timeline_episodic.db").exists():
+                # Configuration-only profiles (before DB creation) retain JSON access.
+                yield None
+                return
+            conn = self.operational.connect()
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                self._transaction_conn = conn
+                yield conn
+                documents = self.operational.documents(conn)
+                conn.commit()
+            except BaseException:
+                conn.rollback()
+                raise
+            finally:
+                self._transaction_conn = None
+                conn.close()
+            self.operational.export(documents)
+
+    def _save_document(self, name: str, document: dict[str, Any]) -> None:
+        if name not in OPERATIONAL_NAMES:
+            self._atomic_write(self.path_for(name), document)
+        elif self._transaction_conn is not None:
+            self.operational.put(self._transaction_conn, name, document)
+        else:
+            with self.transaction() as conn:
+                if conn is None:
+                    self._atomic_write(self.path_for(name), document)
+                else:
+                    self.operational.put(conn, name, document)
 
     def get(self, name: str) -> dict[str, Any]:
         if name not in CONFIG_FILENAMES:
@@ -425,7 +477,7 @@ class ConfigStore:
             )
             configs[name] = candidate
             validate_configs(configs)
-            self._atomic_write(self.path_for(name), candidate)
+            self._save_document(name, candidate)
             return copy.deepcopy(candidate)
 
     def update_identity(self, patch: dict[str, Any]) -> dict[str, Any]:
@@ -481,7 +533,7 @@ class ConfigStore:
         if not isinstance(patch, dict) or not patch:
             raise ValidationError("Il patch dello stato corrente deve essere un oggetto non vuoto.")
 
-        with self._lock:
+        with self.transaction():
             configs = self.load_all()
             state = copy.deepcopy(configs["current_state"])
 
@@ -517,7 +569,7 @@ class ConfigStore:
                 validate_configs(configs)
             except ConfigError as exc:
                 raise ValidationError(f"Stato corrente non valido: {exc}") from exc
-            self._atomic_write(self.path_for("current_state"), state)
+            self._save_document("current_state", state)
             return copy.deepcopy(state)
 
     @staticmethod

@@ -677,7 +677,7 @@ class DashboardData:
             count = person.get("interaction_count", 0)
             if isinstance(count, bool) or not isinstance(count, int) or count < 0:
                 count = 0
-            history = self._interaction_history(person)
+            history = self.memory.config.operational.history(user_id, limit=1)["entries"]
             last_summary = ""
             if history:
                 summary = history[0].get("summary")
@@ -765,18 +765,18 @@ class DashboardData:
             "entries": listing["entries"],
         }
 
-    def relations(self, *, offset: int = 0, limit: int = 50) -> dict[str, Any]:
+    def relations(self, *, offset: int = 0, limit: int = 50, user_id: str | None = None) -> dict[str, Any]:
         if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
             raise ValidationError("offset deve essere un intero non negativo.")
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
             raise ValidationError("limit deve essere tra 1 e 100.")
         contacts = self._contacts(include_details=True)
         for contact in contacts:
-            history = contact["interactions"]
-            contact["history_total"] = len(history)
+            page = self.memory.config.operational.history(contact["user_id"], offset=offset, limit=limit) if user_id is None or contact["user_id"] == user_id else {"total": self.memory.config.operational.history(contact["user_id"], limit=1)["total"], "entries": []}
+            contact["history_total"] = page["total"]
             contact["history_offset"] = offset
             contact["history_limit"] = limit
-            contact["interactions"] = history[offset:offset + limit]
+            contact["interactions"] = page["entries"]
         return {
             "generated_at": datetime.now().astimezone().isoformat(
                 timespec="seconds"
@@ -1462,7 +1462,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                     limit = int(self._first(params, "limit", "50"))
                 except ValueError as exc:
                     raise ValidationError("offset e limit devono essere interi.") from exc
-                self._send_json(self.server.data.relations(offset=offset, limit=limit))
+                self._send_json(self.server.data.relations(offset=offset, limit=limit, user_id=self._first(params, "user_id") or None))
             elif path == SETTINGS_PATH:
                 self._send_json(DashboardSettings(self.server.data.root).snapshot())
             elif path == "/api/timeline":

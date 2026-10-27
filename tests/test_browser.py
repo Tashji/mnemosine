@@ -943,6 +943,17 @@ class BrowserReloadTests(unittest.TestCase):
         self.assertIn("ricaricando", str(caught.exception))
         self.assertEqual(page.waits, READ_ATTEMPTS)
 
+    def test_external_effect_is_not_repeated_after_navigation_error(self) -> None:
+        backend = object.__new__(PlaywrightBackend)
+        backend._page = object()
+        calls = []
+        def effect(_page):
+            calls.append("sent")
+            raise RuntimeError("Execution context was destroyed")
+        with mock.patch.object(backend, "_wait_until_settled"), self.assertRaises(BrowserBusyError):
+            backend._with_page(effect, message="Invio", retry=False)
+        self.assertEqual(calls, ["sent"])
+
     def test_settled_page_is_read_normally(self) -> None:
         class SettledPage:
             def wait_for_load_state(self, _state: str, timeout: int) -> None:

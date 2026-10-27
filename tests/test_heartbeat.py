@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_memory import heartbeat
+from agent_memory.config import ConfigStore
 from agent_memory.errors import ValidationError
 from agent_memory.heartbeat import (
     HEARTBEAT_DEFAULTS,
@@ -47,12 +48,10 @@ class HeartbeatTestCase(unittest.TestCase):
     # -- strumenti ----------------------------------------------------------
 
     def read_json(self, name: str) -> dict[str, Any]:
-        return json.loads((self.root / "config" / f"{name}.json").read_text("utf-8"))
+        return ConfigStore(self.root).get(name)
 
     def write_json(self, name: str, data: dict[str, Any]) -> None:
-        (self.root / "config" / f"{name}.json").write_text(
-            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        ConfigStore(self.root).write(name, data)
 
     def patch_state(self, **fields: Any) -> None:
         state = self.read_json("current_state")
@@ -316,10 +315,12 @@ class HeartbeatWriteTests(HeartbeatTestCase):
             self.engine().record_interaction(user_id="user_marco", summary=f"entry {index}")
         graph = self.read_json("social_graph")
         marco = next(p for p in graph["people"] if p["user_id"] == "user_marco")
-        self.assertEqual(len(marco["interaction_history"]), 107)
+        store = ConfigStore(self.root).operational
+        self.assertEqual(store.history("user_marco")["total"], 107)
         self.assertEqual(marco["interaction_count"], 123)
-        self.assertTrue(any(e["summary"] == "entry 0" for e in marco["interaction_history"]))
-        self.assertEqual(len(HeartbeatEngine(self.root).config.get("social_graph")["people"][0]["interaction_history"]), 107)
+        entries = [e for offset in (0, 100) for e in store.history("user_marco", offset=offset, limit=100)["entries"]]
+        self.assertTrue(any(e["summary"] == "entry 0" for e in entries))
+        self.assertEqual(ConfigStore(self.root).operational.history("user_marco")["total"], 107)
 
     def test_record_interaction_updates_the_relationship(self) -> None:
         result = self.engine().record_interaction(
@@ -335,9 +336,10 @@ class HeartbeatWriteTests(HeartbeatTestCase):
         marco = next(person for person in graph["people"] if person["user_id"] == "user_marco")
         self.assertEqual(marco["interaction_count"], 19)
         self.assertEqual(marco["last_interaction_at"], "2026-10-25T15:00:00+01:00")
-        self.assertEqual(marco["interaction_history"][0]["summary"], "Conversazione serale")
+        latest = ConfigStore(self.root).operational.history("user_marco")["entries"][0]
+        self.assertEqual(latest["summary"], "Conversazione serale")
         self.assertEqual(
-            marco["interaction_history"][0]["timestamp"],
+            latest["timestamp"],
             "2026-10-25T15:00:00+01:00",
         )
 
@@ -460,7 +462,7 @@ class HeartbeatCommandTests(HeartbeatTestCase):
         graph = self.read_json("social_graph")
         marco = next(person for person in graph["people"] if person["user_id"] == "user_marco")
         self.assertEqual(marco["interaction_count"], 19)
-        latest = marco["interaction_history"][0]
+        latest = ConfigStore(self.root).operational.history("user_marco")["entries"][0]
         self.assertEqual(latest["summary"], "Ciao Marco")
         self.assertEqual(latest["channel"], "whatsapp")
         self.assertEqual(latest["sentiment"], "positivo")

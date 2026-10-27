@@ -43,7 +43,7 @@ BASELINE_VERSION = 1
 # Per ogni database: nome del file di schema dentro il pacchetto e versione
 # supportata dal codice corrente.
 DATABASE_SCHEMAS: dict[str, tuple[str, int]] = {
-    "timeline_episodic": ("timeline_episodic.sql", 1),
+    "timeline_episodic": ("timeline_episodic.sql", 2),
     "shadow_diary": ("shadow_diary.sql", 1),
     "semantic_memory": ("semantic_memory.sql", 1),
     "vector_index": ("vector_index.sql", 1),
@@ -56,6 +56,18 @@ DATABASE_SCHEMAS: dict[str, tuple[str, int]] = {
 SQLITE_MIGRATIONS: dict[str, dict[int, Callable[[sqlite3.Connection], None]]] = {
     name: {} for name in DATABASE_SCHEMAS
 }
+
+def _timeline_v2(conn: sqlite3.Connection) -> None:
+    conn.execute("CREATE TABLE IF NOT EXISTS operational_documents (name TEXT PRIMARY KEY, document TEXT NOT NULL)")
+    conn.execute("CREATE TABLE IF NOT EXISTS interaction_events (sequence INTEGER PRIMARY KEY AUTOINCREMENT, event_id TEXT NOT NULL UNIQUE, user_id TEXT NOT NULL, timestamp TEXT NOT NULL, entry TEXT NOT NULL)")
+    conn.execute("CREATE INDEX IF NOT EXISTS interactions_by_person ON interaction_events(user_id, timestamp DESC, sequence DESC)")
+    conn.execute("CREATE TABLE IF NOT EXISTS interaction_receipts (id TEXT PRIMARY KEY, payload TEXT NOT NULL, result TEXT NOT NULL)")
+    conn.execute("CREATE TABLE IF NOT EXISTS autonomous_runs (id TEXT PRIMARY KEY, impulse TEXT NOT NULL UNIQUE, state TEXT NOT NULL, url TEXT NOT NULL, created_at TEXT NOT NULL, steps INTEGER NOT NULL DEFAULT 0, observation TEXT)")
+    conn.execute("CREATE TABLE IF NOT EXISTS autonomous_actions (run_id TEXT NOT NULL, id TEXT NOT NULL, payload TEXT NOT NULL, result TEXT, PRIMARY KEY(run_id, id))")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS one_active_run ON autonomous_runs((1)) WHERE state IN ('ready', 'running', 'awaiting_verification', 'uncertain')")
+
+
+SQLITE_MIGRATIONS["timeline_episodic"] = {2: _timeline_v2}
 
 # Documenti JSON della configurazione e versione supportata dal codice.
 JSON_DOCUMENTS: dict[str, int] = {

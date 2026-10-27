@@ -747,7 +747,9 @@ class PlaywrightBackend:
                 )
             time.sleep(0.05)
 
-    def _with_page(self, action: Callable[[Any], Any], *, message: str) -> Any:
+    def _with_page(
+        self, action: Callable[[Any], Any], *, message: str, retry: bool = True
+    ) -> Any:
         """Esegue un'azione sulla pagina gestendo un ricaricamento in corso.
 
         Prima aspetta che il documento si stabilizzi, poi agisce; se nel
@@ -763,7 +765,7 @@ class PlaywrightBackend:
             return action(page)
 
         try:
-            return _call_with_navigation_retry(attempt)
+            return _call_with_navigation_retry(attempt) if retry else attempt()
         except AgentMemoryError:
             raise
         except Exception as exc:
@@ -819,14 +821,14 @@ class PlaywrightBackend:
     def click(self, selector: str) -> None:
         self._with_page(
             lambda page: page.click(selector, timeout=ACTION_TIMEOUT_MS),
-            message="Click non riuscito",
+            message="Click non riuscito", retry=False,
         )
         self.url = self._require_page().url
 
     def fill(self, selector: str, value: str) -> None:
         self._with_page(
             lambda page: page.fill(selector, value, timeout=ACTION_TIMEOUT_MS),
-            message="Compilazione non riuscita",
+            message="Compilazione non riuscita", retry=False,
         )
         self.url = self._require_page().url
 
@@ -927,7 +929,7 @@ class PlaywrightBackend:
             else:
                 page.keyboard.press(key)
 
-        self._with_page(act, message="Tasto non premuto")
+        self._with_page(act, message="Tasto non premuto", retry=False)
         self.url = self._require_page().url
 
     def wait(

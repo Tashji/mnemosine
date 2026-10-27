@@ -17,6 +17,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
 
 from agent_memory.browser import BrowserController, BrowserPolicy
+from agent_memory.config import ConfigStore
 from agent_memory.server import create_server
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -133,7 +134,7 @@ class McpServerTests(unittest.TestCase):
             person for person in graph["people"] if person["user_id"] == "user_marco"
         )
         self.assertEqual(marco["interaction_count"], 19)
-        latest = marco["interaction_history"][0]
+        latest = call_tool(self.mcp, "interaction_history", {"user_id": "user_marco"})["entries"][0]
         self.assertEqual(latest["summary"], "Messaggio di prova")
         self.assertEqual(latest["channel"], "whatsapp")
         self.assertEqual(latest["sentiment"], "positivo")
@@ -177,7 +178,7 @@ class McpServerTests(unittest.TestCase):
             "delivery": {"channel": "whatsapp", "authorized": True, "note": ""},
             "requires_message": True,
         }
-        state_path.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+        ConfigStore(self.root).write("current_state", state)
 
         integrations_path = self.root / "config" / "integrations.json"
         integrations = json.loads(integrations_path.read_text("utf-8"))

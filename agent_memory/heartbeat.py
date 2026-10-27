@@ -32,6 +32,7 @@ import copy
 import json
 import sys
 import time as time_module
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -42,6 +43,7 @@ from .config import ConfigStore
 from .db import Database
 from .errors import AgentMemoryError, ValidationError
 from .executor import MessageExecutor
+from .operational import canonical
 from .routine import RoutineEngine, availability_for
 
 HEARTBEAT_VERSION = "v1"
@@ -282,18 +284,12 @@ class HeartbeatEngine:
         if not isinstance(first, str) or not first:
             person["first_interaction_at"] = stamp
 
-        history = person.get("interaction_history")
-        history = history if isinstance(history, list) else []
-        person["interaction_history"] = [
-            {
-                "timestamp": stamp,
-                "channel": channel,
-                "summary": summary,
-                "memory_id": memory_id,
-                "sentiment": sentiment,
-            },
-            *history,
-        ]
+        entry = {"timestamp": stamp, "channel": channel, "summary": summary,
+                 "memory_id": memory_id, "sentiment": sentiment}
+        conn = self.config._transaction_conn
+        assert conn is not None
+        conn.execute("INSERT INTO interaction_events(event_id, user_id, timestamp, entry) VALUES (?, ?, ?, ?)",
+                     (uuid.uuid4().hex, user_id, stamp, canonical(entry)))
 
         self.config.write("social_graph", graph)
         return {
@@ -307,6 +303,37 @@ class HeartbeatEngine:
         }
 
     def record_interaction(
+        self, messages: int = 1, complexity: str = "normale", *,
+        user_id: str | None = None, summary: str = "", channel: str = DEFAULT_INTERACTION_CHANNEL,
+        sentiment: str | None = None, memory_id: str | None = None,
+        interaction_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Commit unico; lo stesso ID e payload restituiscono la ricevuta originale."""
+        request_id = self._clean_optional_token(interaction_id, "interaction_id")
+        if interaction_id is not None and request_id is None:
+            raise ValidationError("interaction_id non può essere vuoto.")
+        payload = canonical({"messages": messages, "complexity": complexity,
+            "user_id": user_id.strip() if isinstance(user_id, str) else user_id,
+            "summary": self._clean_interaction_summary(summary),
+            "channel": self._clean_optional_token(channel, "channel", default=DEFAULT_INTERACTION_CHANNEL),
+            "sentiment": self._clean_optional_token(sentiment, "sentiment"),
+            "memory_id": self._clean_optional_token(memory_id, "memory_id")})
+        with self.config.transaction() as conn:
+            if request_id is not None:
+                row = conn.execute("SELECT payload, result FROM interaction_receipts WHERE id=?", (request_id,)).fetchone()
+                if row is not None:
+                    if row["payload"] != payload:
+                        raise ValidationError("interaction_id già utilizzato con dati diversi.")
+                    return json.loads(row["result"])
+            self.state = self.config.get("current_state")
+            result = self._record_interaction(messages, complexity, user_id=user_id,
+                summary=summary, channel=channel, sentiment=sentiment, memory_id=memory_id)
+            if request_id is not None:
+                conn.execute("INSERT INTO interaction_receipts(id, payload, result) VALUES (?, ?, ?)",
+                             (request_id, payload, canonical(result)))
+            return result
+
+    def _record_interaction(
         self,
         messages: int = 1,
         complexity: str = "normale",
@@ -771,6 +798,7 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="TONO",
         help="Tono facoltativo dell'interazione (es. positivo, neutro).",
     )
+    parser.add_argument("--interaction-id", default=None, help="ID stabile per retry senza doppi conteggi.")
     parser.add_argument(
         "--memory-id",
         default=None,
@@ -842,6 +870,7 @@ def main(argv: list[str] | None = None) -> int:
                 channel=args.channel,
                 sentiment=args.sentiment,
                 memory_id=args.memory_id,
+                interaction_id=args.interaction_id,
             )
             if args.json:
                 print(json.dumps(result, ensure_ascii=False, indent=2))

@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-370%20passing-2ea043?logo=githubactions&logoColor=white" alt="370 test superati"></a>
+  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-407%20passing-2ea043?logo=githubactions&logoColor=white" alt="407 test superati"></a>
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12">
   <img src="https://img.shields.io/badge/MCP-Model%20Context%20Protocol-6ee7d8" alt="Model Context Protocol">
   <img src="https://img.shields.io/badge/storage-SQLite%20%2B%20FAISS-0b1422" alt="SQLite e FAISS">
@@ -1011,7 +1011,29 @@ Il server MCP espone `browser_status`, `browser_open`, `browser_read`, `browser_
 
 Le azioni dirette richiedono anche `browser.interaction_origins`: origini HTTPS esatte, senza wildcard. Il vecchio flag globale non concede questo consenso. In dashboard aggiungere origini richiede di digitare `AUTORIZZO`. La whitelist di navigazione resta obbligatoria. **Contatti, orari e limiti dell’outbox non proteggono le azioni dirette del browser**: autorizzare un’origine significa accettare che click, testo e tasti possano produrre effetti sul sito. Non è un controllo automatico del destinatario. Riavviare il server MCP dopo ogni modifica della policy.
 
-Lo storico relazionale non è più troncato a 100 voci: resta persistente nel JSON del profilo. `/api/relations?offset=0&limit=50` espone pagine da 1–100 voci per contatto e la dashboard offre “Più recenti” e “Più vecchie”. Le migrazioni conservano le voci esistenti; quelle già eliminate dal vecchio limite non sono recuperabili senza backup. La paginazione limita la risposta HTTP, non la lettura del JSON su disco.
+Lo storico relazionale non è più troncato a 100 voci: è persistente in SQLite, con indice per contatto e ordinamento stabile. `/api/relations?offset=0&limit=50` espone pagine da 1–100 voci per contatto e la dashboard offre “Più recenti” e “Più vecchie”. Le migrazioni conservano le voci esistenti; quelle già eliminate dal vecchio limite non sono recuperabili senza backup. La paginazione usa query SQL LIMIT/OFFSET; lo storico non viene espanso nel grafo JSON. Il parametro HTTP `user_id` seleziona il contatto di cui caricare la pagina.
+
+### Interazioni transazionali e incarichi MCP (v0.7)
+
+`record_interaction` accetta `interaction_id` (CLI: `--interaction-id`). Riutilizzare lo stesso ID e gli stessi dati restituisce il risultato originale, senza aumentare carico o contatori; dati diversi con lo stesso ID sono rifiutati. Senza ID ogni chiamata resta una nuova interazione. Conservare l’ID quando si ritenta una richiesta interrotta.
+
+Al primo accesso il profilo importa `current_state` e `social_graph` nel database esistente `data/timeline_episodic.db`, insieme alle interazioni ancora disponibili. L’importazione è transazionale e non si ripete. Storico, contatori, carico e ricevuta di `record_interaction` sono confermati insieme. Non si possono recuperare voci eliminate dalle vecchie versioni.
+
+**Cambio operativo:** `config/current_state.json` e `config/social_graph.json` diventano esportazioni di compatibilità, non la fonte autorevole. Modificarli manualmente dopo l’importazione non cambia il profilo. Usare dashboard e API ConfigStore. Gli altri documenti restano JSON. Gli errori di esportazione vengono segnalati con un warning, ma non trasformano un commit SQLite riuscito in una richiesta fallita. Per rigenerare le esportazioni: `ConfigStore(root).operational.export(ConfigStore(root).load_all())`. Il profilo va salvato integralmente, database incluso.
+
+I tool MCP sono ora **43**. `interaction_history(user_id, offset=0, limit=50)` legge una pagina SQL dello storico. Il grafo restituisce i metadati, non tutte le interazioni.
+
+Il client che ospita l’agente può pianificare questo flusso, senza integrazioni per sito:
+
+1. `autonomous_claim(url)` acquisisce un impulso pendente valido verso un URL in whitelist; non apre il browser. Senza impulso restituisce `available: false` e non applica un nuovo battito. L’Heartbeat si esegue separatamente, per esempio con `mnemosine-heartbeat --loop`.
+2. `autonomous_act(run_id, action_id, action, arguments)` esegue `open`, `click`, `fill`, `press` o `wait` usando il controller esistente. Usare ID stabili per i retry. Un ID completato restituisce la ricevuta senza ripetere l’azione.
+3. `autonomous_observe(run_id)` legge testo ed elementi e permette all’agente di scegliere il passo successivo. `autonomous_status(run_id)` legge lo stato durevole.
+4. `autonomous_verify(run_id, text)` controlla il testo nella stessa pagina dell’ultima osservazione e chiude soltanto l’impulso originale. Restituisce `ui_verified`, mai una prova di consegna remota: `remote_delivery_verified` resta `false`.
+5. Se un’azione è interrotta o l’effetto è incerto, non viene ripetuta: osservare e richiedere intervento umano; `autonomous_abort(run_id)` interrompe l’incarico senza confermare invii né cancellare l’impulso.
+
+Una sola esecuzione attiva per profilo, massimo 20 passi e durata di 30 minuti. Prima delle azioni sono ricontrollati manutenzione, impulso originale e policy aggiornata, incluso il consenso per origine. Le credenziali restano nella sessione browser del profilo. Gli errori dopo un possibile effetto esterno non attivano retry automatici. La verifica UI non scrive una finta consegna nell’outbox.
+
+**Mnemosine non risveglia un client inattivo:** il client deve avviare il turno o pianificare le chiamate. Non c’è un LLM incorporato né una dipendenza da un particolare host MCP. Un sito può includere istruzioni ostili: i suoi contenuti sono dati, non nuove autorizzazioni; l’agente deve mantenere obiettivo e consensi dell’amministratore.
 
 ### 14.7. File locali dell'agente
 
@@ -1039,7 +1061,7 @@ Il server MCP può essere collegato a qualunque client e a qualunque modello, co
 
 - `browser_elements` fa per campi e bottoni quello che `browser_links` fa per i link: indice numerato, etichetta e ruolo, nessun selettore da indovinare. Il numero resta valido finché la pagina non cambia, poi l'errore chiede di rilanciare l'elenco.
 
-- `browser_press` e `browser_wait` chiudono il ciclo di un invio: scrivi con `browser_fill`, premi `Enter`, attendi che il testo compaia. La conferma è una lettura della pagina, non una ricevuta: per questo l'invio resta comunque dietro i controlli dell'esecutore.
+- `browser_press` e `browser_wait` chiudono il ciclo di un invio: scrivi con `browser_fill`, premi `Enter`, attendi che il testo compaia. La conferma è una lettura della pagina, non una ricevuta: i limiti dell’executor proteggono l’outbox, non queste azioni dirette del browser.
 
 - `browser_back` torna alla pagina precedente usando una cronologia tenuta dal server, non dal contesto del modello, che due turni dopo non ricorda più dove era.
 

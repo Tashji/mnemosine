@@ -920,7 +920,7 @@ function renderRelations(data) {
   function select(userId) {
     const selected = contacts.find((contact) => contact.user_id === userId);
     if (!selected) return;
-    if (state.relationId !== selected.user_id && state.relationOffset) {
+    if (state.relationId !== selected.user_id && (state.relationOffset || selected.history_total > selected.interactions.length)) {
       state.relationId = selected.user_id;
       state.relationOffset = 0;
       loadRelations(true);
@@ -994,7 +994,7 @@ async function loadRelations(force = false) {
   const content = $("#relations-content");
   setLoading(content, "Caricamento delle relazioni…");
   try {
-    const data = await api(`/api/relations?offset=${state.relationOffset}&limit=50`);
+    const data = await api(`/api/relations?offset=${state.relationOffset}&limit=50${state.relationId ? `&user_id=${encodeURIComponent(state.relationId)}` : ""}`);
     state.loaded.relations = data;
     renderRelations(data);
     setNotice("");

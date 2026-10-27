@@ -64,9 +64,10 @@ class MigrationTestCase(unittest.TestCase):
 class SqliteMigrationTests(MigrationTestCase):
     def test_current_database_is_already_migrated(self) -> None:
         health = Database(self.root).health()["timeline_episodic"]
-        self.assertEqual(health["schema_version"], 1)
-        self.assertEqual(health["schema_supported"], 1)
-        self.assertFalse(health["needs_migration"])
+        self.assertEqual(health["schema_supported"], 2)
+        with Database(self.root).timeline() as conn:
+            self.assertEqual(stored_database_version(conn), 2)
+        self.assertFalse(Database(self.root).health()["timeline_episodic"]["needs_migration"])
 
     def test_database_without_version_is_stamped_without_touching_rows(self) -> None:
         conn = sqlite3.connect(self.db_path())
@@ -75,7 +76,7 @@ class SqliteMigrationTests(MigrationTestCase):
         self.drop_schema_meta()
 
         with Database(self.root).timeline() as opened:
-            self.assertEqual(stored_database_version(opened), 1)
+            self.assertEqual(stored_database_version(opened), 2)
             after = opened.execute("SELECT COUNT(*) FROM episodic_memories").fetchone()[0]
 
         self.assertEqual(before, after)
@@ -91,7 +92,7 @@ class SqliteMigrationTests(MigrationTestCase):
                     "SELECT name FROM sqlite_master WHERE type IN ('table', 'view')"
                 )
             }
-            self.assertEqual(stored_database_version(opened), 1)
+            self.assertEqual(stored_database_version(opened), 2)
 
         self.assertLessEqual(TIMELINE_TABLES, tables)
 
@@ -218,7 +219,7 @@ class SqliteMigrationTests(MigrationTestCase):
         with (
             patch.dict(
                 migr.DATABASE_SCHEMAS,
-                {"timeline_episodic": ("timeline_episodic.sql", 2)},
+                {"timeline_episodic": ("timeline_episodic.sql", 3)},
             ),
             self.assertRaises(DatabaseUnavailable) as ctx,
             Database(self.root).timeline(),
@@ -247,7 +248,7 @@ class LegacyProfileTests(MigrationTestCase):
 
         # Ogni database viene migrato al primo uso, non tutti insieme.
         conn = sqlite3.connect(self.db_path("timeline_episodic"))
-        self.assertEqual(stored_database_version(conn), 1)
+        self.assertEqual(stored_database_version(conn), 2)
         conn.close()
 
         database = Database(self.root)

@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_memory import heartbeat
+from agent_memory.config import ConfigStore
 from agent_memory.dashboard import create_server
 from agent_memory.dashboard_auth import DashboardAuth
 from agent_memory.dashboard_settings import DashboardSettings
@@ -65,19 +66,23 @@ class SettingsUnitTests(unittest.TestCase):
         self.assertEqual(contact["interaction_count"], 0)
         self.assertIsNone(contact["last_interaction_at"])
         marco = next(p for p in graph["people"] if p["user_id"] == "user_marco")
-        history = marco["interaction_history"]
+        history = self.settings.config.operational.history("user_marco")["entries"]
         self.settings.save_contact(self.contact_payload(
             action="update", user_id="user_marco", display_name="Marco aggiornato"
         ))
         marco = next(p for p in self.settings.config.get("social_graph")["people"]
                      if p["user_id"] == "user_marco")
-        self.assertEqual(marco["interaction_history"], history)
+        self.assertEqual(self.settings.config.operational.history("user_marco")["entries"], history)
         self.assertEqual(marco["interaction_count"], 18)
         self.assertEqual(marco["boundaries"], ["Non insistere"])
         self.assertEqual(marco["preferences"], ["programmazione", "videogiochi", "serie TV"])
         self.settings.save_contact({"action": "remove", "user_id": "user_test", "confirmation": "RIMUOVI"})
         self.assertNotIn("user_test", [p["user_id"] for p in self.settings.config.get("social_graph")["people"]])
         self.assertEqual(self.settings._read_integrations(), integrations)
+        self.settings.save_contact({"action": "remove", "user_id": "user_marco", "confirmation": "RIMUOVI"})
+        self.assertEqual(self.settings.config.operational.history("user_marco")["total"], 0)
+        self.settings.save_contact(self.contact_payload(user_id="user_marco"))
+        self.assertEqual(self.settings.config.operational.history("user_marco")["total"], 0)
 
     def test_invalid_contact_edits_do_not_write(self) -> None:
         before = self.settings.config.get("social_graph")
@@ -408,9 +413,7 @@ class SettingsHTTPTests(unittest.TestCase):
             "requires_message": True,
         }
         state["heartbeat"]["spontaneous_message_pending"] = True
-        path.write_text(
-            json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        ConfigStore(self.root).write("current_state", state)
 
     def test_settings_require_auth_and_csrf(self) -> None:
         self.assertEqual(self._request("/api/settings").status, 401)
