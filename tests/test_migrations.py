@@ -301,6 +301,14 @@ class JsonMigrationTests(MigrationTestCase):
         self.assertIn("più recente", str(ctx.exception))
         self.assertEqual(self.json_path().read_bytes(), before)
 
+    def test_social_history_migration_preserves_existing_entries(self) -> None:
+        document = self.read_json("social_graph")
+        document["schema_version"] = "1.0"
+        migrated, changed = migrate_json_document("social_graph", document)
+        self.assertTrue(changed)
+        self.assertEqual(migrated["schema_version"], "2.0")
+        self.assertEqual(migrated["people"], document["people"])
+
     def test_current_state_v1_gains_the_heartbeat_settings(self) -> None:
         data = self.read_json("current_state")
         data["schema_version"] = "1.0"

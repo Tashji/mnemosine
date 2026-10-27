@@ -47,6 +47,7 @@ from .errors import (
     ConfigError,
     ValidationError,
 )
+from .migrations import migrate_integrations
 
 INTEGRATIONS_FILENAME = "integrations.json"
 DEFAULT_TIMEOUT_SECONDS = 30
@@ -274,6 +275,7 @@ class BrowserPolicy:
         *,
         enabled: bool = False,
         interaction_enabled: bool = False,
+        interaction_origins: Iterable[str] = (),
         service_workers: bool = False,
         user_agent: str | None = None,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
@@ -302,6 +304,11 @@ class BrowserPolicy:
             or os.environ.get("AGENT_MEMORY_BROWSER_EXECUTABLE")
             or None
         )
+        if isinstance(interaction_origins, (str, bytes)) or not isinstance(interaction_origins, (list, tuple)):
+            raise ConfigError("browser.interaction_origins: attesa una lista di origini esatte.")
+        self._interaction_rules = tuple(OriginRule.parse(origin) for origin in interaction_origins)
+        if any(rule.wildcard for rule in self._interaction_rules):
+            raise ConfigError("browser.interaction_origins: i wildcard non sono consentiti.")
         self._rules = tuple(OriginRule.parse(origin) for origin in allowed_origins)
         self._resolver = resolver or _default_resolver
         self._resolved: dict[str, tuple[str, ...]] = {}
@@ -312,6 +319,10 @@ class BrowserPolicy:
     @property
     def allowed_origins(self) -> tuple[str, ...]:
         return tuple(rule.source for rule in self._rules)
+
+    @property
+    def interaction_origins(self) -> tuple[str, ...]:
+        return tuple(rule.source for rule in self._interaction_rules)
 
     @property
     def service_worker_mode(self) -> str:
@@ -339,6 +350,7 @@ class BrowserPolicy:
             raise ConfigError(f"Impossibile leggere {path}: {exc}") from exc
         if not isinstance(data, dict):
             raise ConfigError(f"{path}: atteso un oggetto JSON.")
+        data = migrate_integrations(data)
         browser = data.get("browser", {})
         if not isinstance(browser, dict):
             raise ConfigError(f"{path}: 'browser' deve essere un oggetto.")
@@ -375,6 +387,7 @@ class BrowserPolicy:
             origins,
             enabled=enabled,
             interaction_enabled=interaction_enabled,
+            interaction_origins=browser.get("interaction_origins", []),
             service_workers=service_workers,
             user_agent=user_agent,
             timeout_seconds=timeout,
@@ -476,6 +489,13 @@ class BrowserPolicy:
                 "la whitelist."
             )
         self.assert_allowed(url)
+        host = _normalize_host(urlsplit(url).hostname or "")
+        if not any(rule.host == host for rule in self._interaction_rules):
+            raise BrowserBlockedError(
+                "Interazione non autorizzata per questa origine: serve il consenso "
+                "esplicito dell'amministratore in Impostazioni. I limiti dell'outbox "
+                "non proteggono le azioni dirette del browser."
+            )
         return url
 
 
@@ -1360,6 +1380,7 @@ class BrowserController:
         return {
             "enabled": self.policy.enabled,
             "interaction_enabled": self.policy.interaction_enabled,
+            "interaction_origins": list(self.policy.interaction_origins),
             "allowed_origins": list(self.policy.allowed_origins),
             "navigation_timeout_seconds": self.policy.timeout_seconds,
             "playwright_available": _playwright_available(),

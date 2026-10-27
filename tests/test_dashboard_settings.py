@@ -110,6 +110,22 @@ class SettingsUnitTests(unittest.TestCase):
         self.assertEqual(snapshot["profile"]["full_name"], "Alessandro Vitale")
         self.assertEqual(snapshot["profile"]["backup_dir"], str(self.root / "backups"))
 
+    def test_origin_actions_require_new_explicit_consent(self) -> None:
+        payload = {
+            "enabled": True, "interaction_enabled": True, "service_workers": False,
+            "allowed_origins": ["example.org"], "navigation_timeout_seconds": 20,
+            "interaction_origins": ["https://example.org"],
+        }
+        before = self.settings._read_integrations()
+        with self.assertRaises(ValidationError):
+            self.settings.save_browser(payload)
+        self.assertEqual(self.settings._read_integrations(), before)
+        saved = self.settings.save_browser({**payload, "interaction_confirmation": "AUTORIZZO"})
+        self.assertEqual(saved["browser"]["interaction_origins"], ["https://example.org"])
+        self.settings.save_browser(payload)
+        saved = self.settings.save_browser({**payload, "interaction_origins": []})
+        self.assertEqual(saved["browser"]["interaction_origins"], [])
+
     def test_browser_roundtrip_and_validation(self) -> None:
         saved = self.settings.save_browser(
             {

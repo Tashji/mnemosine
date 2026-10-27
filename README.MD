@@ -1009,6 +1009,10 @@ python -m agent_memory.browser --open https://it.wikipedia.org --elements
 
 Il server MCP espone `browser_status`, `browser_open`, `browser_read`, `browser_links`, `browser_open_link`, `browser_back`, `browser_elements`, `browser_click`, `browser_fill`, `browser_press`, `browser_wait` e `browser_close`. `browser_click`, `browser_fill` e `browser_press` richiedono `interaction_enabled`. `browser_elements` restituisce l'indice numerato di campi, aree di scrittura e bottoni; `browser_click` e `browser_fill` accettano quell'indice al posto del selettore, e `browser_press` preme Enter, Tab o una freccia sulla pagina o su un elemento. `browser_wait` aspetta che un elemento compaia o che un testo sia nella pagina, così la conferma di un invio è una lettura e non una supposizione.
 
+Le azioni dirette richiedono anche `browser.interaction_origins`: origini HTTPS esatte, senza wildcard. Il vecchio flag globale non concede questo consenso. In dashboard aggiungere origini richiede di digitare `AUTORIZZO`. La whitelist di navigazione resta obbligatoria. **Contatti, orari e limiti dell’outbox non proteggono le azioni dirette del browser**: autorizzare un’origine significa accettare che click, testo e tasti possano produrre effetti sul sito. Non è un controllo automatico del destinatario. Riavviare il server MCP dopo ogni modifica della policy.
+
+Lo storico relazionale non è più troncato a 100 voci: resta persistente nel JSON del profilo. `/api/relations?offset=0&limit=50` espone pagine da 1–100 voci per contatto e la dashboard offre “Più recenti” e “Più vecchie”. Le migrazioni conservano le voci esistenti; quelle già eliminate dal vecchio limite non sono recuperabili senza backup. La paginazione limita la risposta HTTP, non la lettura del JSON su disco.
+
 ### 14.7. File locali dell'agente
 
 Il server non è un agente: fornisce capacità a un agente che vive altrove. Oltre alla memoria e al browser espone quindi tre tool sui file, `list_files`, `read_file` e `write_file`, confinati alla cartella `files/` del profilo (`profiles/<nome>/files`).

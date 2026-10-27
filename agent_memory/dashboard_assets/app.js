@@ -94,6 +94,7 @@ const state = {
   loaded: {},
   sequence: { timeline: 0, semantic: 0 },
   relationId: null,
+  relationOffset: 0,
   lastFocus: null,
 };
 
@@ -671,6 +672,8 @@ async function loadOverview(force = false) {
 
 function openRelation(userId) {
   state.relationId = userId;
+  state.relationOffset = 0;
+  delete state.loaded.relations;
   navigate("relations");
 }
 
@@ -881,11 +884,17 @@ function relationDetail(contact) {
         "div",
         { class: "relation-history-head" },
         h("h3", { text: "Storico interazioni" }),
-        h("span", { class: "count-chip", text: `${interactions.length}` })
+        h("span", { class: "count-chip", text: `${contact.history_total ?? interactions.length} registrate` })
       ),
       interactions.length
         ? h("ol", { class: "relation-events" }, interactions.map(relationEvent))
-        : emptyState("Storico vuoto", "Nessuna interazione registrata per questo contatto.")
+        : emptyState("Storico vuoto", "Nessuna interazione in questa pagina."),
+      h("div", { class: "settings-actions" },
+        h("button", { type: "button", class: "button", text: "Più recenti", disabled: !contact.history_offset,
+          onClick: () => { state.relationOffset = Math.max(0, contact.history_offset - contact.history_limit); loadRelations(true); } }),
+        h("button", { type: "button", class: "button", text: "Più vecchie", disabled: contact.history_offset + interactions.length >= contact.history_total,
+          onClick: () => { state.relationOffset = contact.history_offset + contact.history_limit; loadRelations(true); } })
+      )
     )
   );
 }
@@ -911,6 +920,12 @@ function renderRelations(data) {
   function select(userId) {
     const selected = contacts.find((contact) => contact.user_id === userId);
     if (!selected) return;
+    if (state.relationId !== selected.user_id && state.relationOffset) {
+      state.relationId = selected.user_id;
+      state.relationOffset = 0;
+      loadRelations(true);
+      return;
+    }
     state.relationId = selected.user_id;
     for (const button of buttons) {
       const active = button.dataset.userId === selected.user_id;
@@ -979,7 +994,7 @@ async function loadRelations(force = false) {
   const content = $("#relations-content");
   setLoading(content, "Caricamento delle relazioni…");
   try {
-    const data = await api("/api/relations");
+    const data = await api(`/api/relations?offset=${state.relationOffset}&limit=50`);
     state.loaded.relations = data;
     renderRelations(data);
     setNotice("");
@@ -1722,6 +1737,11 @@ function browserSettings(browser) {
         Boolean(browser.interaction_enabled),
         "Abilita le azioni sulla pagina; richiede il browser attivo."
       ),
+      settingsField("Origini autorizzate alle azioni", h("textarea", {
+        name: "interaction_origins", rows: "4", spellcheck: "false",
+      }, (browser.interaction_origins || []).join("\n")), "Una origine HTTPS esatta per riga, senza wildcard. Serve anche la whitelist di navigazione."),
+      h("p", { class: "settings-warning", text: "Click, testo e tasti possono inviare messaggi o compiere altre azioni. Contatti, orari e limiti dell'outbox NON proteggono queste azioni dirette, su nessun sito." }),
+      settingsField("Consenso per nuove origini", settingsInput("interaction_confirmation", "", "text", { placeholder: "Scrivi AUTORIZZO" })),
       settingsCheck(
         "service_workers",
         "Permetti i service worker",
@@ -1772,6 +1792,8 @@ function browserSettings(browser) {
         {
           enabled: formData.has("enabled"),
           interaction_enabled: formData.has("interaction_enabled"),
+          interaction_origins: String(formData.get("interaction_origins") || "").split(/\r?\n/).map((item) => item.trim()).filter(Boolean),
+          interaction_confirmation: String(formData.get("interaction_confirmation") || ""),
           service_workers: formData.has("service_workers"),
           user_agent: String(formData.get("user_agent") || "").trim() || null,
           allowed_origins: originsValue

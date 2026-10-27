@@ -311,6 +311,16 @@ class HeartbeatWriteTests(HeartbeatTestCase):
             state["heartbeat"]["last_interaction_at"], "2026-10-25T15:00:00+01:00"
         )
 
+    def test_history_survives_more_than_one_hundred_interactions(self) -> None:
+        for index in range(105):
+            self.engine().record_interaction(user_id="user_marco", summary=f"entry {index}")
+        graph = self.read_json("social_graph")
+        marco = next(p for p in graph["people"] if p["user_id"] == "user_marco")
+        self.assertEqual(len(marco["interaction_history"]), 107)
+        self.assertEqual(marco["interaction_count"], 123)
+        self.assertTrue(any(e["summary"] == "entry 0" for e in marco["interaction_history"]))
+        self.assertEqual(len(HeartbeatEngine(self.root).config.get("social_graph")["people"][0]["interaction_history"]), 107)
+
     def test_record_interaction_updates_the_relationship(self) -> None:
         result = self.engine().record_interaction(
             user_id="user_marco", summary="Conversazione serale"

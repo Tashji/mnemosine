@@ -33,7 +33,7 @@ from .config import ConfigStore
 from .errors import ConfigError, ValidationError
 from .executor import WhatsAppPolicy
 from .heartbeat import HeartbeatPolicy
-from .migrations import write_json_atomic
+from .migrations import migrate_integrations, write_json_atomic
 from .profile import (
     PROFILE_STATE_READY,
     PROJECT_ROOT,
@@ -184,7 +184,7 @@ class DashboardSettings:
                 raise ConfigError(
                     f"{self.path}: '{block_name}' deve essere un oggetto."
                 )
-        return document
+        return migrate_integrations(document)
 
     def snapshot(self) -> dict[str, Any]:
         """Restituisce ciò che la vista Impostazioni può mostrare e modificare."""
@@ -222,6 +222,7 @@ class DashboardSettings:
             "browser": {
                 "enabled": browser.enabled,
                 "interaction_enabled": browser.interaction_enabled,
+                "interaction_origins": list(browser.interaction_origins),
                 "service_workers": browser.service_workers,
                 "user_agent": browser.user_agent,
                 "allowed_origins": list(browser.allowed_origins),
@@ -305,7 +306,7 @@ class DashboardSettings:
 
     def _write_document(self, document: dict[str, Any]) -> None:
         self._validate_document(document)
-        document.setdefault("schema_version", 1)
+        document["schema_version"] = 2
         write_json_atomic(self.path, document)
 
     def save_browser(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -329,6 +330,12 @@ class DashboardSettings:
             raise ValidationError(
                 "allowed_origins: attesa una lista di stringhe."
             )
+        interaction_origins = payload.get("interaction_origins", [])
+        if not isinstance(interaction_origins, list) or not all(isinstance(item, str) for item in interaction_origins):
+            raise ValidationError("interaction_origins: attesa una lista di origini esatte.")
+        previous = BrowserPolicy.from_root(self.root).interaction_origins
+        if set(interaction_origins) - set(previous) and payload.get("interaction_confirmation") != "AUTORIZZO":
+            raise ValidationError("Scrivi AUTORIZZO: le azioni dirette non sono coperte dai limiti dell'outbox.")
         timeout = payload.get("navigation_timeout_seconds")
         if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
             raise ValidationError(
@@ -342,6 +349,7 @@ class DashboardSettings:
             {
                 "enabled": enabled,
                 "interaction_enabled": interaction_enabled,
+                "interaction_origins": interaction_origins,
                 "service_workers": service_workers,
                 "user_agent": user_agent,
                 "allowed_origins": [origin.strip() for origin in origins if origin.strip()],

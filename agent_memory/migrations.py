@@ -64,7 +64,7 @@ JSON_DOCUMENTS: dict[str, int] = {
     # La versione 2 aggiunge i parametri del ciclo autonomo in ``heartbeat``.
     "current_state": 2,
     "world_history": 1,
-    "social_graph": 1,
+    "social_graph": 2,
 }
 
 # Passi di migrazione dei JSON: ``{documento: {versione: funzione}}``. La
@@ -97,6 +97,31 @@ def _current_state_v2(document: dict[str, Any]) -> dict[str, Any]:
 
 
 JSON_MIGRATIONS["current_state"] = {2: _current_state_v2}
+
+
+def _social_graph_v2(document: dict[str, Any]) -> dict[str, Any]:
+    """Conserva tutto lo storico esistente: dalla v2 non viene più troncato."""
+    return json.loads(json.dumps(document))
+
+
+JSON_MIGRATIONS["social_graph"] = {2: _social_graph_v2}
+
+
+def migrate_integrations(document: dict[str, Any]) -> dict[str, Any]:
+    """La v2 richiede un consenso per origine, mai derivato dal flag globale."""
+    updated = json.loads(json.dumps(document))
+    try:
+        version = _parse_version(updated.get("schema_version", 1))
+    except ValueError as exc:
+        raise ConfigError("Versione integrations non valida.") from exc
+    if version > 2:
+        raise ConfigError("integrations: versione più recente di quella supportata.")
+    browser = updated.setdefault("browser", {})
+    if not isinstance(browser, dict):
+        raise ConfigError("integrations.browser: atteso un oggetto.")
+    browser.setdefault("interaction_origins", [])
+    updated["schema_version"] = 2
+    return updated
 
 
 def format_version(version: int) -> str:

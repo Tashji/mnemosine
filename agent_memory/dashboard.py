@@ -765,8 +765,18 @@ class DashboardData:
             "entries": listing["entries"],
         }
 
-    def relations(self) -> dict[str, Any]:
+    def relations(self, *, offset: int = 0, limit: int = 50) -> dict[str, Any]:
+        if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+            raise ValidationError("offset deve essere un intero non negativo.")
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+            raise ValidationError("limit deve essere tra 1 e 100.")
         contacts = self._contacts(include_details=True)
+        for contact in contacts:
+            history = contact["interactions"]
+            contact["history_total"] = len(history)
+            contact["history_offset"] = offset
+            contact["history_limit"] = limit
+            contact["interactions"] = history[offset:offset + limit]
         return {
             "generated_at": datetime.now().astimezone().isoformat(
                 timespec="seconds"
@@ -1447,7 +1457,12 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             elif path == "/api/overview":
                 self._send_json(self.server.data.overview())
             elif path == RELATIONS_PATH:
-                self._send_json(self.server.data.relations())
+                try:
+                    offset = int(self._first(params, "offset", "0"))
+                    limit = int(self._first(params, "limit", "50"))
+                except ValueError as exc:
+                    raise ValidationError("offset e limit devono essere interi.") from exc
+                self._send_json(self.server.data.relations(offset=offset, limit=limit))
             elif path == SETTINGS_PATH:
                 self._send_json(DashboardSettings(self.server.data.root).snapshot())
             elif path == "/api/timeline":

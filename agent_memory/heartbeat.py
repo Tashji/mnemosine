@@ -57,7 +57,6 @@ FULL_NIGHT_MINUTES = 360.0
 MAX_MESSAGES_PER_CALL = 100
 MAX_INTERACTION_SUMMARY_CHARS = 500
 MAX_INTERACTION_META_CHARS = 80
-MAX_INTERACTION_HISTORY = 100
 DEFAULT_INTERACTION_SUMMARY = "Interazione registrata."
 DEFAULT_INTERACTION_CHANNEL = "chat"
 
@@ -294,7 +293,7 @@ class HeartbeatEngine:
                 "sentiment": sentiment,
             },
             *history,
-        ][:MAX_INTERACTION_HISTORY]
+        ]
 
         self.config.write("social_graph", graph)
         return {

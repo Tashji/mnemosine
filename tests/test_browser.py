@@ -160,6 +160,7 @@ def make_policy(
         origins if origins is not None else ["https://example.com"],
         enabled=enabled,
         interaction_enabled=interaction,
+        interaction_origins=["https://example.com"] if interaction else [],
         service_workers=service_workers,
         user_agent=user_agent,
         resolver=resolver,
@@ -167,6 +168,32 @@ def make_policy(
 
 
 class BrowserPolicyTests(unittest.TestCase):
+    def test_existing_global_flag_does_not_grant_origin_consent(self) -> None:
+        backend = FakeBackend()
+        controller = BrowserController(policy=BrowserPolicy(
+            ["https://example.com"], enabled=True, interaction_enabled=True,
+            resolver=public_resolver,
+        ), backend=backend)
+        controller.open("https://example.com")
+        for action in (lambda: controller.click("button"), lambda: controller.fill("input", "test"), lambda: controller.press("Enter")):
+            with self.assertRaises(BrowserBlockedError):
+                action()
+        self.assertEqual(backend.clicked, [])
+        self.assertEqual(backend.filled, [])
+        self.assertEqual(backend.pressed, [])
+        self.assertTrue(controller.snapshot())
+
+    def test_consent_is_exact_and_never_bypasses_navigation_whitelist(self) -> None:
+        policy = BrowserPolicy(["https://*.example.com"], enabled=True,
+            interaction_enabled=True, interaction_origins=["https://chat.example.com"], resolver=public_resolver)
+        policy.assert_interaction_allowed("https://chat.example.com/path")
+        with self.assertRaises(BrowserBlockedError):
+            policy.assert_interaction_allowed("https://other.example.com")
+        with self.assertRaises(BrowserBlockedError):
+            policy.assert_interaction_allowed("https://example.com")
+        with self.assertRaises(ConfigError):
+            BrowserPolicy(interaction_origins=["https://*.example.com"])
+
     def test_allows_exact_https_origin(self) -> None:
         policy = make_policy()
         self.assertTrue(policy.is_allowed("https://example.com/una/pagina?q=1"))

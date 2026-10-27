@@ -13,6 +13,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from agent_memory.dashboard import DashboardData, create_server
+from agent_memory.errors import ValidationError
 from agent_memory.evolution import EvolutionService
 from agent_memory.files import FileSandbox
 from agent_memory.heartbeat import HeartbeatEngine
@@ -131,6 +132,24 @@ class DashboardDataTests(DashboardFixture):
         )
         self.assertEqual(davide["trust"], 63)
         self.assertEqual(davide["intimacy"], 44)
+
+    def test_history_pagination_preserves_all_records(self) -> None:
+        data = DashboardData(self.root)
+        graph = data.memory.config.get("social_graph")
+        graph["people"][0]["interaction_history"] = [
+            {"timestamp": f"2026-10-25T12:{i // 60:02}:{i % 60:02}+01:00", "summary": str(i)} for i in range(125)
+        ]
+        data.memory.config.write("social_graph", graph)
+        seen = []
+        for offset in (0, 50, 100):
+            contact = next(p for p in data.relations(offset=offset)["contacts"] if p["user_id"] == "user_marco")
+            self.assertEqual(contact["history_total"], 125)
+            self.assertLessEqual(len(contact["interactions"]), 50)
+            seen.extend(e["summary"] for e in contact["interactions"])
+        self.assertEqual(len(set(seen)), 125)
+        for kwargs in ({"offset": -1}, {"limit": 0}, {"limit": 101}):
+            with self.assertRaises(ValidationError):
+                data.relations(**kwargs)
 
     def test_relations_expose_full_interaction_history(self) -> None:
         relations = DashboardData(self.root).relations()
