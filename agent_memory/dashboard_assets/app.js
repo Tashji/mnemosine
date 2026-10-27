@@ -1963,7 +1963,7 @@ function behaviorSettings(behavior) {
           "shadow_engine_enabled",
           "Motore dell'ombra",
           Boolean(flags.shadow_engine_enabled),
-          "Mantiene attivi tratti latenti e riconsolidamenti."
+          "Preferenza salvata: non attiva né disattiva ancora un motore automatico dell'ombra."
         ),
         settingsCheck(
           "maintenance_mode",

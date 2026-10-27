@@ -10,6 +10,8 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
@@ -84,7 +86,8 @@ class McpServerTests(unittest.TestCase):
         self.assertEqual(updated["emotion"]["label"], "sereno")
         self.assertEqual(updated["emotion"]["valence"], 0.35)
 
-    def test_heartbeat_tools_update_load_and_clear_impulses(self) -> None:
+    @patch("agent_memory.routine._resolve_now", return_value=datetime(2026, 10, 25, 15, tzinfo=ZoneInfo("Europe/Rome")))
+    def test_heartbeat_tools_update_load_and_clear_impulses(self, _moment) -> None:
         before = call_tool(self.mcp, "get_current_state", {})["mental_load"]
 
         updated = call_tool(
@@ -149,7 +152,8 @@ class McpServerTests(unittest.TestCase):
             )
         self.assertIn("grafo delle relazioni", str(ctx.exception))
 
-    def test_deliver_impulse_respects_whitelist_and_flags(self) -> None:
+    @patch("agent_memory.routine._resolve_now", return_value=datetime(2026, 10, 25, 15, tzinfo=ZoneInfo("Europe/Rome")))
+    def test_deliver_impulse_respects_whitelist_and_flags(self, _moment) -> None:
         with self.assertRaises(ToolError) as ctx:
             call_tool(self.mcp, "deliver_impulse", {"text": "Ciao Marco"})
         self.assertIn("nessun impulso in attesa", str(ctx.exception))
@@ -169,7 +173,7 @@ class McpServerTests(unittest.TestCase):
             "trigger": "relazione",
             "target": {"user_id": "user_marco", "display_name": "Marco"},
             "context": {},
-            "created_at": datetime.now().astimezone().replace(microsecond=0).isoformat(),
+            "created_at": "2026-10-25T15:00:00+01:00",
             "delivery": {"channel": "whatsapp", "authorized": True, "note": ""},
             "requires_message": True,
         }

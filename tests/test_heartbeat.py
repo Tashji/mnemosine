@@ -341,6 +341,17 @@ class HeartbeatWriteTests(HeartbeatTestCase):
             "2026-10-25T15:00:00+01:00",
         )
 
+    def test_invalid_or_hidden_memory_does_not_change_profile(self) -> None:
+        engine = self.engine()
+        before = engine.config.load_all()
+        for memory_id in ("missing_memory", "mem_0002"):
+            with self.subTest(memory_id=memory_id), self.assertRaises(ValidationError):
+                engine.record_interaction(user_id="user_marco", memory_id=memory_id)
+            self.assertEqual(engine.config.load_all(), before)
+        with self.assertRaises(ValidationError):
+            engine.record_interaction(memory_id="mem_0004")
+        self.assertEqual(engine.config.load_all(), before)
+
     def test_unknown_contact_does_not_change_state(self) -> None:
         state_before = self.read_json("current_state")
         graph_before = self.read_json("social_graph")

@@ -324,6 +324,14 @@ class HeartbeatEngine:
         grafo: un id sconosciuto viene rifiutato prima di qualsiasi scrittura.
         """
 
+        clean_memory_id = self._clean_optional_token(memory_id, "memory_id")
+        if clean_memory_id is not None:
+            if user_id is None:
+                raise ValidationError("memory_id richiede user_id per collegare il ricordo alla relazione.")
+            with Database(self.root).timeline() as conn:
+                exists = conn.execute("SELECT 1 FROM conscious_episodic_memories WHERE id = ?", (clean_memory_id,)).fetchone()
+            if exists is None:
+                raise ValidationError("memory_id: ricordo inesistente o non accessibile.")
         load = apply_interactions(self._load(), messages, complexity)
         stamp = self.now.replace(microsecond=0).isoformat()
         relationship: dict[str, Any] | None = None
@@ -336,7 +344,6 @@ class HeartbeatEngine:
             )
             assert clean_channel is not None
             clean_sentiment = self._clean_optional_token(sentiment, "sentiment")
-            clean_memory_id = self._clean_optional_token(memory_id, "memory_id")
             relationship = self._record_social_interaction(
                 user_id,
                 stamp,

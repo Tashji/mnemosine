@@ -1531,6 +1531,8 @@ Senza `--apply` il comando è di sola lettura. Con `--apply` acquisisce lo stess
 
 La dashboard mostra già il nuovo stato senza modifiche: attività, luogo, routine e carico sono letti da `current_state.json`.
 
+I collegamenti `memory_id` registrati nelle interazioni devono puntare a un ricordo episodico conscio esistente e richiedono `user_id`; riferimenti inesistenti o non accessibili vengono rifiutati prima di modificare la relazione o il carico. Il flag `shadow_engine_enabled` resta una preferenza salvata, non un interruttore operativo di un motore automatico.
+
 ### 17.5. Heartbeat e carico cognitivo
 
 `agent_memory/heartbeat.py` porta a termine la Fase 6 in modo deterministico, senza chiamare un modello linguistico. Ogni battito:
