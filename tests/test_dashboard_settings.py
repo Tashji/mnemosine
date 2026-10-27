@@ -51,6 +51,48 @@ class SettingsUnitTests(unittest.TestCase):
     def tearDown(self) -> None:
         self._tmp.cleanup()
 
+    def contact_payload(self, **patch: Any) -> dict[str, Any]:
+        return {
+            "action": "create", "user_id": "user_test", "display_name": "Prova",
+            "trust": 20, "intimacy": 10, "boundaries": ["Non insistere"], **patch,
+        }
+
+    def test_contact_lifecycle_preserves_history_and_whatsapp(self) -> None:
+        integrations = self.settings._read_integrations()
+        self.settings.save_contact(self.contact_payload())
+        graph = self.settings.config.get("social_graph")
+        contact = next(p for p in graph["people"] if p["user_id"] == "user_test")
+        self.assertEqual(contact["interaction_count"], 0)
+        self.assertIsNone(contact["last_interaction_at"])
+        marco = next(p for p in graph["people"] if p["user_id"] == "user_marco")
+        history = marco["interaction_history"]
+        self.settings.save_contact(self.contact_payload(
+            action="update", user_id="user_marco", display_name="Marco aggiornato"
+        ))
+        marco = next(p for p in self.settings.config.get("social_graph")["people"]
+                     if p["user_id"] == "user_marco")
+        self.assertEqual(marco["interaction_history"], history)
+        self.assertEqual(marco["interaction_count"], 18)
+        self.assertEqual(marco["boundaries"], ["Non insistere"])
+        self.assertEqual(marco["preferences"], ["programmazione", "videogiochi", "serie TV"])
+        self.settings.save_contact({"action": "remove", "user_id": "user_test", "confirmation": "RIMUOVI"})
+        self.assertNotIn("user_test", [p["user_id"] for p in self.settings.config.get("social_graph")["people"]])
+        self.assertEqual(self.settings._read_integrations(), integrations)
+
+    def test_invalid_contact_edits_do_not_write(self) -> None:
+        before = self.settings.config.get("social_graph")
+        cases = [
+            {"trust": True}, {"intimacy": 101}, {"display_name": " "},
+            {"boundaries": "test"}, {"preferences": [1]}, {"action": "unknown"},
+            {"action": []},
+            {"user_id": "user_marco"}, {"action": "update"},
+            {"action": "remove", "user_id": "user_marco", "confirmation": "no"},
+        ]
+        for patch in cases:
+            with self.subTest(patch=patch), self.assertRaises(ValidationError):
+                self.settings.save_contact(self.contact_payload(**patch))
+            self.assertEqual(self.settings.config.get("social_graph"), before)
+
     def test_snapshot_exposes_effective_policy_and_profile(self) -> None:
         session = self.root / "data" / "browser" / "session.json"
         session.parent.mkdir(parents=True, exist_ok=True)
@@ -399,6 +441,34 @@ class SettingsHTTPTests(unittest.TestCase):
         )
         self.assertEqual(response.status, 200)
         self.assertTrue(json.loads(response.read())["browser"]["enabled"])
+
+    def test_contact_api_requires_auth_csrf_and_same_origin(self) -> None:
+        payload = {"action": "create", "user_id": "api_contact", "display_name": "API", "trust": 50, "intimacy": 20}
+        self.assertEqual(self._post_json("/api/relations", payload, "").status, 401)
+        cookie = self._login()
+        self.assertEqual(self._post_json("/api/relations", payload, cookie).status, 400)
+        token = self._csrf(cookie)
+        request = urllib.request.Request(
+            self.base_url + "/api/relations", method="POST",
+            data=json.dumps({**payload, "csrf": token}).encode(),
+            headers={"Origin": "https://foreign.example", "Cookie": cookie, "Content-Type": "application/json"},
+        )
+        with self.assertRaises(urllib.error.HTTPError) as error:
+            self.opener.open(request, timeout=10)
+        self.assertEqual(error.exception.code, 403)
+        error.exception.close()
+        response = self._post_json("/api/relations", {**payload, "csrf": token}, cookie)
+        self.assertEqual(response.status, 200)
+        self.assertEqual(self._post_json("/api/relations", {**payload, "csrf": token}, cookie).status, 400)
+        response = self._request("/api/relations", cookie=cookie)
+        contacts = json.loads(response.read())["contacts"]
+        self.assertIn("api_contact", [p["user_id"] for p in contacts])
+        response = self._post_json("/api/relations", {
+            "action": "remove", "user_id": "api_contact", "confirmation": "RIMUOVI", "csrf": self._csrf(cookie),
+        }, cookie)
+        self.assertEqual(response.status, 200)
+        response = self._request("/api/relations", cookie=cookie)
+        self.assertNotIn("api_contact", [p["user_id"] for p in json.loads(response.read())["contacts"]])
 
     def test_archive_from_api_returns_to_setup(self) -> None:
         cookie = self._login()

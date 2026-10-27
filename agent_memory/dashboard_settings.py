@@ -110,6 +110,57 @@ class DashboardSettings:
         self.config = ConfigStore(self.root)
         self.path = self.root / "config" / INTEGRATIONS_FILENAME
 
+    def save_contact(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Crea o aggiorna un contatto senza alterarne storico e contatori."""
+        action = payload.get("action")
+        if not isinstance(action, str) or action not in {"create", "update", "remove"}:
+            raise ValidationError("Azione contatto non valida.")
+        user_id = payload.get("user_id")
+        if not isinstance(user_id, str) or not user_id.strip() or len(user_id) > 100:
+            raise ValidationError("user_id: attesa una stringa di 1–100 caratteri.")
+        user_id = user_id.strip()
+        with self.config._lock:
+            graph = self.config.get("social_graph")
+            person = next((p for p in graph["people"] if p["user_id"] == user_id), None)
+            if action == "create" and person is not None:
+                raise ValidationError("Esiste già un contatto con questo user_id.")
+            if action != "create" and person is None:
+                raise ValidationError("Contatto non trovato.")
+            if action == "remove":
+                if payload.get("confirmation") != "RIMUOVI":
+                    raise ValidationError("Scrivi RIMUOVI per confermare.")
+                graph["people"] = [p for p in graph["people"] if p["user_id"] != user_id]
+            else:
+                candidate = copy.deepcopy(person) if person is not None else {
+                    "user_id": user_id,
+                    "first_interaction_at": None,
+                    "last_interaction_at": None,
+                    "interaction_count": 0,
+                    "interaction_history": [],
+                }
+                for key in ("display_name", "full_name", "relation", "notes"):
+                    value = payload.get(key, candidate.get(key, ""))
+                    if not isinstance(value, str) or len(value) > 2000:
+                        raise ValidationError(f"{key}: attesa una stringa, massimo 2000 caratteri.")
+                    candidate[key] = value.strip()
+                if not candidate["display_name"]:
+                    raise ValidationError("Il nome visualizzato è obbligatorio.")
+                for key in ("trust", "intimacy"):
+                    candidate[key] = _require_int(payload, key, minimum=0, maximum=100)
+                for key in ("preferences", "confirmed_facts", "boundaries"):
+                    value = payload.get(key, candidate.get(key, []))
+                    if not isinstance(value, list) or len(value) > 100 or any(
+                        not isinstance(item, str) or len(item) > 2000 for item in value
+                    ):
+                        raise ValidationError(f"{key}: attesa una lista di massimo 100 testi.")
+                    candidate[key] = [item.strip() for item in value if item.strip()]
+                if person is None:
+                    graph["people"].append(candidate)
+                else:
+                    person.update(candidate)
+            self.config.write("social_graph", graph)
+        return {"saved": True, "action": action, "user_id": user_id}
+
     # -- lettura ------------------------------------------------------------
 
     def _read_integrations(self) -> dict[str, Any]:

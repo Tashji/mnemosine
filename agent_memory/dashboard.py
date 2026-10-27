@@ -4,10 +4,11 @@ Il modulo espone una piccola applicazione HTTP su loopback che legge i
 database e i file di configurazione già usati dai servizi. Le scritture
 applicative sono la creazione iniziale del profilo, la generazione della
 biografia e dell'indice vettoriale dal passaggio finale del wizard, le
-impostazioni di browser, WhatsApp e comportamento, e l'archiviazione esplicita
-del profilo. Biografia e indice vengono eseguiti in un thread di background:
-la pagina di completamento segue lo stato con polling. Ricordi, conoscenze,
-tratti e storico non vengono modificati dalle altre viste.
+impostazioni di browser, WhatsApp e comportamento, la gestione dei contatti
+e l'archiviazione esplicita del profilo. Biografia e indice vengono eseguiti
+in un thread di background: la pagina di completamento segue lo stato con
+polling. Ricordi, conoscenze e tratti non vengono modificati dalle altre viste. La rimozione di un
+contatto elimina il suo storico relazionale, non i ricordi episodici.
 
 Uso:
     python -m agent_memory.dashboard
@@ -89,6 +90,7 @@ SETTINGS_WHATSAPP_PATH = "/api/settings/whatsapp"
 SETTINGS_BEHAVIOR_PATH = "/api/settings/behavior"
 PROFILE_ARCHIVE_PATH = "/api/profile/archive"
 SETTINGS_POST_PATHS = {
+    RELATIONS_PATH,
     SETTINGS_BROWSER_PATH,
     SETTINGS_WHATSAPP_PATH,
     SETTINGS_BEHAVIOR_PATH,
@@ -1675,7 +1677,9 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             raise ValidationError("Modulo scaduto o non valido. Riprova.")
 
         settings = DashboardSettings(self.server.data.root)
-        if path == SETTINGS_BROWSER_PATH:
+        if path == RELATIONS_PATH:
+            result = settings.save_contact(payload)
+        elif path == SETTINGS_BROWSER_PATH:
             result = settings.save_browser(payload)
         elif path == SETTINGS_WHATSAPP_PATH:
             result = settings.save_whatsapp(payload)

@@ -783,6 +783,65 @@ function relationAbout(contact) {
   );
 }
 
+function contactEditor(contact = null) {
+  const editing = Boolean(contact);
+  const value = contact || {};
+  const fields = [
+    settingsField("Identificativo univoco", settingsInput("user_id", value.user_id || "", "text", {
+      required: true, maxlength: "100", readonly: editing,
+    }), "L'identificativo non cambia dopo la creazione."),
+    ...[["display_name", "Nome visualizzato"], ["full_name", "Nome completo"], ["relation", "Relazione"]].map(
+      ([name, title]) => settingsField(title, settingsInput(name, value[name] || "", "text", {
+        required: name === "display_name", maxlength: "2000",
+      }))
+    ),
+    ...[["trust", "Fiducia"], ["intimacy", "Intimità"]].map(
+      ([name, title]) => settingsField(title, settingsInput(name, value[name] ?? 0, "number", {
+        required: true, min: "0", max: "100", step: "1",
+      }))
+    ),
+    ...[["preferences", "Preferenze"], ["confirmed_facts", "Fatti confermati"], ["boundaries", "Confini relazionali"]].map(
+      ([name, title]) => settingsField(title, h("textarea", { name, rows: "3" }, (value[name] || []).join("\n")), "Una voce per riga.")
+    ),
+    settingsField("Note", h("textarea", { name: "notes", rows: "3", maxlength: "2000" }, value.notes || "")),
+  ];
+  const form = settingsForm(editing ? "Salva contatto" : "Crea contatto", fields, async (formData) => {
+    const payload = { action: editing ? "update" : "create" };
+    for (const name of ["user_id", "display_name", "full_name", "relation", "notes"]) {
+      payload[name] = String(formData.get(name) || "");
+    }
+    for (const name of ["trust", "intimacy"]) payload[name] = Number(formData.get(name));
+    for (const name of ["preferences", "confirmed_facts", "boundaries"]) {
+      payload[name] = String(formData.get(name) || "").split("\n").map((item) => item.trim()).filter(Boolean);
+    }
+    await postJson("/api/relations", payload);
+    state.relationId = payload.user_id.trim();
+    delete state.loaded.overview;
+    delete state.loaded.settings;
+    await loadRelations(true);
+    setNotice("Contatto salvato. Le autorizzazioni WhatsApp restano separate.", "success");
+  });
+  return h("details", { class: "settings-card" },
+    h("summary", { text: editing ? "Modifica contatto" : "Aggiungi contatto" }), form);
+}
+
+async function removeContact(contact) {
+  const confirmation = window.prompt(
+    `Rimuovere ${contact.display_name}? Verrà eliminato anche il suo storico relazionale, non i ricordi episodici né la whitelist WhatsApp. Scrivi RIMUOVI per confermare.`
+  );
+  if (confirmation !== "RIMUOVI") return;
+  try {
+    await postJson("/api/relations", { action: "remove", user_id: contact.user_id, confirmation });
+    state.relationId = null;
+    delete state.loaded.overview;
+    delete state.loaded.settings;
+    await loadRelations(true);
+    setNotice("Contatto rimosso. La whitelist WhatsApp non è stata modificata.", "success");
+  } catch (error) {
+    setNotice(error.message);
+  }
+}
+
 function relationDetail(contact) {
   const interactions = Array.isArray(contact.interactions) ? contact.interactions : [];
   const identity = [contact.full_name, contact.user_id].filter(Boolean).join(" · ");
@@ -810,6 +869,11 @@ function relationDetail(contact) {
       relationStat("Ultima interazione", fmtDate(contact.last_interaction_at, { time: true }))
     ),
     relationAbout(contact),
+    contactEditor(contact),
+    h("button", {
+      type: "button", class: "button button-danger", text: "Rimuovi contatto",
+      onClick: () => removeContact(contact),
+    }),
     h(
       "div",
       { class: "relation-history" },
@@ -834,7 +898,8 @@ function renderRelations(data) {
   if (!contacts.length) {
     clear(
       $("#relations-content"),
-      emptyState("Nessuna relazione", "Il grafo delle relazioni è vuoto.")
+      contactEditor(),
+      emptyState("Nessuna relazione", "Il grafo delle relazioni è vuoto. Aggiungi il primo contatto.")
     );
     return;
   }
@@ -886,6 +951,7 @@ function renderRelations(data) {
 
   clear(
     $("#relations-content"),
+    contactEditor(),
     h(
       "div",
       { class: "relations-layout" },

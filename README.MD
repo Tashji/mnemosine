@@ -1480,7 +1480,7 @@ La dashboard espone sette viste:
 
 - **Panoramica**: identità, stato corrente, conteggi, ultimi ricordi, riepilogo cliccabile delle relazioni, stato del ciclo autonomo con l'outbox e contenuto della sandbox `files/`.
 
-- **Relazioni**: elenco dei contatti ordinato per ultima interazione e scheda completa con fiducia, intimità, preferenze, fatti confermati, confini relazionali e storico delle interazioni (con apertura diretta dei ricordi collegati).
+- **Relazioni**: elenco dei contatti ordinato per ultima interazione e scheda completa con fiducia, intimità, preferenze, fatti confermati, confini relazionali e storico delle interazioni (con apertura diretta dei ricordi collegati). Si possono aggiungere e modificare i contatti senza alterare storico e contatori. La rimozione richiede di scrivere `RIMUOVI` ed elimina il contatto e il suo storico relazionale, non i ricordi episodici. La whitelist WhatsApp resta separata e non viene modificata automaticamente.
 
 - **Timeline**: ricerca e filtri per fonte e livello di accesso; i ricordi latenti e repressi sono visibili solo attivando esplicitamente l'opzione dedicata. Il dettaglio mostra revisioni, collegamenti episodici e conoscenze collegate.
 
@@ -1492,7 +1492,7 @@ La dashboard espone sette viste:
 
 - **Impostazioni**: browser e whitelist, WhatsApp, flag e battito, archiviazione del profilo.
 
-Le API di consultazione sono in sola lettura; i POST gestiscono accesso, logout, prima configurazione, completamento del profilo (biografia e indice) e le scritture di **Impostazioni** (integrazioni, comportamento e archiviazione del profilo). Ogni POST autenticato richiede un token CSRF monouso. Il server ascolta su `127.0.0.1` per impostazione predefinita: contiene dati amministrativi e tratti dell'ombra, quindi non va pubblicato su Internet. L'opzione `--host` permette di cambiare l'indirizzo; su un host non loopback l'autenticazione è obbligatoria. Usa `--https` per cifrare il traffico quando la dashboard è raggiungibile da altri dispositivi.
+Le API di consultazione sono in sola lettura; i POST gestiscono accesso, logout, prima configurazione, completamento del profilo (biografia e indice), la gestione dei contatti in **Relazioni** e le scritture di **Impostazioni** (integrazioni, comportamento e archiviazione del profilo). Ogni POST autenticato richiede un token CSRF monouso. Il server ascolta su `127.0.0.1` per impostazione predefinita: contiene dati amministrativi e tratti dell'ombra, quindi non va pubblicato su Internet. L'opzione `--host` permette di cambiare l'indirizzo; su un host non loopback l'autenticazione è obbligatoria. Usa `--https` per cifrare il traffico quando la dashboard è raggiungibile da altri dispositivi.
 
 ### 17.4. Routine giornaliera e stato corrente
 
