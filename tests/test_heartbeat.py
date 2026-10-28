@@ -220,9 +220,10 @@ class HeartbeatTickTests(HeartbeatTestCase):
         self.assertFalse(result["state"]["heartbeat"]["spontaneous_message_pending"])
         self.assertEqual(result["mental_load_after"], 0)
         self.assertEqual(result["state"]["availability"]["response_style"], "assente")
+        # La sola anteprima non dichiara un consolidamento realmente eseguito.
         self.assertEqual(
             result["state"]["sleep"]["last_consolidation_at"],
-            "2026-10-25T03:00:00+01:00",
+            "2026-10-24T07:10:00+02:00",
         )
 
     def test_cooldown_blocks_a_second_impulse(self) -> None:
@@ -282,6 +283,75 @@ class HeartbeatTickTests(HeartbeatTestCase):
 
 
 class HeartbeatWriteTests(HeartbeatTestCase):
+    def test_shadow_guidance_is_mediated_and_opt_in(self) -> None:
+        store = ConfigStore(self.root)
+        store.update_current_state({"flags": {"shadow_engine_enabled": True}})
+        result = self.engine().record_interaction(summary="Ho ricevuto una promozione")
+        self.assertIn("response_guidance", result)
+        self.assertNotIn("invidia", result["response_guidance"].lower())
+        self.assertNotIn("response_guidance", self.engine().record_interaction(summary="Una giornata tranquilla"))
+        store.update_current_state({"flags": {"shadow_engine_enabled": False}})
+        self.assertNotIn("response_guidance", self.engine().record_interaction(summary="una promozione"))
+
+    def test_night_summary_is_atomic_and_excludes_hidden_memories(self) -> None:
+        from agent_memory.db import Database
+        from agent_memory.service import MemoryService, ShadowService
+        database = Database(self.root)
+        with database.timeline() as conn, conn:
+            conn.execute("UPDATE episodic_memories SET is_consolidated=1")
+        memory = MemoryService(self.root).create_memory(
+            title="Giornata speciale", description="Ho letto un libro.", importance=8,
+            event_time="2026-10-24T10:00:00+02:00", memory_id="mem_test_day"
+        )
+        ShadowService(self.root).create_episodic_memory(
+            title="SEGRETO", description="Informazione latente", importance=9,
+            event_time="2026-10-24T10:00:00+02:00", memory_id="mem_test_secret"
+        )
+        preview = self.engine("2026-10-25T03:00").preview()
+        self.assertEqual(preview["state"]["sleep"]["last_consolidation_at"], "2026-10-24T07:10:00+02:00")
+        result = self.engine("2026-10-25T03:00").apply()
+        self.assertEqual(result["consolidation"]["source_count"], 1)
+        summary = MemoryService(self.root).get_memory(result["consolidation"]["summary_id"])
+        self.assertIn(memory["title"], summary["description"])
+        self.assertNotIn("SEGRETO", summary["description"])
+        self.assertEqual(MemoryService(self.root).get_memory(memory["id"])["is_consolidated"], 1)
+        with database.timeline() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM memory_links WHERE from_memory_id=? AND to_memory_id=?", (summary["id"], memory["id"])).fetchone()[0], 1)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM memory_revisions WHERE memory_id=?", (memory["id"],)).fetchone()[0], 2)
+        second = self.engine("2026-10-25T03:00").apply()
+        self.assertFalse(second["applied"])
+
+    def test_night_consolidation_rolls_back_when_state_write_fails(self) -> None:
+        from unittest.mock import patch
+
+        from agent_memory.db import Database
+        from agent_memory.service import MemoryService
+        database = Database(self.root)
+        with database.timeline() as conn, conn:
+            conn.execute("UPDATE episodic_memories SET is_consolidated=1")
+        MemoryService(self.root).create_memory(title="Prova", description="Un ricordo", importance=8,
+            event_time="2026-10-24T10:00:00+02:00", memory_id="mem_rollback")
+        engine = self.engine("2026-10-25T03:00")
+        with (
+            patch.object(
+                engine.config, "update_current_state", side_effect=RuntimeError("interruzione")
+            ),
+            self.assertRaisesRegex(RuntimeError, "interruzione"),
+        ):
+            engine.apply()
+        with database.timeline() as conn:
+            self.assertEqual(conn.execute("SELECT is_consolidated FROM episodic_memories WHERE id='mem_rollback'").fetchone()[0], 0)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM episodic_memories WHERE id LIKE 'mem_consolidation_%'").fetchone()[0], 0)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM memory_revisions WHERE memory_id='mem_rollback'").fetchone()[0], 1)
+
+    def test_night_maintenance_does_not_consolidate(self) -> None:
+        store = ConfigStore(self.root)
+        store.update_current_state({"flags": {"maintenance_mode": True}})
+        before = store.get("current_state")["sleep"]["last_consolidation_at"]
+        result = self.engine("2026-10-25T03:00").apply()
+        self.assertIsNone(result["consolidation"])
+        self.assertEqual(store.get("current_state")["sleep"]["last_consolidation_at"], before)
+
     def test_apply_persists_and_is_idempotent(self) -> None:
         self.set_people([])
         self.plan_day(start="14:30")

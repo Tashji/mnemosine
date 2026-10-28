@@ -12,10 +12,9 @@ Il motore è deterministico e non chiama un modello linguistico. A ogni battito:
    messaggio: la generazione del testo e l'invio restano due operazioni
    distinte, e nessun canale viene aperto da qui.
 
-Durante la finestra di sonno il battito non produce impulsi e azzera
-progressivamente il carico. La sintesi dei ricordi notturni resta al generatore
-di biografia e ai moduli di evoluzione: qui si registra il consolidamento, non
-si inventano ricordi.
+Durante la finestra di sonno il battito non produce impulsi e riduce il
+carico. Il consolidamento produce una sintesi estrattiva dei ricordi consci,
+con riferimenti alle fonti, senza inventare fatti o esporre l'ombra.
 
 Uso:
     python -m agent_memory.heartbeat --at 2026-10-25T15:00
@@ -29,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import json
 import sys
 import time as time_module
@@ -398,7 +398,31 @@ class HeartbeatEngine:
         }
         if relationship is not None:
             result["relationship"] = relationship
+        guidance = self._shadow_guidance(summary)
+        if guidance is not None:
+            result["response_guidance"] = guidance
         return result
+
+    def _shadow_guidance(self, summary: str) -> str | None:
+        """Media i trigger senza esporre tratti, diario o cause private."""
+        flags = self.state.get("flags", {})
+        if not flags.get("shadow_engine_enabled") or flags.get("maintenance_mode"):
+            return None
+        text = self._clean_interaction_summary(summary).casefold()
+        for trait in self.config.get("shadow_traits").get("traits", []):
+            safety = trait.get("safety", {})
+            if not isinstance(safety, dict) or safety.get("allowed") is not True:
+                continue
+            for trigger in trait.get("triggers", []):
+                if not isinstance(trigger, dict):
+                    continue
+                examples = trigger.get("examples", [])
+                if not isinstance(examples, list):
+                    continue
+                if any(isinstance(example, str) and len(example.strip()) >= 4
+                       and example.strip().casefold() in text for example in examples):
+                    return "Rispondi con calma e tatto, senza presumere intenzioni o giudicare."
+        return None
 
     def acknowledge_impulse(self, note: str = "") -> dict[str, Any]:
         """Chiude l'impulso in attesa, dopo che qualcuno se n'è occupato."""
@@ -649,9 +673,6 @@ class HeartbeatEngine:
         if not isinstance(sleep, dict):
             sleep = {}
         sleep["is_sleeping"] = self.sleeping
-        if self.sleeping:
-            sleep["last_consolidation_at"] = stamp
-
         patch: dict[str, Any] = copy.deepcopy(self.routine.patch)
         patch["mental_load"] = load_after
         patch["availability"] = availability_for(
@@ -689,17 +710,80 @@ class HeartbeatEngine:
         return {**report, "state": copy.deepcopy(self._candidate)}
 
     def apply(self) -> dict[str, Any]:
-        report = self.plan()
-        if not report["would_change"]:
-            return {**report, "applied": False}
-        state = self.config.update_current_state(copy.deepcopy(self._patch))
+        with self.config.transaction() as conn:
+            # Recompute under the same write lock used for memory and state.
+            self.state = self.config.get("current_state")
+            self.routine = RoutineEngine(self.root, at=self.now)
+            self.sleeping = self.routine.is_sleep
+            self.heartbeat = self.state.get("heartbeat", {})
+            self.policy = HeartbeatPolicy.from_state(self.state)
+            report = self.plan()
+            state_now = self.state
+            consolidation = None
+            if (self.sleeping and conn is not None
+                    and not state_now.get("flags", {}).get("maintenance_mode")):
+                consolidation = self._consolidate(conn)
+                if consolidation is not None:
+                    self._patch["sleep"]["last_consolidation_at"] = self.now.replace(microsecond=0).isoformat()
+            if not report["would_change"] and consolidation is None:
+                return {**report, "applied": False}
+            state = self.config.update_current_state(copy.deepcopy(self._patch))
         return {
             **report,
             "applied": True,
             "would_change": False,
             "mental_load_after": state["mental_load"],
             "heartbeat": state["heartbeat"],
+            "consolidation": consolidation,
         }
+
+    def _consolidate(self, conn: Any) -> dict[str, Any] | None:
+        """Consolida fino a 20 ricordi consci in un'unica transazione SQLite."""
+        rows = conn.execute(
+            "SELECT * FROM conscious_episodic_memories WHERE is_consolidated = 0 "
+            "AND importance >= 5 AND reliability >= 0.5 AND julianday(event_time) <= julianday(?) "
+            "ORDER BY event_time, id LIMIT 20", (self.now.isoformat(),)
+        ).fetchall()
+        if not rows:
+            return None
+        stamp = self.now.replace(microsecond=0).isoformat()
+        ids = [row["id"] for row in rows]
+        digest = hashlib.sha256(canonical([[row["id"], row["version"]] for row in rows]).encode("utf-8")).hexdigest()[:24]
+        summary_id = f"mem_consolidation_{digest}"
+        description = "Sintesi estrattiva di ricordi consci; non è una nuova esperienza:\n" + "\n".join(
+            f"- {row['event_date']}: {row['title'][:200]} — {row['description'][:1000]}"
+            for row in rows
+        )
+        conn.execute(
+            "INSERT INTO episodic_memories (id, event_time, event_date, title, description, "
+            "importance, source, source_ref, reliability, is_simulated, access_level, "
+            "is_consolidated, tags_json, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, 'generated', ?, ?, 1, 'conscious', 1, ?, ?, ?)",
+            (summary_id, stamp, stamp[:10], "Sintesi dei ricordi", description,
+             max(row["importance"] for row in rows), canonical(ids),
+             min(row["reliability"] for row in rows), canonical(["consolidamento"]), stamp, stamp)
+        )
+        inserted = dict(conn.execute("SELECT * FROM episodic_memories WHERE id=?", (summary_id,)).fetchone())
+        conn.execute(
+            "INSERT INTO memory_revisions(memory_id, revision_number, changed_at, changed_by, "
+            "change_reason, previous_snapshot_json, new_snapshot_json) VALUES (?, 1, ?, ?, ?, NULL, ?)",
+            (summary_id, stamp, "heartbeat", "Sintesi estrattiva notturna.", canonical(inserted))
+        )
+        for row in rows:
+            before = dict(row)
+            conn.execute("UPDATE episodic_memories SET is_consolidated=1, version=version+1, updated_at=? WHERE id=?", (stamp, row["id"]))
+            after = dict(conn.execute("SELECT * FROM episodic_memories WHERE id=?", (row["id"],)).fetchone())
+            conn.execute(
+                "INSERT INTO memory_revisions(memory_id, revision_number, changed_at, changed_by, "
+                "change_reason, previous_snapshot_json, new_snapshot_json) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (row["id"], after["version"], stamp, "heartbeat", "Consolidamento notturno.", canonical(before), canonical(after))
+            )
+            conn.execute(
+                "INSERT INTO memory_links(from_memory_id, to_memory_id, relation_type, strength, note, created_at) "
+                "VALUES (?, ?, 'associated', 1.0, ?, ?)",
+                (summary_id, row["id"], "Fonte della sintesi estrattiva.", stamp)
+            )
+        return {"summary_id": summary_id, "source_count": len(rows)}
 
 
 def _parse_at(value: str) -> datetime:
