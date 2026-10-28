@@ -6,7 +6,6 @@ import contextlib
 import io
 import json
 import re
-import shutil
 import tempfile
 import threading
 import unittest
@@ -24,6 +23,7 @@ from agent_memory.dashboard_settings import DashboardSettings
 from agent_memory.errors import ConfigError, ValidationError
 from agent_memory.executor import delivered_messages
 from agent_memory.profile import PROFILE_STATE_MISSING, PROJECT_ROOT, profile_state
+from tests.support import copy_profile
 
 PASSWORD = "correct horse battery"
 
@@ -34,12 +34,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def _copy_profile(root: Path) -> None:
-    shutil.copytree(PROJECT_ROOT / "config", root / "config")
-    shutil.copytree(
-        PROJECT_ROOT / "data",
-        root / "data",
-        ignore=shutil.ignore_patterns("models", "indexes"),
-    )
+    copy_profile(root)
 
 
 class SettingsUnitTests(unittest.TestCase):

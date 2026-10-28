@@ -5,7 +5,6 @@ from __future__ import annotations
 import http.client
 import os
 import re
-import shutil
 import tempfile
 import threading
 import unittest
@@ -17,8 +16,8 @@ from pathlib import Path
 from agent_memory.dashboard import _same_origin, create_server
 from agent_memory.dashboard_auth import DashboardAuth, resolve_auth
 from agent_memory.errors import ConfigError, ValidationError
+from tests.support import copy_profile
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PASSWORD = "correct horse battery"
 
 
@@ -184,12 +183,7 @@ class DashboardAuthHTTPTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.root = Path(self._tmp.name)
-        shutil.copytree(PROJECT_ROOT / "config", self.root / "config")
-        shutil.copytree(
-            PROJECT_ROOT / "data",
-            self.root / "data",
-            ignore=shutil.ignore_patterns("models", "indexes"),
-        )
+        copy_profile(self.root)
         self.auth = DashboardAuth(PASSWORD)
         self.server = create_server(
             self.root,

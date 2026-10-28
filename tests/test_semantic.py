@@ -2,27 +2,20 @@
 
 from __future__ import annotations
 
-import shutil
 import tempfile
 import unittest
 from pathlib import Path
 
 from agent_memory.errors import ConflictError, NotFoundError, ValidationError
 from agent_memory.semantic import SemanticService
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+from tests.support import copy_profile
 
 
 class SemanticServiceTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.root = Path(self._tmp.name)
-        shutil.copytree(PROJECT_ROOT / "config", self.root / "config")
-        shutil.copytree(
-            PROJECT_ROOT / "data",
-            self.root / "data",
-            ignore=shutil.ignore_patterns("models", "indexes"),
-        )
+        copy_profile(self.root)
         self.semantic = SemanticService(self.root)
 
     def tearDown(self) -> None:

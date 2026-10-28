@@ -4,7 +4,6 @@ from __future__ import annotations
 import base64
 import json
 import os
-import shutil
 import tempfile
 import threading
 import unittest
@@ -17,8 +16,8 @@ from PIL import Image
 from agent_memory.config import ConfigStore
 from agent_memory.errors import ConfigError, ValidationError
 from agent_memory.visual import MAX_GENERATED_BYTES, MAX_REFERENCE_BYTES, VisualService
+from tests.support import copy_profile
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
 _buffer = BytesIO()
 Image.new("RGB", (2, 2), (40, 80, 120)).save(_buffer, format="PNG")
 PNG = _buffer.getvalue()
@@ -36,9 +35,7 @@ class VisualTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
-        shutil.copytree(PROJECT_ROOT / "config", self.root / "config")
-        shutil.copytree(PROJECT_ROOT / "data", self.root / "data",
-                        ignore=shutil.ignore_patterns("models", "indexes", "dashboard_tls"))
+        copy_profile(self.root)
         self.service = VisualService(self.root)
 
     def tearDown(self):

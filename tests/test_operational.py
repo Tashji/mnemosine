@@ -1,7 +1,6 @@
 """Verifiche su copie isolate del profilo, nessuna azione su siti esterni."""
 from __future__ import annotations
 
-import shutil
 import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
@@ -11,8 +10,7 @@ from unittest.mock import patch
 from agent_memory.config import ConfigStore
 from agent_memory.errors import ValidationError
 from agent_memory.heartbeat import HeartbeatEngine
-
-ROOT = Path(__file__).resolve().parents[1]
+from tests.support import copy_profile
 
 
 class OperationalTests(unittest.TestCase):
@@ -20,8 +18,7 @@ class OperationalTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
-        shutil.copytree(ROOT / "config", self.root / "config")
-        shutil.copytree(ROOT / "data", self.root / "data", ignore=shutil.ignore_patterns("models", "indexes", "browser", "dashboard_tls"))
+        copy_profile(self.root)
         self.config = ConfigStore(self.root)
         self.config.load_all()
 

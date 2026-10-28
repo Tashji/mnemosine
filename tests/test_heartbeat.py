@@ -9,7 +9,6 @@ from __future__ import annotations
 import contextlib
 import io
 import json
-import shutil
 import sqlite3
 import tempfile
 import unittest
@@ -26,8 +25,8 @@ from agent_memory.heartbeat import (
     apply_interactions,
     recover_load,
 )
+from tests.support import copy_profile
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
 NOW = "2026-10-25T15:00"
 
 
@@ -35,12 +34,7 @@ class HeartbeatTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.root = Path(self._tmp.name)
-        shutil.copytree(PROJECT_ROOT / "config", self.root / "config")
-        shutil.copytree(
-            PROJECT_ROOT / "data",
-            self.root / "data",
-            ignore=shutil.ignore_patterns("models", "indexes", "dashboard_tls"),
-        )
+        copy_profile(self.root)
 
     def tearDown(self) -> None:
         self._tmp.cleanup()

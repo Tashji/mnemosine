@@ -26,7 +26,6 @@ from agent_memory.executor import (
 )
 from tests.support import copy_profile
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
 NOW = "2026-10-25T15:00"
 CREATED = "2026-10-25T14:30:00+01:00"
 MARCO = {"user_id": "user_marco", "display_name": "Marco"}

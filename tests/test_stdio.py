@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import shutil
 import sys
 import tempfile
 import unittest
@@ -18,6 +17,8 @@ from pathlib import Path
 from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 
+from tests.support import copy_profile
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -25,12 +26,7 @@ class StdioTransportTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.root = Path(self._tmp.name)
-        shutil.copytree(PROJECT_ROOT / "config", self.root / "config")
-        shutil.copytree(
-            PROJECT_ROOT / "data",
-            self.root / "data",
-            ignore=shutil.ignore_patterns("models", "indexes"),
-        )
+        copy_profile(self.root)
 
     def tearDown(self) -> None:
         self._tmp.cleanup()

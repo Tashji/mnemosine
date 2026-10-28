@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import shutil
 import tempfile
 import unittest
 from datetime import datetime
@@ -19,8 +18,7 @@ from mcp.server.fastmcp.exceptions import ToolError
 from agent_memory.browser import BrowserController, BrowserPolicy
 from agent_memory.config import ConfigStore
 from agent_memory.server import create_server
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+from tests.support import copy_profile
 
 
 def call_tool(mcp: FastMCP, name: str, arguments: dict[str, Any]) -> Any:
@@ -40,12 +38,7 @@ class McpServerTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.root = Path(self._tmp.name)
-        shutil.copytree(PROJECT_ROOT / "config", self.root / "config")
-        shutil.copytree(
-            PROJECT_ROOT / "data",
-            self.root / "data",
-            ignore=shutil.ignore_patterns("models", "indexes"),
-        )
+        copy_profile(self.root)
         self.mcp = create_server(self.root)
 
     def tearDown(self) -> None:

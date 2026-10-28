@@ -23,8 +23,6 @@ from agent_memory.migrations import migrate_json_document, stored_database_versi
 from agent_memory.service import MemoryService
 from tests.support import copy_profile, set_database_version
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-
 
 class MigrationTestCase(unittest.TestCase):
     def setUp(self) -> None:

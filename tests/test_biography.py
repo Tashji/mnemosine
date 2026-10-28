@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import contextlib
 import io
-import shutil
 import sqlite3
 import tempfile
 import unittest
@@ -19,8 +18,8 @@ from agent_memory.biography import (
     comprehension_threshold,
 )
 from agent_memory.service import MemoryService
+from tests.support import copy_profile
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
 AS_OF = date(2026, 10, 24)
 
 
@@ -28,12 +27,7 @@ class BiographyTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.root = Path(self._tmp.name)
-        shutil.copytree(PROJECT_ROOT / "config", self.root / "config")
-        shutil.copytree(
-            PROJECT_ROOT / "data",
-            self.root / "data",
-            ignore=shutil.ignore_patterns("models", "indexes"),
-        )
+        copy_profile(self.root)
         self._remove_generated_biography()
         self.memory = MemoryService(self.root)
         self.service = BiographyService(self.root, as_of=AS_OF)

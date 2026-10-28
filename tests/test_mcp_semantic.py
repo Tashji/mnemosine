@@ -16,8 +16,7 @@ from mcp.server.fastmcp.exceptions import ToolError
 from agent_memory.embeddings import DeterministicEmbedder
 from agent_memory.retrieval import RetrievalService
 from agent_memory.server import create_server
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+from tests.support import copy_profile
 
 
 def call_tool(mcp: FastMCP, name: str, arguments: dict[str, Any]) -> Any:
@@ -31,16 +30,7 @@ class McpSemanticTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.root = Path(self._tmp.name)
-        shutil.copytree(
-            PROJECT_ROOT / "config",
-            self.root / "config",
-            ignore=shutil.ignore_patterns("models", "indexes"),
-        )
-        shutil.copytree(
-            PROJECT_ROOT / "data",
-            self.root / "data",
-            ignore=shutil.ignore_patterns("models", "indexes"),
-        )
+        copy_profile(self.root)
         shutil.rmtree(self.root / "data" / "indexes", ignore_errors=True)
         vector_path = self.root / "data" / "vector_index.db"
         with sqlite3.connect(vector_path) as conn:

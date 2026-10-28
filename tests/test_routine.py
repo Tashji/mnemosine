@@ -5,7 +5,6 @@ from __future__ import annotations
 import contextlib
 import io
 import json
-import shutil
 import tempfile
 import unittest
 from datetime import datetime
@@ -13,15 +12,14 @@ from pathlib import Path
 
 from agent_memory.errors import ValidationError
 from agent_memory.routine import RoutineEngine, main
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+from tests.support import copy_profile
 
 
 class RoutineTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.root = Path(self._tmp.name)
-        shutil.copytree(PROJECT_ROOT / "config", self.root / "config")
+        copy_profile(self.root, include_data=False)
         self.state_path = self.root / "config" / "current_state.json"
         self.identity_path = self.root / "config" / "identity.json"
 

@@ -4,26 +4,19 @@ from __future__ import annotations
 
 import contextlib
 import io
-import shutil
 import tempfile
 import unittest
 from pathlib import Path
 
 from agent_memory import profile as profile_module
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+from tests.support import copy_profile
 
 
 class IndexCliLockTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.root = Path(self._tmp.name) / "profile"
-        shutil.copytree(PROJECT_ROOT / "config", self.root / "config")
-        shutil.copytree(
-            PROJECT_ROOT / "data",
-            self.root / "data",
-            ignore=shutil.ignore_patterns("models"),
-        )
+        copy_profile(self.root)
 
     def tearDown(self) -> None:
         self._tmp.cleanup()

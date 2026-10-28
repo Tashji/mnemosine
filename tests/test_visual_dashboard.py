@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
 import tempfile
 import threading
 import unittest
@@ -16,8 +15,8 @@ from PIL import Image
 
 from agent_memory.dashboard import create_server
 from agent_memory.dashboard_auth import DashboardAuth
-from agent_memory.profile import PROJECT_ROOT
 from agent_memory.visual import VisualService
+from tests.support import copy_profile
 
 PASSWORD = "correct horse battery"
 OUTPUT = BytesIO()
@@ -34,12 +33,7 @@ class VisualDashboardTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name) / "profile"
-        shutil.copytree(PROJECT_ROOT / "config", self.root / "config")
-        shutil.copytree(
-            PROJECT_ROOT / "data",
-            self.root / "data",
-            ignore=shutil.ignore_patterns("models", "indexes", "dashboard_tls"),
-        )
+        copy_profile(self.root)
         self.server = create_server(
             self.root, host="127.0.0.1", port=0, quiet=True,
             auth=DashboardAuth(PASSWORD),

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 import tempfile
 import threading
 import unittest
@@ -17,8 +16,8 @@ from agent_memory.errors import ValidationError
 from agent_memory.evolution import EvolutionService
 from agent_memory.files import FileSandbox
 from agent_memory.heartbeat import HeartbeatEngine
+from tests.support import copy_profile
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
 AS_OF = date(2026, 10, 24)
 
 
@@ -26,12 +25,7 @@ class DashboardFixture(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.root = Path(self._tmp.name)
-        shutil.copytree(PROJECT_ROOT / "config", self.root / "config")
-        shutil.copytree(
-            PROJECT_ROOT / "data",
-            self.root / "data",
-            ignore=shutil.ignore_patterns("models", "indexes"),
-        )
+        copy_profile(self.root)
 
     def tearDown(self) -> None:
         self._tmp.cleanup()

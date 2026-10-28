@@ -7,7 +7,6 @@ modificano mai gli artefatti del progetto.
 from __future__ import annotations
 
 import json
-import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -19,20 +18,14 @@ from agent_memory.errors import (
     ValidationError,
 )
 from agent_memory.service import MemoryService, ShadowService
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+from tests.support import copy_profile
 
 
 class TempProjectTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.root = Path(self._tmp.name)
-        shutil.copytree(PROJECT_ROOT / "config", self.root / "config")
-        shutil.copytree(
-            PROJECT_ROOT / "data",
-            self.root / "data",
-            ignore=shutil.ignore_patterns("models", "indexes"),
-        )
+        copy_profile(self.root)
         self.memory = MemoryService(self.root)
         self.shadow = ShadowService(self.root)
 

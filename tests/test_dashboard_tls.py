@@ -19,8 +19,8 @@ from agent_memory.dashboard import create_server
 from agent_memory.dashboard_auth import DashboardAuth
 from agent_memory.dashboard_tls import ensure_dashboard_tls
 from agent_memory.errors import ConfigError
+from tests.support import copy_profile
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PASSWORD = "correct horse battery"
 
 
@@ -34,12 +34,7 @@ class DashboardTLSTests(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self.root = Path(self._tmp.name)
         self.tls_dir = self.root / "tls"
-        shutil.copytree(PROJECT_ROOT / "config", self.root / "config")
-        shutil.copytree(
-            PROJECT_ROOT / "data",
-            self.root / "data",
-            ignore=shutil.ignore_patterns("models", "indexes"),
-        )
+        copy_profile(self.root)
         self.auth = DashboardAuth(PASSWORD)
         self.server = create_server(
             self.root,
