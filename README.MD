@@ -105,7 +105,7 @@ mnemosine-index --root ./profiles/marco --rebuild
 ## Test
 
 ```bash
-python -m unittest discover -s tests
+python -m unittest discover -s tests -t .
 ```
 
 <a id="indice" name="indice"></a>

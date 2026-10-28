@@ -7,11 +7,11 @@ from unittest.mock import patch
 from agent_memory.autonomy import AutonomyService
 from agent_memory.browser import BrowserController
 from agent_memory.errors import ValidationError
+from tests import test_operational
 from tests.test_browser import FakeBackend
-from tests.test_operational import OperationalTests
 
 
-class AutonomyTests(OperationalTests):
+class AutonomyTests(test_operational.OperationalTests):
     def setUp(self):
         super().setUp()
         integrations = self.root / "config" / "integrations.json"
