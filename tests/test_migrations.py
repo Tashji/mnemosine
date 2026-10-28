@@ -8,7 +8,6 @@ mappe di ``agent_memory.migrations`` e togliendoli alla fine del test.
 from __future__ import annotations
 
 import json
-import shutil
 import sqlite3
 import tempfile
 import unittest
@@ -22,6 +21,7 @@ from agent_memory.db import TIMELINE_TABLES, Database
 from agent_memory.errors import ConfigError, DatabaseUnavailable
 from agent_memory.migrations import migrate_json_document, stored_database_version
 from agent_memory.service import MemoryService
+from tests.support import copy_profile, set_database_version
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -30,12 +30,7 @@ class MigrationTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.root = Path(self._tmp.name)
-        shutil.copytree(PROJECT_ROOT / "config", self.root / "config")
-        shutil.copytree(
-            PROJECT_ROOT / "data",
-            self.root / "data",
-            ignore=shutil.ignore_patterns("models", "indexes", "dashboard_tls"),
-        )
+        copy_profile(self.root)
 
     def tearDown(self) -> None:
         self._tmp.cleanup()
@@ -152,6 +147,9 @@ class SqliteMigrationTests(MigrationTestCase):
         conn.close()
 
     def test_migration_steps_run_in_order(self) -> None:
+        # Il profilo demo può essere già stato aperto dall'app: qui serve una
+        # copia dichiarata alla 1.0 perché la scala abbia qualcosa da applicare.
+        set_database_version(self.root)
         calls: list[int] = []
 
         def step_two(conn: sqlite3.Connection) -> None:
@@ -183,6 +181,8 @@ class SqliteMigrationTests(MigrationTestCase):
             self.assertIn("probe_three", columns)
 
     def test_failed_step_keeps_the_previous_version(self) -> None:
+        set_database_version(self.root)
+
         def broken(conn: sqlite3.Connection) -> None:
             raise sqlite3.OperationalError("colonna già presente")
 

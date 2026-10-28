@@ -24,6 +24,7 @@ from agent_memory.executor import (
     WhatsAppPolicy,
     delivered_messages,
 )
+from tests.support import copy_profile
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 NOW = "2026-10-25T15:00"
@@ -35,12 +36,7 @@ class ExecutorTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.root = Path(self._tmp.name)
-        shutil.copytree(PROJECT_ROOT / "config", self.root / "config")
-        shutil.copytree(
-            PROJECT_ROOT / "data",
-            self.root / "data",
-            ignore=shutil.ignore_patterns("models", "indexes", "dashboard_tls"),
-        )
+        copy_profile(self.root)
         shutil.rmtree(self.root / "data" / "outbox", ignore_errors=True)
         self.enable_whatsapp()
         self.allow_delivery()
