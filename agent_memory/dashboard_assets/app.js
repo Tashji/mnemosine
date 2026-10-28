@@ -2323,11 +2323,48 @@ function renderVisual(data) {
   const images = (data.generated_images || []).map((item) => h("figure", { class: "visual-image" },
     h("img", { src: `/api/visual/image/${encodeURIComponent(item.id)}`, alt: item.prompt || "Immagine generata" }),
     h("figcaption", { text: `${item.created_at || ""} · seed ${item.seed}` }),
-    h("p", { text: item.prompt || "" })
+    h("p", { text: item.prompt || "" }),
+    h("button", { class: "button button-danger", type: "button", text: "Elimina", onClick: async (event) => {
+      const button = event.currentTarget;
+      try {
+        button.disabled = true;
+        const updated = await postJson("/api/visual/image/delete", { id: item.id });
+        state.loaded.visual = updated;
+        renderVisual(updated);
+        setNotice("Immagine eliminata dal profilo locale.", "success");
+      } catch (error) { setNotice(error.message); }
+      finally { if (button.isConnected) button.disabled = false; }
+    } })
   ));
+  const checkButton = h("button", { class: "button button-quiet", type: "button", text: "Verifica ora", onClick: async (event) => {
+    const button = event.currentTarget;
+    try {
+      button.disabled = true;
+      const updated = await postJson("/api/visual/token/check", {});
+      state.loaded.visual = updated;
+      renderVisual(updated);
+      setNotice("Verifica completata: nessuna immagine generata, nessun credito usato.", "success");
+    } catch (error) { setNotice(error.message); }
+    finally { if (button.isConnected) button.disabled = false; }
+  } });
+  const providerCard = settingsCard(
+    "Provider",
+    data.provider,
+    h("div", { class: "visual-generation" },
+      h("p", { class: "settings-hint", text: data.provider_configured
+        ? `Token configurato, origine: ${data.provider_source === "environment" ? "variabile d'ambiente" : "file locale protetto"}.`
+        : "Nessun token configurato: la generazione resta bloccata. Salvalo con mnemosine-visual-token --root <profilo>." }),
+      h("p", { class: "settings-meta", text: data.provider_checked_at
+        ? `Ultima verifica: ${data.provider_checked_at} — ${data.provider_valid ? "valido" : "rifiutato"}${data.provider_username ? ` (account ${data.provider_username})` : ""}.`
+        : "Nessuna verifica registrata." }),
+      data.provider_configured ? checkButton : null,
+      h("p", { class: "settings-hint", text: "La verifica legge solo l'account Replicate e non invia prompt né immagini." })
+    )
+  );
   clear(content, h("div", { class: "visual-grid" },
     settingsCard("Profilo visivo", "Descrizione persistente e seed del personaggio.", form),
     referenceCard,
+    providerCard,
     settingsCard("Generazione", data.provider_configured ? `${data.provider} · circa $${Number(data.price_per_image_usd || 0.04).toFixed(2)} per immagine` : `${data.provider} · token non configurato: esegui mnemosine-visual-token --root <profilo>`, h("div", { class: "visual-generation" }, warning, activationForm, data.enabled ? generateForm : emptyState("Generazione disattivata", "Salva prima l'autorizzazione esplicita."))),
     settingsCard("Immagini generate", "Cronologia locale di scene e seed.", images.length ? h("div", { class: "visual-gallery" }, ...images) : emptyState("Ancora nessuna immagine", "Le immagini generate appariranno qui."))
   ));

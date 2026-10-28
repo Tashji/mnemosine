@@ -251,6 +251,40 @@ class VisualTests(unittest.TestCase):
         with patch.dict("os.environ", {}, clear=True):
             self.assertEqual(self.service.status()["provider_source"], "file")
 
+    def test_generated_images_can_be_deleted_one_by_one(self):
+        first = self.service._store_output(PNG, "prima scena", 11)
+        second = self.service._store_output(PNG, "seconda scena", 12)
+        self.assertEqual(len(self.service.status()["generated_images"]), 2)
+
+        result = self.service.delete_image(first["id"])
+
+        self.assertTrue(result["removed"])
+        self.assertEqual([item["id"] for item in result["generated_images"]], [second["id"]])
+        self.assertFalse((self.root / "files" / first["path"]).exists())
+        self.assertFalse((self.root / "files" / first["path"]).with_suffix(".json").exists())
+        with self.assertRaises(ConfigError):
+            self.service.delete_image(first["id"])
+        with self.assertRaises(ValidationError):
+            self.service.delete_image("../../config/identity")
+
+    def test_provider_check_records_origin_and_result(self):
+        with (
+            patch.dict("os.environ", {"REPLICATE_API_TOKEN": "r8_status_token_123456"}),
+            patch("agent_memory.visual_token.check_token", return_value={
+                "valid": True, "status": 200, "username": "demo",
+            }) as checker,
+        ):
+            status = self.service.check_provider()
+
+        checker.assert_called_once_with("r8_status_token_123456")
+        self.assertTrue(status["provider_checked_at"])
+        self.assertTrue(status["provider_valid"])
+        self.assertEqual(status["provider_username"], "demo")
+        self.assertEqual(status["provider_source"], "environment")
+        self.assertNotIn("r8_status_token_123456", json.dumps(status))
+        recorded = self.root / "data" / "visual" / "token_status.json"
+        self.assertEqual(recorded.stat().st_mode & 0o777, 0o600)
+
     def test_status_never_exposes_provider_token(self):
         with patch.dict("os.environ", {"REPLICATE_API_TOKEN": "never-return-this"}):
             status = self.service.status()

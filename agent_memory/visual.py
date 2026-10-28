@@ -160,6 +160,7 @@ class VisualService:
             configured, source = False, None
         else:
             configured = True
+        checked = self._read_token_status()
         identity = self.config.get("identity")
         state = self.config.get("current_state")
         files: list[dict[str, Any]] = []
@@ -217,6 +218,9 @@ class VisualService:
             "price_per_image_usd": 0.04,
             "provider_configured": configured,
             "provider_source": source,
+            "provider_checked_at": checked.get("checked_at"),
+            "provider_valid": checked.get("valid"),
+            "provider_username": checked.get("username"),
             "reference_available": reference_available,
             "reference_path": "reference.jpg" if reference_available else None,
             "generated_images": files,
@@ -308,6 +312,72 @@ class VisualService:
             except OSError as exc:
                 raise ConfigError("Impossibile rimuovere la reference visiva.") from exc
         return {"removed": True, **self.status()}
+
+    def delete_image(self, image_id: str) -> dict[str, Any]:
+        """Rimuove un'immagine generata e i suoi metadati dal profilo locale."""
+
+        if not isinstance(image_id, str) or not _valid_id(image_id):
+            raise ValidationError("ID immagine non valido.")
+        image_path = self.output_dir / f"{image_id}.png"
+        metadata_path = self.output_dir / f"{image_id}.json"
+        with _profile_lock(self.root, timeout=30):
+            for path in (image_path, metadata_path):
+                if path.is_symlink():
+                    raise ConfigError("Immagine non valida: il percorso non può essere un symlink.")
+            if not image_path.is_file():
+                raise ConfigError("Immagine non disponibile: potrebbe essere già stata eliminata.")
+            try:
+                image_path.unlink()
+                metadata_path.unlink(missing_ok=True)
+            except OSError as exc:
+                raise ConfigError("Impossibile eliminare l'immagine.") from exc
+        return {"removed": True, "id": image_id, **self.status()}
+
+    def check_provider(self) -> dict[str, Any]:
+        """Verifica il token sull'account Replicate senza avviare generazioni."""
+
+        token, source = resolve_token(self.root)
+        from .visual_token import check_token
+
+        result = check_token(token)
+        username = result.get("username")
+        record = {
+            "checked_at": datetime.now(UTC).replace(microsecond=0).isoformat(),
+            "valid": bool(result.get("valid")),
+            "username": username if isinstance(username, str) else None,
+            "source": source,
+        }
+        with _profile_lock(self.root, timeout=30):
+            self._ensure_private_dir(self.visual_dir)
+            _write_private(
+                self.token_status_path(),
+                json.dumps(record, ensure_ascii=False).encode("utf-8"),
+            )
+        return self.status()
+
+    def token_status_path(self) -> Path:
+        return self.visual_dir / "token_status.json"
+
+    def _read_token_status(self) -> dict[str, Any]:
+        path = self.token_status_path()
+        if path.is_symlink() or not path.is_file():
+            return {}
+        try:
+            if path.stat().st_size > 4096:
+                return {}
+            record = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+        if not isinstance(record, dict):
+            return {}
+        checked_at = record.get("checked_at")
+        valid = record.get("valid")
+        username = record.get("username")
+        return {
+            "checked_at": checked_at if isinstance(checked_at, str) else None,
+            "valid": valid if isinstance(valid, bool) else None,
+            "username": username if isinstance(username, str) else None,
+        }
 
     def generate_image(self, prompt: str) -> dict[str, Any]:
         """Il tool MCP non dispone di un consenso per l'invio a servizi esterni."""

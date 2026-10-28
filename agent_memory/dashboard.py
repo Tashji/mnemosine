@@ -97,10 +97,14 @@ VISUAL_PROFILE_PATH = "/api/visual/profile"
 VISUAL_REFERENCE_PATH = "/api/visual/reference"
 VISUAL_REFERENCE_REMOVE_PATH = "/api/visual/reference/remove"
 VISUAL_GENERATE_PATH = "/api/visual/generate"
+VISUAL_IMAGE_DELETE_PATH = "/api/visual/image/delete"
+VISUAL_TOKEN_CHECK_PATH = "/api/visual/token/check"
 VISUAL_POST_PATHS = {
     VISUAL_PROFILE_PATH,
     VISUAL_REFERENCE_REMOVE_PATH,
     VISUAL_GENERATE_PATH,
+    VISUAL_IMAGE_DELETE_PATH,
+    VISUAL_TOKEN_CHECK_PATH,
 }
 SETTINGS_POST_PATHS = {
     RELATIONS_PATH,
@@ -1743,6 +1747,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 payload.get("scene", ""),
                 consent_to_external_processing=payload.get("consent_to_external_processing"),
             )
+        elif path == VISUAL_IMAGE_DELETE_PATH:
+            result = VisualService(self.server.data.root).delete_image(payload.get("id"))
+        elif path == VISUAL_TOKEN_CHECK_PATH:
+            result = VisualService(self.server.data.root).check_provider()
         elif path == RELATIONS_PATH:
             result = settings.save_contact(payload)
         elif path == SHADOW_TRAITS_PATH:

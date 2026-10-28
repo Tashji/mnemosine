@@ -17,6 +17,7 @@ from PIL import Image
 from agent_memory.dashboard import create_server
 from agent_memory.dashboard_auth import DashboardAuth
 from agent_memory.profile import PROJECT_ROOT
+from agent_memory.visual import VisualService
 
 PASSWORD = "correct horse battery"
 OUTPUT = BytesIO()
@@ -145,5 +146,24 @@ class VisualDashboardTests(unittest.TestCase):
         response = self._post("/api/visual/generate", {
             "scene": "in giardino", "consent_to_external_processing": True,
         })
+        self.assertEqual(response.status, 500)
+        self.assertIn("Provider non configurato", json.loads(response.read())["error"])
+
+    def test_image_delete_and_token_check_endpoints(self):
+        service = VisualService(self.root)
+        stored = service._store_output(PNG, "scena di prova", 7)
+
+        response = self._post("/api/visual/image/delete", {"id": stored["id"]})
+        self.assertEqual(response.status, 200)
+        self.assertTrue(json.loads(response.read())["removed"])
+        self.assertEqual(json.loads(self._request("/api/visual/status").read())["generated_images"], [])
+
+        response = self._post("/api/visual/image/delete", {"id": stored["id"]})
+        self.assertEqual(response.status, 500)
+        self.assertIn("non disponibile", json.loads(response.read())["error"])
+        response = self._post("/api/visual/image/delete", {"id": "../../config/identity"})
+        self.assertEqual(response.status, 400)
+
+        response = self._post("/api/visual/token/check", {})
         self.assertEqual(response.status, 500)
         self.assertIn("Provider non configurato", json.loads(response.read())["error"])
