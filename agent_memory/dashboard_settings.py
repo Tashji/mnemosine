@@ -50,7 +50,6 @@ PROFILE_ENTRIES = ("config", "data", "files")
 # nuovo, come fa già ``profile init --force``.
 PRESERVED_DATA = ("dashboard_tls", "models")
 EDITABLE_FLAGS = (
-    "visual_generation_enabled",
     "shadow_engine_enabled",
     "maintenance_mode",
 )
@@ -182,6 +181,14 @@ class DashboardSettings:
         if not fields["name"]:
             raise ValidationError("Il nome del tratto è obbligatorio.")
         intensity = _require_int(payload, "intensity", minimum=1, maximum=10)
+        examples = payload.get("trigger_examples")
+        if examples is not None:
+            if (not isinstance(examples, list) or len(examples) > 20 or any(
+                not isinstance(item, str) or not 4 <= len(item.strip()) <= 200 or "\x00" in item
+                for item in examples
+            )):
+                raise ValidationError("Esempi trigger: massimo 20 frasi, da 4 a 200 caratteri ciascuna.")
+            examples = [item.strip() for item in examples]
         awareness = payload.get("conscious_awareness")
         if (isinstance(awareness, bool) or not isinstance(awareness, (int, float))
                 or not 0 <= awareness <= 1 or not math.isfinite(awareness)):
@@ -193,11 +200,16 @@ class DashboardSettings:
             if action == "create":
                 if trait is not None:
                     raise ValidationError("Esiste già un tratto con questo ID.")
-                trait = {"id": trait_id, "triggers": []}
+                trait = {"id": trait_id, "triggers": [], "safety": {"allowed": True}}
                 traits.append(trait)
             elif trait is None:
                 raise ValidationError("Tratto non trovato.")
             trait.update(fields | {"intensity": intensity, "conscious_awareness": awareness})
+            if examples is not None:
+                triggers = [item for item in trait["triggers"] if not isinstance(item, dict) or item.get("id") != "dashboard_examples"]
+                if examples:
+                    triggers.append({"id": "dashboard_examples", "description": "Esempi configurati in dashboard", "examples": examples})
+                trait["triggers"] = triggers
             self.config.write("shadow_traits", document)
         return {"saved": True, "id": trait_id}
 
@@ -292,6 +304,9 @@ class DashboardSettings:
                     key: bool(flags.get(key, False)) for key in EDITABLE_FLAGS
                 }
                 | {
+                    "visual_generation_enabled": bool(
+                        flags.get("visual_generation_enabled", False)
+                    ),
                     "whatsapp_sending_enabled": bool(
                         flags.get("whatsapp_sending_enabled", False)
                     ),
@@ -542,6 +557,7 @@ class DashboardSettings:
             allow_whatsapp_sending=(
                 flags_patch.get("whatsapp_sending_enabled") is True
             ),
+            allow_visual_generation=False,
         )
         return self.snapshot()
 

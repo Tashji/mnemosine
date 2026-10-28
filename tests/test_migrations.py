@@ -276,12 +276,38 @@ class LegacyProfileTests(MigrationTestCase):
 
 
 class JsonMigrationTests(MigrationTestCase):
+    def test_legacy_identity_migration_adds_empty_visual_profile(self) -> None:
+        identity = self.read_json()
+        identity["schema_version"] = "1.0"
+        identity.pop("visual_profile", None)
+        self.write_json(identity)
+
+        migrated = ConfigStore(self.root).load_all()["identity"]
+
+        self.assertEqual(migrated["schema_version"], "2.0")
+        self.assertEqual(migrated["visual_profile"]["fixed_seed"], None)
+        self.assertEqual(migrated["visual_profile"]["body"], "")
+        self.assertEqual(self.read_json()["visual_profile"], migrated["visual_profile"])
+
     def test_current_documents_are_not_rewritten(self) -> None:
+        identity = self.read_json()
+        identity["schema_version"] = "2.0"
+        identity["visual_profile"] = {
+            "schema_version": 1,
+            "body": "",
+            "face": "",
+            "hair": "",
+            "eyes": "",
+            "distinctive_marks": "",
+            "style": "",
+            "fixed_seed": None,
+        }
+        self.write_json(identity)
         with patch("agent_memory.config.write_json_atomic") as writer:
             configs = ConfigStore(self.root).load_all()
 
         writer.assert_not_called()
-        self.assertEqual(configs["identity"]["schema_version"], "1.0")
+        self.assertEqual(configs["identity"]["schema_version"], "2.0")
 
     def test_missing_version_is_stamped_and_persisted(self) -> None:
         data = self.read_json()
@@ -290,8 +316,8 @@ class JsonMigrationTests(MigrationTestCase):
 
         configs = ConfigStore(self.root).load_all()
 
-        self.assertEqual(configs["identity"]["schema_version"], "1.0")
-        self.assertEqual(self.read_json()["schema_version"], "1.0")
+        self.assertEqual(configs["identity"]["schema_version"], "2.0")
+        self.assertEqual(self.read_json()["schema_version"], "2.0")
 
     def test_invalid_legacy_document_is_not_rewritten(self) -> None:
         data = self.read_json()
@@ -358,6 +384,7 @@ class JsonMigrationTests(MigrationTestCase):
             updated["migration_probe"] = True
             return updated
 
+        document["schema_version"] = "1.0"
         with (
             patch.dict(migr.JSON_DOCUMENTS, {"identity": 2}),
             patch.dict(
@@ -373,8 +400,9 @@ class JsonMigrationTests(MigrationTestCase):
 
     def test_missing_json_step_is_reported(self) -> None:
         document = ConfigStore(self.root).get("identity")
+        document["schema_version"] = "1.0"
         with (
-            patch.dict(migr.JSON_DOCUMENTS, {"identity": 2}),
+            patch.dict(migr.JSON_DOCUMENTS, {"identity": 3}),
             self.assertRaises(ConfigError) as ctx,
         ):
             migrate_json_document("identity", document)

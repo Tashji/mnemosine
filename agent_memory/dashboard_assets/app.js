@@ -29,6 +29,10 @@ const VIEW_META = {
     title: "Impostazioni",
     subtitle: "Integrazioni, comportamento e ciclo di vita del profilo.",
   },
+  visual: {
+    title: "Aspetto",
+    subtitle: "Seed visivo, caratteristiche fisiche e generazione manuale di immagini.",
+  },
 };
 
 const SOURCE_LABELS = {
@@ -1331,12 +1335,14 @@ function shadowTraitForm(trait = null) {
     settingsField("Origine", h("textarea", { name: "origin", rows: "2", maxlength: "2000" }, trait?.origin || "")),
     settingsField("Intensità", settingsInput("intensity", trait?.intensity ?? 5, "number", { min: "1", max: "10", step: "1", required: true })),
     settingsField("Consapevolezza (0–1)", settingsInput("conscious_awareness", trait?.conscious_awareness ?? 0, "number", { min: "0", max: "1", step: "0.01", required: true })),
-    h("p", { class: "settings-hint", text: "I trigger, le difese, le regole e i ricordi collegati già presenti restano invariati. L'agente non può leggere direttamente l'ombra. I servizi dell'ombra già avviati devono essere riavviati per leggere le modifiche." }),
+    settingsField("Esempi di trigger", h("textarea", { name: "trigger_examples", rows: "3", maxlength: "4000" }, (trait?.triggers?.find((trigger) => trigger.id === "dashboard_examples")?.examples || []).join("\n")), "Una frase per riga (4–200 caratteri): il confronto con il riepilogo è letterale, non semantico."),
+    h("p", { class: "settings-hint", text: "Gli altri trigger, le difese, le regole e i ricordi collegati restano invariati. L'agente non può leggere direttamente l'ombra." }),
   ], async (data) => {
     await postJson("/api/traits/shadow", {
       action: editing ? "update" : "create", id: data.get("id"), name: data.get("name"),
       description: data.get("description"), origin: data.get("origin"),
       intensity: Number(data.get("intensity")), conscious_awareness: Number(data.get("conscious_awareness")),
+      trigger_examples: String(data.get("trigger_examples") || "").split("\n").map((item) => item.trim()).filter(Boolean),
     });
     delete state.loaded.overview;
     delete state.loaded.traits;
@@ -2035,16 +2041,10 @@ function behaviorSettings(behavior) {
         "div",
         { class: "settings-checks-grid" },
         settingsCheck(
-          "visual_generation_enabled",
-          "Generazione visiva",
-          Boolean(flags.visual_generation_enabled),
-          "Consente le richieste di immagini quando il modello visivo sarà disponibile."
-        ),
-        settingsCheck(
           "shadow_engine_enabled",
           "Motore dell'ombra",
           Boolean(flags.shadow_engine_enabled),
-          "Preferenza salvata: non attiva né disattiva ancora un motore automatico dell'ombra."
+          "Applica alle interazioni un suggerimento prudente quando il riepilogo corrisponde a un esempio di trigger; i tratti restano privati."
         ),
         settingsCheck(
           "maintenance_mode",
@@ -2200,6 +2200,139 @@ function profileSettings(profile) {
   return content;
 }
 
+function renderVisual(data) {
+  const content = $("#visual-content");
+  const profile = data.profile || {};
+  const fields = [
+    ["body", "Corporatura"],
+    ["face", "Viso"],
+    ["hair", "Capelli"],
+    ["eyes", "Occhi"],
+    ["distinctive_marks", "Segni particolari"],
+    ["style", "Stile visivo"],
+  ];
+  const form = settingsForm(
+    "Salva aspetto",
+    [
+      h("p", { class: "settings-hint", text: "Definisci i tratti che devono restare riconoscibili. Puoi aggiornare questi dati in qualsiasi momento." }),
+      ...fields.map(([key, title]) => settingsField(
+        title,
+        h("textarea", { name: key, rows: key === "body" ? "3" : "2", maxlength: "2000", placeholder: `Descrivi ${title.toLowerCase()}…` }, profile[key] || "")
+      )),
+      settingsField("Seed fisso (facoltativo)", settingsInput("fixed_seed", profile.fixed_seed ?? "", "number", { min: "0", max: "2147483647", step: "1", placeholder: "Vuoto = seed casuale per generazione" }), "Il seed aiuta la ripetibilità, ma non garantisce da solo la stessa identità."),
+    ],
+    async (formData) => {
+      const seedText = String(formData.get("fixed_seed") || "").trim();
+      const seed = seedText ? Number(seedText) : null;
+      if (seed !== null && (!Number.isSafeInteger(seed) || seed < 0 || seed > 2147483647)) {
+        throw new Error("Il seed deve essere un intero tra 0 e 2147483647.");
+      }
+      const result = await postJson("/api/visual/profile", {
+        profile: Object.fromEntries([
+          ...fields.map(([key]) => [key, String(formData.get(key) || "")]),
+          ["fixed_seed", seed],
+        ]),
+        enabled: Boolean(state.loaded.visual && state.loaded.visual.enabled),
+      });
+      state.loaded.visual = result;
+      renderVisual(result);
+      setNotice("Profilo Aspetto aggiornato.", "success");
+    }
+  );
+
+  const reference = data.reference_available
+    ? h("div", { class: "visual-reference" },
+        h("img", { src: "/api/visual/image/reference", alt: "Immagine di riferimento del profilo" }),
+        h("button", { class: "button button-danger", type: "button", text: "Rimuovi reference", onClick: async () => {
+          try {
+            const updated = await postJson("/api/visual/reference/remove", {});
+            state.loaded.visual = updated;
+            renderVisual(updated);
+            setNotice("Reference rimossa dal profilo locale.", "success");
+          } catch (error) { setNotice(error.message); }
+        } })
+      )
+    : emptyState("Nessuna reference", "Carica un'immagine solo se vuoi usarla come riferimento per la generazione.");
+  const upload = h("input", { type: "file", accept: "image/png,image/jpeg,image/webp", "aria-label": "Carica immagine di riferimento" });
+  const uploadButton = h("button", { class: "button button-quiet", type: "button", text: "Carica reference", onClick: async () => {
+    const file = upload.files && upload.files[0];
+    if (!file) { setNotice("Seleziona prima un'immagine PNG, JPEG o WebP."); return; }
+    if (file.size > 8 * 1024 * 1024) { setNotice("L'immagine deve pesare al massimo 8 MiB."); return; }
+    try {
+      uploadButton.disabled = true;
+      const session = await api("/api/session");
+      const response = await fetch("/api/visual/reference", {
+        method: "POST", cache: "no-store",
+        headers: { "Content-Type": file.type, "X-CSRF-Token": session.csrf },
+        body: file,
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || `Errore HTTP ${response.status}`);
+      state.loaded.visual = result;
+      renderVisual(result);
+      setNotice("Reference salvata nel profilo locale.", "success");
+    } catch (error) { setNotice(error.message); }
+    finally { uploadButton.disabled = false; }
+  } });
+  const referenceCard = settingsCard(
+    "Immagine di riferimento",
+    "Salvata localmente; viene inviata a Replicate soltanto quando confermi una generazione.",
+    h("div", { class: "visual-reference-stack" }, reference, upload, uploadButton)
+  );
+
+  const warning = h("p", { class: "settings-warning", text: `La generazione usa Replicate e FLUX.1 Kontext Pro: testo e immagine di riferimento saranno inviati al provider esterno; ogni output costa circa $${Number(data.price_per_image_usd || 0.04).toFixed(2)} secondo il listino consultato al 2026-10-28. La coerenza del volto non è garantita.` });
+  const enable = settingsCheck("visual_enabled", "Consenti generazione visiva", Boolean(data.enabled), "Le richieste vengono avviate manualmente qui, mai in automatico.");
+  const enableConfirm = settingsField("Conferma attivazione (solo quando abiliti)", settingsInput("enable_confirmation", "", "text", { placeholder: "Scrivi GENERA", autocomplete: "off" }));
+  let generateForm;
+  generateForm = settingsForm("Genera immagine", [
+    h("label", { class: "settings-check" }, h("input", { type: "checkbox", name: "external_consent" }), h("span", {}, h("strong", { text: "Confermo l'invio a Replicate" }), h("small", { text: "La reference e il prompt saranno elaborati da un servizio cloud a pagamento." }))),
+    settingsField("Scena o modifica", h("textarea", { name: "scene", rows: "3", maxlength: "1000", placeholder: "Es. ritratto all'aperto in una giornata di sole" })),
+  ], async (formData) => {
+    if (!formData.has("external_consent")) {
+      throw new Error("Conferma esplicita l'invio della reference e del prompt a Replicate.");
+    }
+    const button = generateForm.querySelector('button[type="submit"]');
+    button.disabled = true;
+    button.textContent = "Generazione in corso…";
+    try {
+      const result = await postJson("/api/visual/generate", {
+        scene: String(formData.get("scene") || ""),
+        consent_to_external_processing: true,
+      });
+      state.loaded.visual = await api("/api/visual/status");
+      renderVisual(state.loaded.visual);
+      setNotice(`Immagine generata (seed ${result.seed}).`, "success");
+    } finally {
+      if (button.isConnected) {
+        button.disabled = false;
+        button.textContent = "Genera immagine";
+      }
+    }
+  });
+  const activationForm = settingsForm("Salva autorizzazione", [enable, enableConfirm], async (formData) => {
+    const result = await postJson("/api/visual/profile", {
+      profile,
+      enabled: formData.has("visual_enabled"),
+      confirmation: String(formData.get("enable_confirmation") || ""),
+    });
+    state.loaded.visual = result;
+    renderVisual(result);
+    setNotice(result.enabled ? "Generazione visiva autorizzata." : "Generazione visiva disattivata.", "success");
+  });
+
+  const images = (data.generated_images || []).map((item) => h("figure", { class: "visual-image" },
+    h("img", { src: `/api/visual/image/${encodeURIComponent(item.id)}`, alt: item.prompt || "Immagine generata" }),
+    h("figcaption", { text: `${item.created_at || ""} · seed ${item.seed}` }),
+    h("p", { text: item.prompt || "" })
+  ));
+  clear(content, h("div", { class: "visual-grid" },
+    settingsCard("Profilo visivo", "Descrizione persistente e seed del personaggio.", form),
+    referenceCard,
+    settingsCard("Generazione", data.provider_configured ? `${data.provider} · circa $${Number(data.price_per_image_usd || 0.04).toFixed(2)} per immagine` : `${data.provider} · token non configurato: esegui mnemosine-visual-token --root <profilo>`, h("div", { class: "visual-generation" }, warning, activationForm, data.enabled ? generateForm : emptyState("Generazione disattivata", "Salva prima l'autorizzazione esplicita."))),
+    settingsCard("Immagini generate", "Cronologia locale di scene e seed.", images.length ? h("div", { class: "visual-gallery" }, ...images) : emptyState("Ancora nessuna immagine", "Le immagini generate appariranno qui."))
+  ));
+}
+
 function renderSettings(data) {
   const browser = data.browser || {};
   const whatsapp = data.whatsapp || {};
@@ -2234,6 +2367,20 @@ function renderSettings(data) {
   );
 }
 
+async function loadVisual(force = false) {
+  if (state.loaded.visual && !force) return;
+  const content = $("#visual-content");
+  setLoading(content, "Caricamento del profilo visivo…");
+  try {
+    const data = await api("/api/visual/status");
+    state.loaded.visual = data;
+    renderVisual(data);
+  } catch (error) {
+    setNotice(`Impossibile caricare Aspetto: ${error.message}`);
+    clear(content, emptyState("Profilo visivo non disponibile", error.message));
+  }
+}
+
 async function loadSettings(force = false) {
   if (state.loaded.settings && !force) return;
   const content = $("#settings-content");
@@ -2259,6 +2406,7 @@ const LOADERS = {
   semantic: loadSemantic,
   evolution: loadEvolution,
   settings: loadSettings,
+  visual: loadVisual,
 };
 
 function navigate(view) {

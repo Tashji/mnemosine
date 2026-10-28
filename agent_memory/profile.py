@@ -702,6 +702,23 @@ def build_profile_args(values: Mapping[str, Any]) -> argparse.Namespace:
                 "Lavoro: l'anno di inizio non può precedere la nascita."
             )
 
+    visual_profile: dict[str, Any] = {}
+    for field in ("body", "face", "hair", "eyes", "distinctive_marks", "style"):
+        visual_profile[field] = _form_limited(
+            values, f"visual_{field}", f"Aspetto: {field}", maximum=2000
+        )
+    raw_seed = _form_text(values, "visual_fixed_seed")
+    if raw_seed:
+        try:
+            fixed_seed = int(raw_seed)
+        except ValueError as exc:
+            raise ValidationError("Seed visivo: inserisci un numero intero.") from exc
+        if not 0 <= fixed_seed <= 2**31 - 1:
+            raise ValidationError("Seed visivo: usa un intero tra 0 e 2147483647.")
+    else:
+        fixed_seed = None
+    visual_profile["fixed_seed"] = fixed_seed
+
     traits: dict[str, dict[str, Any]] = {}
     for trait_id, (left, right) in TRAIT_LABELS.items():
         value = _form_int(
@@ -777,6 +794,7 @@ def build_profile_args(values: Mapping[str, Any]) -> argparse.Namespace:
         education=education,
         work=work,
         social_people=_parse_people(values),
+        visual_profile=visual_profile,
     )
 
 
@@ -974,6 +992,10 @@ def _identity_document(args: argparse.Namespace, birth_date: date) -> dict[str, 
             "parents": parents,
             "siblings": siblings,
             "family_notes": family_notes,
+        },
+        "visual_profile": {
+            "schema_version": 1,
+            **getattr(args, "visual_profile", {}),
         },
         "personality": {
             "model": "bipolar_sliders_v1",

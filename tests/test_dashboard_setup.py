@@ -223,6 +223,8 @@ class DashboardSetupTests(SetupFixture):
         self.assertIn('data-step="6"', page)
         self.assertIn('data-add-row="parent"', page)
         self.assertIn('name="trait_introversion_extraversion"', page)
+        self.assertIn('name="visual_body"', page)
+        self.assertIn('name="visual_fixed_seed"', page)
         self.assertIn('name="generate_biography"', page)
         self.assertIn('name="build_index"', page)
         self.assertIn('/static/setup.js', page)
@@ -250,6 +252,9 @@ class DashboardSetupTests(SetupFixture):
             (self.root / "config" / "identity.json").read_text(encoding="utf-8")
         )
         self.assertEqual(identity["personal_data"]["full_name"], "Giulia Bianchi")
+        self.assertEqual(identity["schema_version"], "2.0")
+        self.assertEqual(identity["visual_profile"]["fixed_seed"], None)
+        self.assertEqual(identity["visual_profile"]["body"], "")
         self.assertEqual(
             identity["personal_data"]["residence"]["city"], "Torino"
         )

@@ -67,12 +67,22 @@ class McpServerTests(unittest.TestCase):
         self.assertIn("list_files", names)
         self.assertIn("read_file", names)
         self.assertIn("write_file", names)
+        self.assertIn("generate_image", names)
         self.assertFalse(any("shadow" in name for name in names))
         self.assertNotIn("get_shadow_traits", names)
         self.assertNotIn("list_shadow_entries", names)
         self.assertIn("record_interaction", names)
         self.assertIn("acknowledge_impulse", names)
         self.assertIn("deliver_impulse", names)
+
+    def test_visual_tool_requires_manual_dashboard_consent(self) -> None:
+        ConfigStore(self.root).update_current_state(
+            {"flags": {"visual_generation_enabled": True}},
+            allow_visual_generation=True,
+        )
+        with self.assertRaises(ToolError) as error:
+            call_tool(self.mcp, "generate_image", {"prompt": "un paesaggio"})
+        self.assertIn("dashboard", str(error.exception))
 
     def test_identity_and_state_tools(self) -> None:
         identity = call_tool(self.mcp, "get_identity", {})

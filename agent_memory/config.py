@@ -133,6 +133,23 @@ def _validate_identity(identity: dict[str, Any]) -> None:
     _require_list(family["parents"], "identity.family.parents")
     _require_list(family["siblings"], "identity.family.siblings")
 
+    visual = identity.get("visual_profile")
+    if visual is not None:
+        visual = _require_object(visual, "identity.visual_profile")
+        for field in ("body", "face", "hair", "eyes", "distinctive_marks", "style"):
+            value = visual.get(field, "")
+            if not isinstance(value, str) or len(value) > 2000:
+                raise ConfigError(
+                    f"identity.visual_profile.{field}: attesa una stringa fino a 2000 caratteri."
+                )
+        seed = visual.get("fixed_seed")
+        if seed is not None and (
+            isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed <= 2**31 - 1
+        ):
+            raise ConfigError(
+                "identity.visual_profile.fixed_seed: atteso un intero tra 0 e 2147483647 o null."
+            )
+
     personality = _require_object(identity["personality"], "identity.personality")
     _require_keys(personality, ["model", "scale", "traits"], "identity.personality")
     traits = _require_object(personality["traits"], "identity.personality.traits")
@@ -519,6 +536,7 @@ class ConfigStore:
         patch: dict[str, Any],
         *,
         allow_whatsapp_sending: bool = False,
+        allow_visual_generation: bool = False,
     ) -> dict[str, Any]:
         """Applica un patch ricorsivo a ``current_state.json``.
 
@@ -526,8 +544,9 @@ class ConfigStore:
         particolare la lettura diretta dell'ombra e l'invio WhatsApp restano
         disabilitati finché non li abilita l'amministratore del profilo.
         ``allow_whatsapp_sending`` è riservato alla dashboard autenticata, che
-        ha già chiesto una conferma esplicita all'amministratore; nessun tool
-        MCP lo passa. La lettura diretta dell'ombra resta bloccata in ogni caso.
+        ha già chiesto una conferma esplicita all'amministratore. Anche
+        ``allow_visual_generation`` è riservato alla dashboard. Nessun tool MCP
+        li passa. La lettura diretta dell'ombra resta bloccata in ogni caso.
         """
 
         if not isinstance(patch, dict) or not patch:
@@ -558,6 +577,12 @@ class ConfigStore:
                     "whatsapp_sending_enabled non può essere abilitato dal server: "
                     "l'invio va autorizzato dall'amministratore nel profilo."
                 )
+
+            if (isinstance(flags_patch, dict)
+                    and flags_patch.get("visual_generation_enabled") is True
+                    and not state.get("flags", {}).get("visual_generation_enabled", False)
+                    and not allow_visual_generation):
+                raise ValidationError("La generazione visiva va abilitata dall'amministratore nella dashboard.")
 
             _deep_merge(state, patch)
             state["identity_id"] = configs["identity"]["identity_id"]

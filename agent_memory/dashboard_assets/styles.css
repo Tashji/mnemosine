@@ -2942,6 +2942,59 @@ select:hover {
   color: var(--text);
 }
 
+/* -- profilo visivo ------------------------------------------------------ */
+
+.visual-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.visual-reference-stack,
+.visual-generation,
+.visual-gallery {
+  display: grid;
+  gap: 12px;
+}
+
+.visual-reference img,
+.visual-image img {
+  display: block;
+  width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: var(--bg-raised);
+}
+
+.visual-gallery {
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+}
+
+.visual-image {
+  min-width: 0;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 9px;
+  background: var(--panel-soft);
+}
+
+.visual-image img {
+  max-height: 280px;
+}
+
+.visual-image figcaption,
+.visual-image p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
 /* -- impostazioni -------------------------------------------------------- */
 
 .settings-grid {
@@ -3224,7 +3277,8 @@ select:hover {
 }
 
 @media (max-width: 1180px) {
-  .settings-grid {
+  .settings-grid,
+  .visual-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 

@@ -24,6 +24,10 @@ profiles/*/data/outbox/
 data/browser/
 profiles/*/data/browser/
 
+# Token dei provider esterni (Replicate): mai nel repository.
+data/secrets/
+profiles/*/data/secrets/
+
 # Artefatti di build del pacchetto.
 build/
 dist/

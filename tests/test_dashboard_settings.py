@@ -120,6 +120,20 @@ class SettingsUnitTests(unittest.TestCase):
                 self.settings.save_shadow_trait({**payload, **patch})
             self.assertEqual(self.settings.config.get("shadow_traits"), snapshot)
 
+    def test_shadow_trigger_examples_are_editable(self) -> None:
+        payload = {"action": "create", "id": "shadow_new", "name": "Prova", "description": "", "origin": "", "intensity": 5, "conscious_awareness": 0, "trigger_examples": ["una promozione"]}
+        self.settings.save_shadow_trait(payload)
+        trait = self.settings.config.get("shadow_traits")["traits"][-1]
+        self.assertTrue(trait["safety"]["allowed"])
+        self.assertEqual(trait["triggers"][0]["examples"], ["una promozione"])
+        from agent_memory.heartbeat import HeartbeatEngine
+        self.settings.config.update_current_state({"flags": {"shadow_engine_enabled": True}})
+        self.assertIn("response_guidance", HeartbeatEngine(self.root).record_interaction(summary="una promozione"))
+        self.settings.save_shadow_trait({**payload, "action": "update", "trigger_examples": []})
+        self.assertEqual(self.settings.config.get("shadow_traits")["traits"][-1]["triggers"], [])
+        with self.assertRaises(ValidationError):
+            self.settings.save_shadow_trait({**payload, "action": "update", "trigger_examples": ["x"]})
+
     def test_concurrent_shadow_creates_preserve_both_traits(self) -> None:
         from concurrent.futures import ThreadPoolExecutor
 
@@ -267,7 +281,6 @@ class SettingsUnitTests(unittest.TestCase):
         saved = self.settings.save_behavior(
             {
                 "flags": {
-                    "visual_generation_enabled": True,
                     "shadow_engine_enabled": False,
                     "maintenance_mode": True,
                 },
@@ -278,7 +291,7 @@ class SettingsUnitTests(unittest.TestCase):
                 },
             }
         )
-        self.assertTrue(saved["behavior"]["flags"]["visual_generation_enabled"])
+        self.assertFalse(saved["behavior"]["flags"]["visual_generation_enabled"])
         self.assertFalse(saved["behavior"]["flags"]["shadow_engine_enabled"])
         self.assertTrue(saved["behavior"]["flags"]["maintenance_mode"])
         self.assertEqual(saved["behavior"]["heartbeat"]["interval_minutes"], 45)

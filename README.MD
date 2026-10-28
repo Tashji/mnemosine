@@ -255,7 +255,7 @@ La modalità guidata chiede i dati uno alla volta e usa il valore tra parentesi 
 python -m agent_memory.profile init --interactive
 ```
 
-In alternativa, la stessa creazione può essere avviata dal browser: avvia la dashboard con `--root ./profiles/marco --auth` e apri `/setup`. Il wizard web è più ricco del percorso interattivo: raccoglie anche lingue, quattro assi della personalità, interessi, valori, abitudini, familiari multipli, persone importanti, formazione e lavoro.
+In alternativa, la stessa creazione può essere avviata dal browser: avvia la dashboard con `--root ./profiles/marco --auth` e apri `/setup`. Il wizard web è più ricco del percorso interattivo: raccoglie anche lingue, quattro assi della personalità, caratteristiche fisiche e seed visivo facoltativo, interessi, valori, abitudini, familiari multipli, persone importanti, formazione e lavoro.
 
 `--interactive` può essere combinato con gli altri argomenti: i valori passati diventano i default mostrati nei prompt; con `--root` la directory non viene richiesta. `--dry-run`, `--force` e `--json` funzionano anche in questa modalità. Il comando genera:
 
@@ -320,6 +320,7 @@ Con l'installazione come pacchetto sono disponibili i comandi:
 | `mnemosine-heartbeat` | `python -m agent_memory.heartbeat` | Esegue un battito del ciclo autonomo e consegna gli impulsi con `--deliver`. |
 | `mnemosine-browser` | `python -m agent_memory.browser` | Verifica la policy e apre una pagina consentita. |
 | `mnemosine-browser-login` | `python -m agent_memory.browser_login` | Apre un browser visibile per il primo accesso e salva la sessione. |
+| `mnemosine-visual-token` | `python -m agent_memory.visual_token` | Salva o verifica il token Replicate in un file locale protetto. |
 
 Il primo comando da eseguire dopo l'installazione è `mnemosine-start`: sceglie `~/.mnemosine/profile` (o `$AGENT_MEMORY_PROFILE`), avvia la dashboard in locale e apre il browser sulla pagina di configurazione. Se il profilo esiste già, riapre semplicemente la dashboard. Le opzioni utili sono `--root` per scegliere un'altra directory, `--no-open` quando non c'è un browser (server remoto) e `--port` per cambiare porta.
 
@@ -1561,7 +1562,9 @@ Senza `--apply` il comando è di sola lettura. Con `--apply` acquisisce lo stess
 
 La dashboard mostra già il nuovo stato senza modifiche: attività, luogo, routine e carico sono letti da `current_state.json`.
 
-I collegamenti `memory_id` registrati nelle interazioni devono puntare a un ricordo episodico conscio esistente e richiedono `user_id`; riferimenti inesistenti o non accessibili vengono rifiutati prima di modificare la relazione o il carico. Il flag `shadow_engine_enabled` resta una preferenza salvata, non un interruttore operativo di un motore automatico.
+I collegamenti `memory_id` registrati nelle interazioni devono puntare a un ricordo episodico conscio esistente e richiedono `user_id`; riferimenti inesistenti o non accessibili vengono rifiutati prima di modificare la relazione o il carico.
+
+Con `shadow_engine_enabled` attivo, `record_interaction` confronta letteralmente il riepilogo con gli esempi dei trigger dei tratti autorizzati e può restituire un'indicazione generica di tatto nel campo `response_guidance`. La dashboard permette di aggiungere esempi, uno per riga; i trigger preesistenti sono conservati. Non si tratta di comprensione semantica né di un'imposizione: il client MCP deve usare il suggerimento. L'ombra e i suoi dettagli restano privati; la manutenzione sospende la valutazione.
 
 ### 17.5. Heartbeat e carico cognitivo
 
@@ -1571,6 +1574,8 @@ I collegamenti `memory_id` registrati nelle interazioni devono puntare a un rico
 2. recupera carico cognitivo per il tempo trascorso: 2 punti l'ora da svegli, 15 nel sonno, e una notte intera lo azzera;
 3. valuta i trigger interni in ordine di priorità — ricorrenza di un ricordo conscio con importanza almeno 7 nello stesso giorno dell'anno, silenzio di almeno tre giorni da una persona con fiducia almeno 60, noia dopo 90 minuti nella stessa attività;
 4. se un trigger è attivo e non ci sono freni (sonno, manutenzione, cooldown, limite giornaliero, sovraccarico) mette in coda un **impulso**, non un messaggio.
+
+Durante il sonno, un battito **applicato** crea una sintesi estrattiva di massimo 20 ricordi consci non consolidati, con importanza almeno 5 e affidabilità almeno 0,5. La sintesi mantiene riferimenti e collegamenti alle fonti; i ricordi latenti e repressi sono esclusi. La transazione salva sintesi, revisioni e stato insieme; l'anteprima non modifica nulla. I battiti successivi trattano eventuali altri ricordi; in manutenzione il consolidamento è sospeso. Non sono generate nuove conoscenze semantiche. Dopo il consolidamento occorre eseguire `mnemosine-index --root <profilo> --sync` per includere la sintesi nella ricerca vettoriale; fino ad allora resta accessibile alla ricerca lessicale. Il battito deve essere avviato o pianificato esternamente.
 
 L'impulso contiene trigger, eventuale destinatario, contesto e canale suggerito; `delivery.authorized` dice se l'integrazione è già abilitata. L'invio passa da un esecutore separato (sotto): il battito non apre WhatsApp né il browser, e il testo del messaggio non viene inventato da qui.
 
@@ -1666,6 +1671,14 @@ Il sistema non si limiterà quindi a conservare una cronologia di conversazioni:
 <a id="identita-visiva" name="identita-visiva"></a>
 
 ## 18. Motore di consistenza visiva: Visual Identity Continuity
+
+La dashboard include la vista **Aspetto**. Durante la creazione del profilo o in seguito si possono salvare in `identity.json` descrizioni di corporatura, viso, capelli, occhi, segni particolari e stile, oltre a un seed opzionale. I profili esistenti ricevono `visual_profile` tramite migrazione automatica.
+
+È possibile caricare una reference PNG, JPEG o WebP (massimo 8 MiB e 20 megapixel). Viene normalizzata e conservata localmente in `data/visual/`; non viene inviata al provider quando viene caricata.
+
+La generazione manuale usa **FLUX.1 Kontext Pro** tramite Replicate. Installa l'extra opzionale `pip install 'mnemosine[visual]'`. Il token si salva con `mnemosine-visual-token --root <profilo>`: l'input è nascosto, il valore finisce in `data/secrets/replicate_token` con permessi `0600` ed è escluso dal repository. `REPLICATE_API_TOKEN` nell'ambiente del processo ha la precedenza, ma resta sconsigliato perché finisce nella storia della shell; il token non va mai in chat, in file versionati o nei dati del profilo. `mnemosine-visual-token --check` verifica il token sull'endpoint dell'account senza generare immagini, `--remove` lo cancella. L'attivazione richiede di digitare `GENERA`; ogni generazione richiede inoltre conferma esplicita dell'invio a Replicate. Solo allora prompt e reference vengono inviati al provider. Il flag nasce spento, non ci sono invii automatici e il tool MCP `generate_image` non può aggirare il consenso.
+
+Il prezzo consultato è **$0,04 per immagine**; controlla il listino aggiornato prima dell'uso. Il seed aiuta la ripetibilità ma non garantisce identità stabile né risultati identici fra versioni del modello. Gli output sono verificati, ripuliti dai metadati e salvati localmente in `files/images/`; la galleria mostra fino a 50 risultati recenti. La continuità facciale resta probabilistica: non è un modello addestrato né una verifica dell'identità.
 
 ### 18.1. Obiettivo
 

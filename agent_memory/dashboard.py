@@ -71,6 +71,7 @@ from .setup_options import (
     PRONOUN_OPTIONS,
     timezone_groups,
 )
+from .visual import VisualService
 
 ASSETS_DIR = Path(__file__).resolve().parent / "dashboard_assets"
 ACCESS_LEVELS = {"conscious", "latent", "repressed"}
@@ -92,6 +93,15 @@ SETTINGS_WHATSAPP_PATH = "/api/settings/whatsapp"
 SETTINGS_BEHAVIOR_PATH = "/api/settings/behavior"
 PROFILE_ARCHIVE_PATH = "/api/profile/archive"
 AUTONOMY_REVIEW_PATH = "/api/autonomy/review"
+VISUAL_PROFILE_PATH = "/api/visual/profile"
+VISUAL_REFERENCE_PATH = "/api/visual/reference"
+VISUAL_REFERENCE_REMOVE_PATH = "/api/visual/reference/remove"
+VISUAL_GENERATE_PATH = "/api/visual/generate"
+VISUAL_POST_PATHS = {
+    VISUAL_PROFILE_PATH,
+    VISUAL_REFERENCE_REMOVE_PATH,
+    VISUAL_GENERATE_PATH,
+}
 SETTINGS_POST_PATHS = {
     RELATIONS_PATH,
     SHADOW_TRAITS_PATH,
@@ -1060,7 +1070,7 @@ class DashboardData:
                 }
             )
 
-        shadow_doc = self.shadow.get_shadow_traits()
+        shadow_doc = ShadowService(self.root).get_shadow_traits()
         shadow_traits = []
         for trait in shadow_doc.get("traits", []):
             shadow_traits.append(
@@ -1463,6 +1473,13 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 self._serve_file("index.html")
             elif path == "/api/overview":
                 self._send_json(self.server.data.overview())
+            elif path == "/api/visual/status":
+                self._send_json(VisualService(self.server.data.root).status())
+            elif path == "/api/visual/image/reference":
+                self._send_private_image(VisualService(self.server.data.root), reference=True)
+            elif path.startswith("/api/visual/image/"):
+                image_id = path.removeprefix("/api/visual/image/")
+                self._send_private_image(VisualService(self.server.data.root), image_id=image_id)
             elif path == RELATIONS_PATH:
                 try:
                     offset = int(self._first(params, "offset", "0"))
@@ -1566,7 +1583,17 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                     self._handle_finalize_post()
                 else:
                     self._handle_setup_post()
-            elif path in SETTINGS_POST_PATHS:
+            elif path == VISUAL_REFERENCE_PATH:
+                if self.server.auth is not None and not self._is_authenticated():
+                    self._discard_body()
+                    self._send_json({"error": "Autenticazione richiesta."}, status=HTTPStatus.UNAUTHORIZED)
+                    return
+                if self.server.data.profile_status() != PROFILE_STATE_READY:
+                    self._discard_body()
+                    self._send_json({"error": "Profilo non configurato."}, status=HTTPStatus.SERVICE_UNAVAILABLE)
+                    return
+                self._handle_visual_reference_upload()
+            elif path in SETTINGS_POST_PATHS or path in VISUAL_POST_PATHS:
                 if (
                     self.server.auth is not None
                     and not self._is_authenticated()
@@ -1596,6 +1623,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         except ValidationError as exc:
             self._send_json(
                 {"error": str(exc)}, status=HTTPStatus.BAD_REQUEST
+            )
+        except AgentMemoryError as exc:
+            self._send_json(
+                {"error": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR
             )
         except (BrokenPipeError, ConnectionResetError):
             return
@@ -1699,7 +1730,20 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             raise ValidationError("Modulo scaduto o non valido. Riprova.")
 
         settings = DashboardSettings(self.server.data.root)
-        if path == RELATIONS_PATH:
+        if path == VISUAL_PROFILE_PATH:
+            result = VisualService(self.server.data.root).configure(
+                payload.get("profile", {}),
+                enabled=payload.get("enabled"),
+                confirmation=payload.get("confirmation", ""),
+            )
+        elif path == VISUAL_REFERENCE_REMOVE_PATH:
+            result = VisualService(self.server.data.root).remove_reference()
+        elif path == VISUAL_GENERATE_PATH:
+            result = VisualService(self.server.data.root).generate(
+                payload.get("scene", ""),
+                consent_to_external_processing=payload.get("consent_to_external_processing"),
+            )
+        elif path == RELATIONS_PATH:
             result = settings.save_contact(payload)
         elif path == SHADOW_TRAITS_PATH:
             result = settings.save_shadow_trait(payload)
@@ -1730,6 +1774,30 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 )
                 sys.stderr.flush()
         self._send_json(result)
+
+    def _send_private_image(
+        self,
+        service: VisualService,
+        *,
+        image_id: str = "",
+        reference: bool = False,
+    ) -> None:
+        data, content_type = service.image_bytes(image_id, reference=reference)
+        self._send_bytes(data, content_type)
+
+    def _handle_visual_reference_upload(self) -> None:
+        token = self.headers.get("X-CSRF-Token")
+        if not token or not self.server.form_tokens.consume(token):
+            self._discard_body()
+            raise ValidationError("Modulo scaduto o non valido. Riprova.")
+        content_type = self.headers.get_content_type()
+        if content_type not in {"image/png", "image/jpeg", "image/webp"}:
+            self._discard_body()
+            raise ValidationError("Formato immagine non supportato: usa PNG, JPEG o WebP.")
+        from .visual import MAX_REFERENCE_BYTES
+
+        body = self._read_request_body(max_bytes=MAX_REFERENCE_BYTES)
+        self._send_json(VisualService(self.server.data.root).save_reference(body, content_type))
 
     def _handle_logout(self) -> None:
         auth = self.server.auth
@@ -2144,19 +2212,19 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         )
         self._send_html(page, status=status)
 
-    def _read_request_body(self) -> bytes:
+    def _read_request_body(self, *, max_bytes: int = MAX_FORM_BYTES) -> bytes:
         transfer_encoding = self.headers.get("Transfer-Encoding", "").lower()
         if transfer_encoding:
             if "chunked" not in transfer_encoding:
                 raise ValidationError("Transfer-Encoding non supportato.")
-            return self._read_chunked_body()
+            return self._read_chunked_body(max_bytes=max_bytes)
 
         raw_length = self.headers.get("Content-Length", "0")
         try:
             length = int(raw_length or "0")
         except ValueError as exc:
             raise ValidationError("Content-Length non valido.") from exc
-        if length < 0 or length > MAX_FORM_BYTES:
+        if length < 0 or length > max_bytes:
             raise ValidationError("Richiesta troppo grande.")
         if length == 0:
             return b""
@@ -2165,7 +2233,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             raise ValidationError("Corpo della richiesta incompleto.")
         return body
 
-    def _read_chunked_body(self) -> bytes:
+    def _read_chunked_body(self, *, max_bytes: int = MAX_FORM_BYTES) -> bytes:
         chunks: list[bytes] = []
         total = 0
         while True:
@@ -2186,7 +2254,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                         break
                 break
             total += size
-            if total > MAX_FORM_BYTES:
+            if total > max_bytes:
                 raise ValidationError("Richiesta troppo grande.")
             chunk = self.rfile.read(size)
             if len(chunk) != size:

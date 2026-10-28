@@ -79,7 +79,7 @@ SQLITE_MIGRATIONS["timeline_episodic"] = {2: _timeline_v2, 3: _timeline_v3}
 
 # Documenti JSON della configurazione e versione supportata dal codice.
 JSON_DOCUMENTS: dict[str, int] = {
-    "identity": 1,
+    "identity": 2,
     "shadow_traits": 1,
     # La versione 2 aggiunge i parametri del ciclo autonomo in ``heartbeat``.
     "current_state": 2,
@@ -125,6 +125,28 @@ def _social_graph_v2(document: dict[str, Any]) -> dict[str, Any]:
 
 
 JSON_MIGRATIONS["social_graph"] = {2: _social_graph_v2}
+
+
+def _identity_v2(document: dict[str, Any]) -> dict[str, Any]:
+    """Aggiunge un profilo visivo vuoto, senza cambiare i dati preesistenti."""
+    updated = json.loads(json.dumps(document))
+    updated.setdefault(
+        "visual_profile",
+        {
+            "schema_version": 1,
+            "body": "",
+            "face": "",
+            "hair": "",
+            "eyes": "",
+            "distinctive_marks": "",
+            "style": "",
+            "fixed_seed": None,
+        },
+    )
+    return updated
+
+
+JSON_MIGRATIONS["identity"] = {2: _identity_v2}
 
 
 def migrate_integrations(document: dict[str, Any]) -> dict[str, Any]:

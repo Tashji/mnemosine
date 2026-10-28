@@ -278,6 +278,20 @@
             </fieldset>
 
             <fieldset class="setup-section">
+              <legend>Aspetto e seed visivo</legend>
+              <p class="setup-hint">Definisci le caratteristiche fisiche del personaggio. Il seed è facoltativo e non garantisce da solo che il volto resti identico. Potrai aggiungere in seguito un'immagine di riferimento e generare immagini dalla sezione Aspetto della dashboard.</p>
+              <div class="setup-grid">
+                <label class="login-field setup-field-wide"><span>Corporatura</span><textarea name="visual_body" rows="2" maxlength="2000"></textarea></label>
+                <label class="login-field setup-field-wide"><span>Viso e lineamenti</span><textarea name="visual_face" rows="2" maxlength="2000"></textarea></label>
+                <label class="login-field"><span>Capelli</span><textarea name="visual_hair" rows="2" maxlength="2000"></textarea></label>
+                <label class="login-field"><span>Occhi</span><textarea name="visual_eyes" rows="2" maxlength="2000"></textarea></label>
+                <label class="login-field setup-field-wide"><span>Segni particolari</span><textarea name="visual_distinctive_marks" rows="2" maxlength="2000"></textarea></label>
+                <label class="login-field setup-field-wide"><span>Stile visivo</span><textarea name="visual_style" rows="2" maxlength="2000"></textarea></label>
+                <label class="login-field"><span>Seed fisso (facoltativo)</span><input type="number" name="visual_fixed_seed" min="0" max="2147483647" step="1"></label>
+              </div>
+            </fieldset>
+
+            <fieldset class="setup-section">
               <legend>Interessi, valori, abitudini</legend>
               <div class="setup-grid">
                 <label class="login-field setup-field-wide">

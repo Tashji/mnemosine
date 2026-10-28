@@ -560,7 +560,7 @@
     reviewBox.textContent = "";
     const groups = [
       { index: 0, title: "Identità e contesto" },
-      { index: 1, title: "Carattere" },
+      { index: 1, title: "Carattere e aspetto" },
       { index: 2, title: "Relazioni" },
       { index: 3, title: "Storia" },
     ];
