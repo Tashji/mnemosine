@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mnemosine"
-version = "0.7.0"
+version = "0.8.0"
 description = "Architettura cognitiva locale su MCP: identità, memoria, biografia e autonomia controllata per agenti AI."
 readme = "README.MD"
 requires-python = ">=3.12"

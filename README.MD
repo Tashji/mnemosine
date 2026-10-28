@@ -1033,6 +1033,14 @@ Il client che ospita l’agente può pianificare questo flusso, senza integrazio
 
 Una sola esecuzione attiva per profilo, massimo 20 passi e durata di 30 minuti. Prima delle azioni sono ricontrollati manutenzione, impulso originale e policy aggiornata, incluso il consenso per origine. Le credenziali restano nella sessione browser del profilo. Gli errori dopo un possibile effetto esterno non attivano retry automatici. La verifica UI non scrive una finta consegna nell’outbox.
 
+**Revisione amministrativa degli esiti incerti (v0.8).** La panoramica mostra gli incarichi recenti e dà priorità ai casi da rivedere, indicando origine, ultimo tipo di azione e passi, senza contenuti delle pagine né parametri delle azioni. Una ricevuta mancante può anche indicare un'azione ancora in corso: controllare prima il sito esterno. Solo dalla dashboard l'amministratore può scrivere una nota e confermare con `HO VERIFICATO`; la revisione è registrata nel database e non è un tool MCP. Non scrivere password o dati sensibili nella nota.
+
+La revisione chiude l'incarico come interrotto, non ripete azioni, non conferma consegne e non modifica l'outbox. Rimuove l'impulso originale solo se è ancora quello corrente; un impulso più recente resta intatto. Le ricevute incerte sono conservate e il vecchio incarico non può ripartire. Dopo l'interruzione di un'azione incerta, i nuovi incarichi sono bloccati finché non viene registrata la revisione. La migrazione SQLite della timeline aggiunge la tabella delle revisioni alla versione 3; fare un backup del profilo prima dell'aggiornamento.
+
+La stessa revisione amministrativa è disponibile anche per gli incarichi interrotti senza esiti incerti e per quelli scaduti: l'amministratore verifica eventuali effetti sul sito e registra una nota. La chiusura non ripete azioni e non riutilizza l'incarico; un impulso diverso da quello originale non viene cancellato.
+
+**Tratti dell'ombra nella dashboard.** In Tratti l'amministratore può creare un tratto o modificare nome, descrizione, origine, intensità e consapevolezza. L'ID non cambia e le modifiche conservano trigger, difese, regole, limiti e ricordi collegati. I servizi dell'ombra già avviati devono essere riavviati per caricare le modifiche. Non è possibile modificare questi tratti tramite MCP; la lettura conscia rimane disabilitata. La dashboard non abilita né implementa un motore automatico dell'ombra.
+
 **Mnemosine non risveglia un client inattivo:** il client deve avviare il turno o pianificare le chiamate. Non c’è un LLM incorporato né una dipendenza da un particolare host MCP. Un sito può includere istruzioni ostili: i suoi contenuti sono dati, non nuove autorizzazioni; l’agente deve mantenere obiettivo e consensi dell’amministratore.
 
 ### 14.7. File locali dell'agente

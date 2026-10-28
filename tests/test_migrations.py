@@ -64,10 +64,25 @@ class MigrationTestCase(unittest.TestCase):
 class SqliteMigrationTests(MigrationTestCase):
     def test_current_database_is_already_migrated(self) -> None:
         health = Database(self.root).health()["timeline_episodic"]
-        self.assertEqual(health["schema_supported"], 2)
+        self.assertEqual(health["schema_supported"], 3)
         with Database(self.root).timeline() as conn:
-            self.assertEqual(stored_database_version(conn), 2)
+            self.assertEqual(stored_database_version(conn), 3)
         self.assertFalse(Database(self.root).health()["timeline_episodic"]["needs_migration"])
+
+    def test_v2_autonomy_rows_survive_review_migration(self) -> None:
+        with Database(self.root).timeline() as conn:
+            conn.execute("INSERT INTO autonomous_runs(id, impulse, state, url, created_at) VALUES (?, ?, ?, ?, ?)",
+                         ("legacy-run", '{"trigger":"test"}', "uncertain", "https://example.org", "2026-01-01"))
+            conn.execute("INSERT INTO autonomous_actions(run_id, id, payload) VALUES (?, ?, ?)",
+                         ("legacy-run", "legacy-action", '{"action":"click"}'))
+            conn.execute("DROP TABLE autonomous_reviews")
+            conn.execute("UPDATE schema_meta SET value='2.0' WHERE key='schema_version'")
+            conn.commit()
+        with Database(self.root).timeline() as conn:
+            self.assertEqual(stored_database_version(conn), 3)
+            self.assertEqual(conn.execute("SELECT state FROM autonomous_runs WHERE id='legacy-run'").fetchone()[0], "uncertain")
+            self.assertIsNone(conn.execute("SELECT result FROM autonomous_actions WHERE id='legacy-action'").fetchone()[0])
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM autonomous_reviews").fetchone()[0], 0)
 
     def test_database_without_version_is_stamped_without_touching_rows(self) -> None:
         conn = sqlite3.connect(self.db_path())
@@ -76,7 +91,7 @@ class SqliteMigrationTests(MigrationTestCase):
         self.drop_schema_meta()
 
         with Database(self.root).timeline() as opened:
-            self.assertEqual(stored_database_version(opened), 2)
+            self.assertEqual(stored_database_version(opened), 3)
             after = opened.execute("SELECT COUNT(*) FROM episodic_memories").fetchone()[0]
 
         self.assertEqual(before, after)
@@ -92,7 +107,7 @@ class SqliteMigrationTests(MigrationTestCase):
                     "SELECT name FROM sqlite_master WHERE type IN ('table', 'view')"
                 )
             }
-            self.assertEqual(stored_database_version(opened), 2)
+            self.assertEqual(stored_database_version(opened), 3)
 
         self.assertLessEqual(TIMELINE_TABLES, tables)
 
@@ -219,7 +234,7 @@ class SqliteMigrationTests(MigrationTestCase):
         with (
             patch.dict(
                 migr.DATABASE_SCHEMAS,
-                {"timeline_episodic": ("timeline_episodic.sql", 3)},
+                {"timeline_episodic": ("timeline_episodic.sql", 4)},
             ),
             self.assertRaises(DatabaseUnavailable) as ctx,
             Database(self.root).timeline(),
@@ -248,7 +263,7 @@ class LegacyProfileTests(MigrationTestCase):
 
         # Ogni database viene migrato al primo uso, non tutti insieme.
         conn = sqlite3.connect(self.db_path("timeline_episodic"))
-        self.assertEqual(stored_database_version(conn), 2)
+        self.assertEqual(stored_database_version(conn), 3)
         conn.close()
 
         database = Database(self.root)

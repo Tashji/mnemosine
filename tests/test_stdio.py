@@ -161,3 +161,71 @@ class StdioTransportTests(unittest.TestCase):
                 )
 
         asyncio.run(exercise())
+
+    def test_autonomy_uncertain_across_stdio_restart_and_admin_review(self) -> None:
+        from datetime import UTC, datetime
+
+        from agent_memory.autonomy import AutonomyService
+        from agent_memory.config import ConfigStore
+
+        config = ConfigStore(self.root)
+        config.update_current_state({"flags": {"maintenance_mode": False}, "heartbeat": {
+            "pending_impulse": {"trigger": "test", "created_at": datetime.now(UTC).isoformat()},
+            "spontaneous_message_pending": True,
+        }})
+        (self.root / "config" / "integrations.json").write_text(json.dumps({"browser": {
+            "enabled": True, "interaction_enabled": True, "allowed_origins": ["https://example.com"],
+            "interaction_origins": ["https://example.com"],
+        }}), encoding="utf-8")
+        # The real MCP subprocess uses a deterministic fake backend and DNS;
+        # it never accesses a network site or real browser session.
+        code = '''
+import sys
+from pathlib import Path
+import agent_memory.browser as browser
+from agent_memory.browser import BrowserController
+from agent_memory.errors import BrowserError
+from agent_memory.server import create_server
+from tests.test_browser import FakeBackend
+root = Path(sys.argv[1])
+browser._default_resolver = lambda host: ["93.184.216.34"]
+class InterruptedBackend(FakeBackend):
+    def open(self, url):
+        with (root / "attempts.txt").open("a") as log:
+            log.write("attempt\\n")
+        super().open(url)
+        raise BrowserError("risultato non disponibile")
+create_server(root, browser=BrowserController(root, backend=InterruptedBackend())).run(transport="stdio")
+'''
+        params = StdioServerParameters(command=sys.executable, args=["-c", code, str(self.root)], cwd=str(PROJECT_ROOT))
+
+        async def exercise() -> None:
+            async with stdio_client(params) as (read, write), ClientSession(read, write) as session:
+                await session.initialize()
+                claim = await session.call_tool("autonomous_claim", {"url": "https://example.com"})
+                self.assertFalse(claim.isError)
+                run_id = json.loads(claim.content[0].text)["id"]
+                attempt = await session.call_tool("autonomous_act", {
+                    "run_id": run_id, "action_id": "one", "action": "open", "arguments": {"url": "https://example.com"},
+                })
+                self.assertFalse(attempt.isError)
+                self.assertEqual(json.loads(attempt.content[0].text)["state"], "uncertain")
+            async with stdio_client(params) as (read, write), ClientSession(read, write) as session:
+                await session.initialize()
+                status = await session.call_tool("autonomous_status", {"run_id": run_id})
+                self.assertEqual(json.loads(status.content[0].text)["state"], "uncertain")
+                retry = await session.call_tool("autonomous_act", {
+                    "run_id": run_id, "action_id": "one", "action": "open", "arguments": {"url": "https://example.com"},
+                })
+                self.assertEqual(json.loads(retry.content[0].text)["state"], "uncertain")
+                self.assertEqual((self.root / "attempts.txt").read_text().splitlines(), ["attempt"])
+                review = AutonomyService(self.root, None).review_uncertain(run_id, "HO VERIFICATO", "Esaminato")
+                self.assertTrue(review["impulse_cleared"])
+                self.assertFalse(review["remote_delivery_verified"])
+                denied = await session.call_tool("autonomous_act", {
+                    "run_id": run_id, "action_id": "new", "action": "open", "arguments": {"url": "https://example.com"},
+                })
+                self.assertTrue(denied.isError)
+                self.assertEqual((self.root / "attempts.txt").read_text().splitlines(), ["attempt"])
+
+        asyncio.run(exercise())

@@ -43,7 +43,7 @@ BASELINE_VERSION = 1
 # Per ogni database: nome del file di schema dentro il pacchetto e versione
 # supportata dal codice corrente.
 DATABASE_SCHEMAS: dict[str, tuple[str, int]] = {
-    "timeline_episodic": ("timeline_episodic.sql", 2),
+    "timeline_episodic": ("timeline_episodic.sql", 3),
     "shadow_diary": ("shadow_diary.sql", 1),
     "semantic_memory": ("semantic_memory.sql", 1),
     "vector_index": ("vector_index.sql", 1),
@@ -67,7 +67,15 @@ def _timeline_v2(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS one_active_run ON autonomous_runs((1)) WHERE state IN ('ready', 'running', 'awaiting_verification', 'uncertain')")
 
 
-SQLITE_MIGRATIONS["timeline_episodic"] = {2: _timeline_v2}
+def _timeline_v3(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS autonomous_reviews ("
+        "run_id TEXT PRIMARY KEY REFERENCES autonomous_runs(id), "
+        "reviewed_at TEXT NOT NULL, note TEXT NOT NULL, impulse_cleared INTEGER NOT NULL)"
+    )
+
+
+SQLITE_MIGRATIONS["timeline_episodic"] = {2: _timeline_v2, 3: _timeline_v3}
 
 # Documenti JSON della configurazione e versione supportata dal codice.
 JSON_DOCUMENTS: dict[str, int] = {

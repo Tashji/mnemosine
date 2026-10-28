@@ -294,6 +294,57 @@ async function loadSession() {
 
 /* -- panoramica ---------------------------------------------------------- */
 
+function autonomyRunsPanel(autonomy) {
+  const labels = {
+    ready: "Pronto", running: "In corso", awaiting_verification: "Da verificare",
+    uncertain: "Esito incerto", blocked: "Interrotto", completed: "Completato",
+  };
+  const runs = Array.isArray(autonomy.runs) ? autonomy.runs : [];
+  const cards = runs.map((run) => {
+    const action = run.last_action;
+    const needsReview = run.review_required;
+    let reviewForm = null;
+    if (needsReview) {
+      const reasonText = {
+        uncertain: "Un'azione potrebbe essere ancora in corso oppure già riuscita.",
+        expired: "L'incarico è scaduto; le azioni precedenti potrebbero già aver prodotto effetti.",
+        blocked: "L'incarico è interrotto; le azioni precedenti potrebbero già aver prodotto effetti.",
+      }[run.review_reason] || "L'incarico richiede una revisione.";
+      reviewForm = settingsForm("Registra revisione e chiudi", [
+        h("p", { class: "settings-warning", text: `${reasonText} Controlla prima il sito esterno. La chiusura non ripete azioni e non certifica una consegna; rimuove l'impulso originale solo se è ancora quello attuale.` }),
+        settingsField("Cosa hai verificato", h("textarea", { name: "note", rows: "2", maxlength: "1000", required: true }), "Non inserire password o dati sensibili."),
+        settingsField("Conferma esplicita", settingsInput("confirmation", "", "text", { required: true, placeholder: "Scrivi HO VERIFICATO" })),
+      ], async (formData) => {
+        const result = await postJson("/api/autonomy/review", {
+          run_id: run.id, note: formData.get("note"), confirmation: formData.get("confirmation"),
+        });
+        await loadOverview(true);
+        setNotice(result.impulse_cleared
+          ? "Revisione registrata. Impulso originale rimosso; nessuna consegna dichiarata."
+          : "Revisione registrata. L'impulso attuale è stato conservato; nessuna consegna dichiarata.", "success");
+      }, { danger: true });
+    }
+    return h("article", { class: "autonomy-run" },
+      h("div", { class: "autonomy-run-head" },
+        h("strong", { text: needsReview ? "Revisione richiesta" : text(labels[run.state], run.state) }),
+        h("span", { text: fmtDate(run.created_at, { time: true }) })
+      ),
+      h("p", { text: `${text(run.origin)} · ${run.steps} / 20 passi · ${text(run.trigger, "impulso")}` }),
+      action ? h("p", { text: `Ultima azione: ${text(action.action)}${action.uncertain ? " · esito incerto" : ""}` }) : null,
+      run.review ? h("p", { text: `Revisionato ${fmtDate(run.review.reviewed_at, { time: true })}: ${run.review.note}` }) : null,
+      reviewForm
+    );
+  });
+  return h("section", { class: "panel autonomy-runs-panel" },
+    h("div", { class: "panel-header" }, h("h3", { text: "Incarichi browser" }),
+      h("span", { class: "count-chip", text: `Ultimi ${runs.length}` })),
+    h("div", { class: "panel-body" },
+      h("p", { class: "autonomy-run-intro", text: "La verifica di una pagina non certifica una consegna. Rivedi gli esiti incerti prima di procedere." }),
+      cards.length ? cards : emptyState("Nessun incarico", "Gli incarichi dell'agente compariranno qui.")
+    )
+  );
+}
+
 function renderOverview(data) {
   const identity = data.identity || {};
   const current = data.state || {};
@@ -627,6 +678,7 @@ function renderOverview(data) {
     metrics,
     h("div", { class: "overview-columns" }, recentPanel, historyPanel),
     contactsPanel,
+    autonomyRunsPanel(data.autonomy || {}),
     h("div", { class: "overview-columns overview-autonomy-columns" }, outboxPanel, filesPanel)
   );
 
@@ -1268,6 +1320,33 @@ function renderMemoryDetail(data) {
 
 /* -- tratti -------------------------------------------------------------- */
 
+function shadowTraitForm(trait = null) {
+  const editing = Boolean(trait);
+  const form = settingsForm(editing ? "Salva tratto" : "Aggiungi tratto", [
+    settingsField("ID univoco", settingsInput("id", trait?.id || "", "text", {
+      required: true, maxlength: "80", pattern: "[A-Za-z0-9][A-Za-z0-9_-]{0,79}", readonly: editing,
+    }), editing ? "L'ID non può essere cambiato: resta collegato ai dati esistenti." : "Lettere, numeri, trattino o underscore."),
+    settingsField("Nome", settingsInput("name", trait?.name || "", "text", { required: true, maxlength: "2000" })),
+    settingsField("Descrizione", h("textarea", { name: "description", rows: "3", maxlength: "2000" }, trait?.description || "")),
+    settingsField("Origine", h("textarea", { name: "origin", rows: "2", maxlength: "2000" }, trait?.origin || "")),
+    settingsField("Intensità", settingsInput("intensity", trait?.intensity ?? 5, "number", { min: "1", max: "10", step: "1", required: true })),
+    settingsField("Consapevolezza (0–1)", settingsInput("conscious_awareness", trait?.conscious_awareness ?? 0, "number", { min: "0", max: "1", step: "0.01", required: true })),
+    h("p", { class: "settings-hint", text: "I trigger, le difese, le regole e i ricordi collegati già presenti restano invariati. L'agente non può leggere direttamente l'ombra. I servizi dell'ombra già avviati devono essere riavviati per leggere le modifiche." }),
+  ], async (data) => {
+    await postJson("/api/traits/shadow", {
+      action: editing ? "update" : "create", id: data.get("id"), name: data.get("name"),
+      description: data.get("description"), origin: data.get("origin"),
+      intensity: Number(data.get("intensity")), conscious_awareness: Number(data.get("conscious_awareness")),
+    });
+    delete state.loaded.overview;
+    delete state.loaded.traits;
+    await loadTraits(true);
+    setNotice("Tratto dell'ombra salvato.", "success");
+  });
+  return h("details", { class: "settings-card" },
+    h("summary", { text: editing ? "Modifica tratto" : "Aggiungi tratto dell'ombra" }), form);
+}
+
 function renderTraits(data) {
   const scale = data.scale || {};
   const traits = (data.traits || []).map((trait) => {
@@ -1357,7 +1436,8 @@ function renderTraits(data) {
             h("h4", { text: "Limiti di sicurezza" }),
             h("p", { text: trait.safety.limits })
           )
-        : null
+        : null,
+      shadowTraitForm(trait)
     );
   });
 
@@ -1396,7 +1476,8 @@ function renderTraits(data) {
           )
         )
       ),
-      shadowCards.length ? h("div", { class: "shadow-grid" }, shadowCards) : emptyState("Nessun tratto dell'ombra", "La configurazione non contiene tratti latenti."),
+      shadowCards.length ? h("div", { class: "shadow-grid" }, shadowCards) : emptyState("Nessun tratto dell'ombra", "Questo profilo parte senza tratti dell'ombra. Puoi aggiungerne uno qui sotto."),
+      shadowTraitForm(),
       conflicts.length
         ? h(
             "div",

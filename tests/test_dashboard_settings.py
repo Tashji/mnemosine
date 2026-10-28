@@ -98,6 +98,42 @@ class SettingsUnitTests(unittest.TestCase):
                 self.settings.save_contact(self.contact_payload(**patch))
             self.assertEqual(self.settings.config.get("social_graph"), before)
 
+    def test_shadow_trait_create_update_preserves_private_fields(self) -> None:
+        before = self.settings.config.get("shadow_traits")
+        existing = before["traits"][0]
+        payload = {"action": "update", "id": existing["id"], "name": "Nome modificato",
+                   "description": "Descrizione", "origin": "Origine", "intensity": 8, "conscious_awareness": 0.5}
+        self.settings.save_shadow_trait(payload)
+        after = self.settings.config.get("shadow_traits")
+        edited = after["traits"][0]
+        self.assertEqual(edited["name"], "Nome modificato")
+        for key in ("triggers", "defense_mechanisms", "behavioral_rules", "linked_memory_ids", "safety"):
+            self.assertEqual(edited.get(key), existing.get(key))
+        self.assertEqual(after["access_policy"], before["access_policy"])
+        self.settings.save_shadow_trait({**payload, "action": "create", "id": "shadow_new"})
+        self.assertEqual(self.settings.config.get("shadow_traits")["traits"][-1]["triggers"], [])
+        for patch in ({"id": existing["id"], "action": "create"}, {"id": "missing"},
+                      {"id": "bad id"}, {"intensity": True}, {"intensity": 11},
+                      {"conscious_awareness": float("nan")}, {"conscious_awareness": 2}, {"name": " "}):
+            snapshot = self.settings.config.get("shadow_traits")
+            with self.assertRaises(ValidationError):
+                self.settings.save_shadow_trait({**payload, **patch})
+            self.assertEqual(self.settings.config.get("shadow_traits"), snapshot)
+
+    def test_concurrent_shadow_creates_preserve_both_traits(self) -> None:
+        from concurrent.futures import ThreadPoolExecutor
+
+        def create(index: int) -> None:
+            DashboardSettings(self.root).save_shadow_trait({
+                "action": "create", "id": f"shadow_parallel_{index}", "name": f"Tratto {index}",
+                "description": "", "origin": "", "intensity": 5, "conscious_awareness": 0,
+            })
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            list(executor.map(create, (1, 2)))
+        ids = {trait["id"] for trait in self.settings.config.get("shadow_traits")["traits"]}
+        self.assertTrue({"shadow_parallel_1", "shadow_parallel_2"} <= ids)
+
     def test_snapshot_exposes_effective_policy_and_profile(self) -> None:
         session = self.root / "data" / "browser" / "session.json"
         session.parent.mkdir(parents=True, exist_ok=True)
@@ -488,6 +524,97 @@ class SettingsHTTPTests(unittest.TestCase):
         self.assertEqual(response.status, 200)
         response = self._request("/api/relations", cookie=cookie)
         self.assertNotIn("api_contact", [p["user_id"] for p in json.loads(response.read())["contacts"]])
+
+    def test_autonomy_review_requires_admin_and_preserves_new_impulse(self) -> None:
+        from datetime import UTC, datetime
+
+        from agent_memory.autonomy import AutonomyService
+        from agent_memory.browser import BrowserController
+        from agent_memory.operational import canonical
+
+        config = ConfigStore(self.root)
+        original = {"trigger": "test", "created_at": datetime.now(UTC).isoformat()}
+        config.update_current_state({"heartbeat": {"pending_impulse": original}})
+        with config.transaction() as conn:
+            conn.execute("INSERT INTO autonomous_runs(id, impulse, state, url, created_at, steps) VALUES (?, ?, ?, ?, ?, ?)",
+                         ("run-test", canonical(original), "running", "https://example.org/private?secret=x", datetime.now(UTC).isoformat(), 1))
+            conn.execute("INSERT INTO autonomous_actions(run_id, id, payload) VALUES (?, ?, ?)",
+                         ("run-test", "action-test", canonical({"action": "fill", "arguments": {"value": "PRIVATE_VALUE"}})))
+        payload = {"run_id": "run-test", "confirmation": "HO VERIFICATO", "note": "Esaminato"}
+        self.assertEqual(self._request("/api/overview").status, 401)
+        self.assertEqual(self._post_json("/api/autonomy/review", payload, "").status, 401)
+        cookie = self._login()
+        overview = json.loads(self._request("/api/overview", cookie=cookie).read())
+        runs = overview["autonomy"]["runs"]
+        self.assertTrue(runs[0]["review_required"])
+        self.assertNotIn("PRIVATE_VALUE", json.dumps(runs))
+        self.assertNotIn("secret=x", json.dumps(runs))
+        self.assertEqual(self._post_json("/api/autonomy/review", payload, cookie).status, 400)
+        token = self._csrf(cookie)
+        request = urllib.request.Request(self.base_url + "/api/autonomy/review", method="POST",
+            data=json.dumps({**payload, "csrf": token}).encode(),
+            headers={"Origin": "https://foreign.example", "Cookie": cookie, "Content-Type": "application/json"})
+        with self.assertRaises(urllib.error.HTTPError) as error:
+            self.opener.open(request, timeout=10)
+        self.assertEqual(error.exception.code, 403)
+        error.exception.close()
+        new = {"trigger": "new", "created_at": datetime.now(UTC).isoformat()}
+        config.update_current_state({"heartbeat": {"pending_impulse": new}})
+        response = self._post_json("/api/autonomy/review", {**payload, "csrf": token}, cookie)
+        self.assertEqual(response.status, 200)
+        self.assertFalse(json.loads(response.read())["impulse_cleared"])
+        self.assertEqual(config.get("current_state")["heartbeat"]["pending_impulse"], new)
+        self.assertEqual(AutonomyService(self.root, BrowserController(self.root)).status("run-test")["state"], "blocked")
+        self.assertEqual(self._post_json("/api/autonomy/review", {**payload, "csrf": token}, cookie).status, 400)
+
+    def test_shadow_trait_api_requires_auth_csrf_and_refreshes_view(self) -> None:
+        payload = {"action": "create", "id": "shadow_new", "name": "Prova", "description": "", "origin": "",
+                   "intensity": 5, "conscious_awareness": 0.5}
+        self.assertEqual(self._post_json("/api/traits/shadow", payload, "").status, 401)
+        cookie = self._login()
+        self.assertEqual(self._post_json("/api/traits/shadow", payload, cookie).status, 400)
+        token = self._csrf(cookie)
+        request = urllib.request.Request(self.base_url + "/api/traits/shadow", method="POST",
+            data=json.dumps({**payload, "csrf": token}).encode(),
+            headers={"Origin": "https://foreign.example", "Cookie": cookie, "Content-Type": "application/json"})
+        with self.assertRaises(urllib.error.HTTPError) as error:
+            self.opener.open(request, timeout=10)
+        self.assertEqual(error.exception.code, 403)
+        error.exception.close()
+        # Prime the cached services before the write.
+        self.assertEqual(len(json.loads(self._request("/api/traits", cookie=cookie).read())["shadow"]["traits"]), 5)
+        response = self._post_json("/api/traits/shadow", {**payload, "csrf": token}, cookie)
+        self.assertEqual(response.status, 200)
+        traits = json.loads(self._request("/api/traits", cookie=cookie).read())["shadow"]["traits"]
+        self.assertEqual(len(traits), 6)
+        self.assertEqual(traits[-1]["name"], "Prova")
+        self.assertEqual(self._post_json("/api/traits/shadow", {**payload, "csrf": token}, cookie).status, 400)
+        update = {**payload, "action": "update", "name": "Aggiornato", "csrf": self._csrf(cookie)}
+        self.assertEqual(self._post_json("/api/traits/shadow", update, cookie).status, 200)
+        traits = json.loads(self._request("/api/traits", cookie=cookie).read())["shadow"]["traits"]
+        self.assertEqual(traits[-1]["name"], "Aggiornato")
+
+    def test_dashboard_review_closes_expired_run(self) -> None:
+        from datetime import UTC, datetime
+
+        from agent_memory.operational import canonical
+
+        config = ConfigStore(self.root)
+        impulse = {"trigger": "expired", "created_at": datetime.now(UTC).isoformat()}
+        config.update_current_state({"heartbeat": {"pending_impulse": impulse, "spontaneous_message_pending": True}})
+        with config.transaction() as conn:
+            conn.execute("INSERT INTO autonomous_runs(id, impulse, state, url, created_at) VALUES (?, ?, ?, ?, ?)",
+                         ("stale-run", canonical(impulse), "ready", "https://example.org", "2000-01-01T00:00:00+00:00"))
+        cookie = self._login()
+        overview = json.loads(self._request("/api/overview", cookie=cookie).read())
+        run = next(item for item in overview["autonomy"]["runs"] if item["id"] == "stale-run")
+        self.assertEqual(run["review_reason"], "expired")
+        response = self._post_json("/api/autonomy/review", {
+            "run_id": "stale-run", "confirmation": "HO VERIFICATO", "note": "Controllato", "csrf": self._csrf(cookie),
+        }, cookie)
+        self.assertEqual(response.status, 200)
+        self.assertTrue(json.loads(response.read())["impulse_cleared"])
+        self.assertIsNone(config.get("current_state")["heartbeat"]["pending_impulse"])
 
     def test_archive_from_api_returns_to_setup(self) -> None:
         cookie = self._login()

@@ -7,12 +7,14 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import UTC, datetime
+from contextlib import ExitStack
+from datetime import UTC, datetime, timedelta
 from typing import Any
+from urllib.parse import urlsplit
 
 from .browser import BrowserController, BrowserPolicy
 from .config import ConfigStore
-from .errors import AgentMemoryError, ValidationError
+from .errors import AgentMemoryError, ConfigError, ValidationError
 from .operational import canonical
 
 MAX_STEPS = 20
@@ -21,7 +23,7 @@ ACTIVE = ("ready", "running", "awaiting_verification", "uncertain")
 
 
 class AutonomyService:
-    def __init__(self, root, browser: BrowserController):
+    def __init__(self, root, browser: BrowserController | None):
         self.config = ConfigStore(root)
         self.browser = browser
 
@@ -32,6 +34,8 @@ class AutonomyService:
     def _policy(self) -> BrowserPolicy:
         # Reload per operation: an administrator's revocation applies immediately.
         policy = BrowserPolicy.from_root(self.config.root)
+        if self.browser is None:
+            raise ValidationError("Controller browser non disponibile.")
         self.browser.policy = policy
         backend = self.browser._backend
         if backend is not None and hasattr(backend, "policy"):
@@ -63,6 +67,116 @@ class AutonomyService:
                 "observation": json.loads(run["observation"]) if run.get("observation") else None,
                 "max_steps": MAX_STEPS, "remote_delivery_verified": False}
 
+    @staticmethod
+    def _action_uncertain(action: Any) -> bool:
+        return action["result"] is None or json.loads(action["result"]).get("state") == "uncertain"
+
+    def _review_reason(self, run: dict[str, Any], actions: list) -> str | None:
+        if run["state"] not in ACTIVE and run["state"] != "blocked":
+            return None
+        if any(self._action_uncertain(row) for row in actions):
+            return "uncertain"
+        if run["state"] == "blocked":
+            return "blocked"
+        if run["state"] in ("ready", "awaiting_verification"):
+            try:
+                created = datetime.fromisoformat(run["created_at"])
+                if created.tzinfo is None:
+                    return "expired"
+                if (self._now() - created).total_seconds() > MAX_AGE_SECONDS:
+                    return "expired"
+            except (TypeError, ValueError):
+                return "expired"
+        return None
+
+    def review_summary(self, *, limit: int = 10) -> dict[str, Any]:
+        """Vista amministrativa limitata: nessun testo di pagina o parametro delle azioni."""
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 50:
+            raise ValidationError("limit deve essere tra 1 e 50.")
+        self.config.load_all()
+        conn = self.config.operational.connect()
+        try:
+            conn.execute("BEGIN")
+            rows = conn.execute(
+                "SELECT r.*, v.reviewed_at, v.note AS review_note, v.impulse_cleared "
+                "FROM autonomous_runs r LEFT JOIN autonomous_reviews v ON v.run_id=r.id "
+                "ORDER BY CASE "
+                "WHEN v.run_id IS NULL AND r.state IN ('ready','running','awaiting_verification','uncertain','blocked') "
+                "AND EXISTS (SELECT 1 FROM autonomous_actions a WHERE a.run_id=r.id "
+                "AND (a.result IS NULL OR json_extract(a.result, '$.state')='uncertain')) THEN 0 "
+                "WHEN v.run_id IS NULL AND (r.state='blocked' OR "
+                "(r.state IN ('ready','awaiting_verification') AND "
+                "(julianday(r.created_at) IS NULL OR julianday(r.created_at)<julianday(?)))) THEN 1 "
+                "WHEN r.state IN ('ready','running','awaiting_verification','uncertain') THEN 2 "
+                "ELSE 3 END, r.rowid DESC LIMIT ?", ((self._now() - timedelta(seconds=MAX_AGE_SECONDS)).isoformat(), limit),
+            ).fetchall()
+            # Keep every actionable review ahead of ordinary or already reviewed
+            # records before applying the display limit.
+            runs = []
+            for row in rows:
+                actions = conn.execute(
+                    "SELECT id, payload, result FROM autonomous_actions WHERE run_id=? ORDER BY rowid",
+                    (row["id"],),
+                ).fetchall()
+                last = actions[-1] if actions else None
+                reason = self._review_reason(dict(row), actions) if not row["reviewed_at"] else None
+                try:
+                    parsed = urlsplit(row["url"])
+                    origin = f"{parsed.scheme}://{parsed.hostname}"
+                    if parsed.port:
+                        origin += f":{parsed.port}"
+                except ValueError:
+                    origin = "Origine non disponibile"
+                impulse = json.loads(row["impulse"])
+                runs.append({
+                    "id": row["id"], "state": row["state"], "created_at": row["created_at"],
+                    "origin": origin, "trigger": impulse.get("trigger"), "steps": row["steps"],
+                    "last_action": {"id": last["id"], "action": json.loads(last["payload"]).get("action"),
+                                    "uncertain": self._action_uncertain(last)} if last else None,
+                    "review_required": reason is not None, "review_reason": reason,
+                    "review": {"reviewed_at": row["reviewed_at"], "note": row["review_note"],
+                               "impulse_cleared": bool(row["impulse_cleared"])} if row["reviewed_at"] else None,
+                })
+            return {"runs": runs, "limit": limit}
+        finally:
+            conn.close()
+
+    def review_uncertain(self, run_id: str, confirmation: str, note: str) -> dict[str, Any]:
+        """Chiude un incarico incerto, scaduto o interrotto senza riattivare azioni."""
+        if not isinstance(run_id, str) or not run_id.strip():
+            raise ValidationError("Identificativo incarico obbligatorio.")
+        if confirmation != "HO VERIFICATO":
+            raise ValidationError("Scrivi HO VERIFICATO per confermare la revisione.")
+        if not isinstance(note, str) or not note.strip() or len(note.strip()) > 1000:
+            raise ValidationError("Nota di revisione obbligatoria, massimo 1000 caratteri.")
+        from .profile import _profile_lock
+        with ExitStack() as stack:
+            try:
+                stack.enter_context(_profile_lock(self.config.root))
+            except ConfigError as exc:
+                raise ValidationError(f"Impossibile revisionare ora: {exc}") from exc
+            return self._review_uncertain(run_id, note.strip())
+
+    def _review_uncertain(self, run_id: str, note: str) -> dict[str, Any]:
+        with self.config.transaction() as conn:
+            run = self._run(conn, run_id)
+            if conn.execute("SELECT 1 FROM autonomous_reviews WHERE run_id=?", (run_id,)).fetchone():
+                raise ValidationError("Incarico già revisionato; aggiorna la dashboard.")
+            actions = conn.execute("SELECT result FROM autonomous_actions WHERE run_id=?", (run_id,)).fetchall()
+            if not self._review_reason(run, actions):
+                raise ValidationError("L'incarico non è incerto, scaduto o interrotto.")
+            state = self.config.get("current_state")
+            clear_impulse = state.get("heartbeat", {}).get("pending_impulse") == json.loads(run["impulse"])
+            if clear_impulse:
+                self.config.update_current_state({"heartbeat": {"pending_impulse": None,
+                    "spontaneous_message_pending": False, "last_decision": "browser_reviewed_without_delivery"}})
+            reviewed_at = self._now().isoformat()
+            conn.execute("UPDATE autonomous_runs SET state='blocked' WHERE id=?", (run_id,))
+            conn.execute("INSERT INTO autonomous_reviews(run_id, reviewed_at, note, impulse_cleared) VALUES (?, ?, ?, ?)",
+                         (run_id, reviewed_at, note, int(clear_impulse)))
+            return {"state": "blocked", "reviewed_at": reviewed_at, "impulse_cleared": clear_impulse,
+                    "remote_delivery_verified": False}
+
     def claim(self, url: str) -> dict[str, Any]:
         """Acquisisce l'impulso, senza aprire il browser né inviare messaggi."""
         policy = self._policy()
@@ -83,6 +197,15 @@ class AutonomyService:
                     raise ValueError("expired")
             except (TypeError, ValueError) as exc:
                 raise ValidationError("Impulso scaduto o data non valida.") from exc
+            unresolved = conn.execute(
+                "SELECT 1 FROM autonomous_runs r "
+                "JOIN autonomous_actions a ON a.run_id=r.id "
+                "LEFT JOIN autonomous_reviews v ON v.run_id=r.id "
+                "WHERE r.state='blocked' AND v.run_id IS NULL "
+                "AND (a.result IS NULL OR json_extract(a.result, '$.state')='uncertain') LIMIT 1"
+            ).fetchone()
+            if unresolved:
+                raise ValidationError("Un'azione incerta deve essere revisionata dalla dashboard prima di un nuovo incarico.")
             existing = conn.execute("SELECT * FROM autonomous_runs WHERE state IN ('ready','running','awaiting_verification','uncertain')").fetchone()
             if existing:
                 run = dict(existing)
@@ -199,6 +322,11 @@ class AutonomyService:
 
     def abort(self, run_id: str) -> dict[str, Any]:
         """Interrompe l'incarico senza confermare consegne o cancellare impulsi."""
+        from .profile import _profile_lock
+        with _profile_lock(self.config.root, timeout=30):
+            return self._abort(run_id)
+
+    def _abort(self, run_id: str) -> dict[str, Any]:
         with self.config.transaction() as conn:
             run = self._run(conn, run_id)
             if run["state"] == "running":

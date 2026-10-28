@@ -641,8 +641,40 @@ h3 {
   margin-top: 16px;
 }
 
-.overview-autonomy-columns {
+.overview-autonomy-columns,
+.autonomy-runs-panel {
   margin-top: 16px;
+}
+
+.autonomy-run-intro {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.autonomy-run {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  overflow-wrap: anywhere;
+}
+
+.autonomy-run-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.autonomy-run-head span,
+.autonomy-run p {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.autonomy-run .settings-form {
+  margin-top: 12px;
 }
 
 .autonomy-summary {

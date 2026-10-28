@@ -79,6 +79,162 @@ class AutonomyTests(OperationalTests):
         self.service.abort(run_id)
         self.assertIsNotNone(self.config.get("current_state")["heartbeat"]["pending_impulse"])
 
+    def _interrupt(self):
+        run_id = self.service.claim("https://example.com")["id"]
+        with patch.object(self.browser, "open", side_effect=KeyboardInterrupt), self.assertRaises(KeyboardInterrupt):
+            self.service.act(run_id, "lost", "open", {"url": "https://example.com"})
+        return run_id
+
+    def test_administrative_review_preserves_receipt_and_never_retries(self):
+        run_id = self._interrupt()
+        summary = self.service.review_summary()["runs"][0]
+        self.assertEqual(summary["id"], run_id)
+        self.assertTrue(summary["review_required"])
+        self.assertEqual(summary["last_action"]["action"], "open")
+        for confirmation, note in (("no", "Verificato"), ("HO VERIFICATO", ""), ("HO VERIFICATO", "x" * 1001)):
+            with self.assertRaises(ValidationError):
+                self.service.review_uncertain(run_id, confirmation, note)
+        result = self.service.review_uncertain(run_id, "HO VERIFICATO", "Verificato manualmente")
+        self.assertTrue(result["impulse_cleared"])
+        self.assertFalse(result["remote_delivery_verified"])
+        self.assertIsNone(self.config.get("current_state")["heartbeat"]["pending_impulse"])
+        self.assertEqual(self.service.status(run_id)["state"], "blocked")
+        self.assertFalse(self.service.act(run_id, "lost", "open", {"url": "https://example.com"})["retry_allowed"])
+        with self.assertRaises(ValidationError):
+            self.service.act(run_id, "new", "open", {"url": "https://example.com"})
+        with self.assertRaises(ValidationError):
+            self.service.review_uncertain(run_id, "HO VERIFICATO", "Di nuovo")
+        summary = self.service.review_summary()["runs"][0]
+        self.assertEqual(summary["review"]["note"], "Verificato manualmente")
+        self.assertFalse(summary["review_required"])
+        self.assertEqual(self.backend.opened, [])
+
+    def test_review_preserves_new_impulse_and_aborted_uncertainty(self):
+        run_id = self._interrupt()
+        self.service.status(run_id)
+        self.service.abort(run_id)
+        new = {"trigger": "new", "created_at": self.service._now().isoformat()}
+        self.config.update_current_state({"heartbeat": {"pending_impulse": new}})
+        with self.assertRaises(ValidationError):
+            self.service.claim("https://example.com")
+        result = self.service.review_uncertain(run_id, "HO VERIFICATO", "Controllato")
+        self.assertFalse(result["impulse_cleared"])
+        self.assertEqual(self.config.get("current_state")["heartbeat"]["pending_impulse"], new)
+        self.assertTrue(self.service.claim("https://example.com")["available"])
+
+    def test_review_rejects_active_action_and_keeps_state(self):
+        from agent_memory.profile import _profile_lock
+        run_id = self._interrupt()
+        with _profile_lock(self.root), self.assertRaises(ValidationError):
+            self.service.review_uncertain(run_id, "HO VERIFICATO", "Non ancora")
+        self.assertEqual(self.service.status(run_id)["state"], "uncertain")
+
+    def test_review_rolls_back_as_one_transaction(self):
+        run_id = self._interrupt()
+        before = self.config.get("current_state")["heartbeat"]["pending_impulse"]
+        with patch.object(self.service.config, "update_current_state", side_effect=OSError("disk failure")), self.assertRaises(OSError):
+            self.service.review_uncertain(run_id, "HO VERIFICATO", "Controllato")
+        self.assertEqual(self.config.get("current_state")["heartbeat"]["pending_impulse"], before)
+        self.assertTrue(self.service.review_summary()["runs"][0]["review_required"])
+        self.assertTrue(self.service.review_uncertain(run_id, "HO VERIFICATO", "Controllato")["impulse_cleared"])
+
+    def test_review_rejects_action_that_is_actually_running(self):
+        import threading
+        started, finish = threading.Event(), threading.Event()
+        run_id = self.service.claim("https://example.com")["id"]
+        errors = []
+        def slow_open(**kwargs):
+            started.set()
+            if not finish.wait(5):
+                raise RuntimeError("test timeout")
+            return self.browser._navigate(kwargs["url"], max_chars=6000)
+        def act():
+            try:
+                self.service.act(run_id, "slow", "open", {"url": "https://example.com"})
+            except (RuntimeError, ValidationError) as exc:
+                errors.append(exc)
+        with patch.object(self.browser, "open", side_effect=slow_open):
+            thread = threading.Thread(target=act)
+            thread.start()
+            try:
+                self.assertTrue(started.wait(5))
+                summary = self.service.review_summary()["runs"][0]
+                self.assertTrue(summary["review_required"])
+                with self.assertRaises(ValidationError):
+                    self.service.review_uncertain(run_id, "HO VERIFICATO", "Controllato")
+            finally:
+                finish.set()
+                thread.join(5)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(errors, [])
+        self.assertEqual(self.service.status(run_id)["state"], "awaiting_verification")
+        with self.assertRaises(ValidationError):
+            self.service.review_uncertain(run_id, "HO VERIFICATO", "Controllato")
+
+    def test_review_summary_does_not_include_action_arguments(self):
+        run_id = self.service.claim("https://example.com")["id"]
+        with self.config.transaction() as conn:
+            conn.execute("INSERT INTO autonomous_actions(run_id,id,payload,result) VALUES (?, ?, ?, NULL)",
+                         (run_id, "sensitive", json.dumps({"action": "fill", "arguments": {"value": "PASSWORD_SEGRETA"}})))
+            conn.execute("UPDATE autonomous_runs SET state='running' WHERE id=?", (run_id,))
+        self.assertNotIn("PASSWORD_SEGRETA", json.dumps(self.service.review_summary()))
+
+    def test_review_expired_and_blocked_runs_without_repeating_effects(self):
+        for state in ("expired", "blocked"):
+            with self.subTest(state=state):
+                impulse = {"trigger": state, "created_at": self.service._now().isoformat()}
+                self.config.update_current_state({"heartbeat": {"pending_impulse": impulse, "spontaneous_message_pending": True}})
+                run_id = self.service.claim("https://example.com")["id"]
+                if state == "expired":
+                    with self.config.transaction() as conn:
+                        conn.execute("UPDATE autonomous_runs SET created_at='2000-01-01T00:00:00+00:00' WHERE id=?", (run_id,))
+                else:
+                    self.service.act(run_id, "opened", "open", {"url": "https://example.com"})
+                    self.service.abort(run_id)
+                count = len(self.backend.opened)
+                summary = next(r for r in self.service.review_summary()["runs"] if r["id"] == run_id)
+                self.assertEqual(summary["review_reason"], state)
+                result = self.service.review_uncertain(run_id, "HO VERIFICATO", "Controllato")
+                self.assertTrue(result["impulse_cleared"])
+                self.assertEqual(self.service.status(run_id)["state"], "blocked")
+                self.assertFalse(self.config.get("current_state")["heartbeat"]["spontaneous_message_pending"])
+                self.assertEqual(len(self.backend.opened), count)
+                with self.assertRaises(ValidationError):
+                    self.service.act(run_id, "new-action", "open", {"url": "https://example.com"})
+                if state == "blocked":
+                    self.service.act(run_id, "opened", "open", {"url": "https://example.com"})
+                    self.assertEqual(len(self.backend.opened), count)
+
+    def test_summary_prioritizes_expired_run_over_newer_ready_runs(self):
+        run_id = self.service.claim("https://example.com")["id"]
+        with self.config.transaction() as conn:
+            conn.execute("UPDATE autonomous_runs SET created_at='2000-01-01T00:00:00+00:00' WHERE id=?", (run_id,))
+            for index in range(12):
+                conn.execute("INSERT INTO autonomous_runs(id, impulse, state, url, created_at) VALUES (?, ?, ?, ?, ?)",
+                             (f"complete-{index}", json.dumps({"unique": index}), "completed", "https://example.com", self.service._now().isoformat()))
+        runs = self.service.review_summary(limit=1)["runs"]
+        self.assertEqual(runs[0]["id"], run_id)
+        self.assertEqual(runs[0]["review_reason"], "expired")
+
+    def test_review_stale_run_keeps_replacement_impulse(self):
+        run_id = self.service.claim("https://example.com")["id"]
+        with self.config.transaction() as conn:
+            conn.execute("UPDATE autonomous_runs SET created_at='2000-01-01T00:00:00+00:00' WHERE id=?", (run_id,))
+        new = {"trigger": "replacement", "created_at": self.service._now().isoformat()}
+        self.config.update_current_state({"heartbeat": {"pending_impulse": new}})
+        self.assertFalse(self.service.review_uncertain(run_id, "HO VERIFICATO", "Verificato")["impulse_cleared"])
+        self.assertEqual(self.config.get("current_state")["heartbeat"]["pending_impulse"], new)
+        self.assertTrue(self.service.claim("https://example.com")["available"])
+
+    def test_review_rejects_live_and_completed_runs(self):
+        run_id = self.service.claim("https://example.com")["id"]
+        with self.assertRaises(ValidationError):
+            self.service.review_uncertain(run_id, "HO VERIFICATO", "Controllato")
+        self.service.act(run_id, "open", "open", {"url": "https://example.com"})
+        self.service.verify(run_id, "completata")
+        with self.assertRaises(ValidationError):
+            self.service.review_uncertain(run_id, "HO VERIFICATO", "Controllato")
+
     def test_expiry_and_step_limit(self):
         run_id = self.service.claim("https://example.com")["id"]
         with self.config.transaction() as conn:

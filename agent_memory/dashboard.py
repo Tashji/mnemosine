@@ -38,6 +38,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
+from .autonomy import AutonomyService
 from .biography import BiographyService
 from .config import project_root
 from .dashboard_auth import SESSION_COOKIE, DashboardAuth, resolve_auth
@@ -84,17 +85,21 @@ FINALIZE_PATH = "/setup/finalize"
 FINALIZE_STATUS_PATH = "/setup/finalize/status"
 SESSION_PATH = "/api/session"
 RELATIONS_PATH = "/api/relations"
+SHADOW_TRAITS_PATH = "/api/traits/shadow"
 SETTINGS_PATH = "/api/settings"
 SETTINGS_BROWSER_PATH = "/api/settings/browser"
 SETTINGS_WHATSAPP_PATH = "/api/settings/whatsapp"
 SETTINGS_BEHAVIOR_PATH = "/api/settings/behavior"
 PROFILE_ARCHIVE_PATH = "/api/profile/archive"
+AUTONOMY_REVIEW_PATH = "/api/autonomy/review"
 SETTINGS_POST_PATHS = {
     RELATIONS_PATH,
+    SHADOW_TRAITS_PATH,
     SETTINGS_BROWSER_PATH,
     SETTINGS_WHATSAPP_PATH,
     SETTINGS_BEHAVIOR_PATH,
     PROFILE_ARCHIVE_PATH,
+    AUTONOMY_REVIEW_PATH,
 }
 FORM_TOKEN_TTL = 30 * 60
 FINALIZE_ACTIONS = ("biography", "index")
@@ -843,6 +848,7 @@ class DashboardData:
         history = self.evolution_service.history().get("changes", [])
         recent_memories = self.timeline(limit=5)["memories"]
         outbox = self._outbox_summary()
+        autonomy = AutonomyService(self.root, None).review_summary()
         files = self._files_summary()
 
         return {
@@ -893,6 +899,7 @@ class DashboardData:
             "recent_memories": recent_memories,
             "contacts": self._contacts(),
             "outbox": outbox,
+            "autonomy": autonomy,
             "files": files,
             "recent_history": sorted(
                 history,
@@ -1694,12 +1701,19 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         settings = DashboardSettings(self.server.data.root)
         if path == RELATIONS_PATH:
             result = settings.save_contact(payload)
+        elif path == SHADOW_TRAITS_PATH:
+            result = settings.save_shadow_trait(payload)
+            self.server.data.reload()
         elif path == SETTINGS_BROWSER_PATH:
             result = settings.save_browser(payload)
         elif path == SETTINGS_WHATSAPP_PATH:
             result = settings.save_whatsapp(payload)
         elif path == SETTINGS_BEHAVIOR_PATH:
             result = settings.save_behavior(payload)
+        elif path == AUTONOMY_REVIEW_PATH:
+            result = AutonomyService(self.server.data.root, None).review_uncertain(
+                payload.get("run_id"), payload.get("confirmation"), payload.get("note")
+            )
         else:
             confirmation = payload.get("confirmation")
             if not isinstance(confirmation, str):

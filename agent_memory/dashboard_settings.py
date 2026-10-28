@@ -2,8 +2,8 @@
 
 La dashboard non è più soltanto una finestra sui dati: questa classe espone
 le configurazioni che il resto del progetto legge a runtime. Le scritture
-restano confinate a ``config/integrations.json``, ai soli campi modificabili
-di ``config/current_state.json`` e all'archiviazione esplicita del profilo.
+restano confinate alle impostazioni, ai contatti, ai tratti dell'ombra
+e all'archiviazione esplicita del profilo.
 
 L'archiviazione sposta ``config``, ``data`` e ``files`` in
 ``backups/profile-...`` e conserva ``data/dashboard_tls`` e ``data/models``:
@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 import os
+import re
 import shutil
 import tempfile
 from datetime import UTC, datetime
@@ -37,6 +39,7 @@ from .migrations import migrate_integrations, write_json_atomic
 from .profile import (
     PROFILE_STATE_READY,
     PROJECT_ROOT,
+    _profile_lock,
     profile_state,
 )
 
@@ -161,6 +164,42 @@ class DashboardSettings:
                     person.update(candidate)
             self.config.write("social_graph", graph)
         return {"saved": True, "action": action, "user_id": user_id}
+
+    def save_shadow_trait(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Modifica soltanto i campi amministrativi, conservando il resto del tratto."""
+        action = payload.get("action")
+        trait_id = payload.get("id")
+        if action not in ("create", "update"):
+            raise ValidationError("Azione tratto non valida.")
+        if not isinstance(trait_id, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,79}", trait_id):
+            raise ValidationError("ID: usa lettere, numeri, trattino o underscore (massimo 80 caratteri).")
+        fields = {}
+        for key in ("name", "description", "origin"):
+            value = payload.get(key, "")
+            if not isinstance(value, str) or len(value) > 2000 or "\x00" in value:
+                raise ValidationError(f"{key}: atteso un testo di massimo 2000 caratteri.")
+            fields[key] = value.strip()
+        if not fields["name"]:
+            raise ValidationError("Il nome del tratto è obbligatorio.")
+        intensity = _require_int(payload, "intensity", minimum=1, maximum=10)
+        awareness = payload.get("conscious_awareness")
+        if (isinstance(awareness, bool) or not isinstance(awareness, (int, float))
+                or not 0 <= awareness <= 1 or not math.isfinite(awareness)):
+            raise ValidationError("Consapevolezza: atteso un numero da 0 a 1.")
+        with _profile_lock(self.root, timeout=30):
+            document = self.config.get("shadow_traits")
+            traits = document["traits"]
+            trait = next((item for item in traits if item["id"] == trait_id), None)
+            if action == "create":
+                if trait is not None:
+                    raise ValidationError("Esiste già un tratto con questo ID.")
+                trait = {"id": trait_id, "triggers": []}
+                traits.append(trait)
+            elif trait is None:
+                raise ValidationError("Tratto non trovato.")
+            trait.update(fields | {"intensity": intensity, "conscious_awareness": awareness})
+            self.config.write("shadow_traits", document)
+        return {"saved": True, "id": trait_id}
 
     # -- lettura ------------------------------------------------------------
 
