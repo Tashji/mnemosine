@@ -75,8 +75,10 @@ Files: README, pyproject, package version, affected tests and plan.
 - [x] Run focused tests and the existing suite when required for the common ConfigStore change; fix actual failures rather than suppressing them.
 - [x] Build wheel, install separately and check old-profile migration, SQL pages, console scripts, MCP handshake and browser consent.
 - [x] Start/reuse authenticated dashboard on port 3000, verify HTTP readiness and show preview.
-- [ ] Review diff, commit the requested implementation and push main; inspect CI for the pushed SHA.
+- [x] Review diff, commit the requested implementation and push main; inspect CI for the pushed SHA.
 
 ## Verification record
 
-Full existing suite: 406 passing before the final browser retry regression; affected browser/operational/autonomy check after that change: 104 passing. Wheel verification and publication receipts are reported separately in the task completion. Real client scheduling and external-account delivery remain outside the local checks.
+Work published on `main` in `0284a14` ("Esegui una sola volta ogni test nella discovery"), CI GitHub completed with success on that SHA. The four tasks above and the follow-up dashboard work are therefore all committed and pushed.
+
+Full suite: **452 tests, OK**, run with `python -m unittest discover -s tests -t .` from the repository root. The earlier count of 406 referred to an intermediate state before the browser retry regression was fixed; the count then rose to 458, but that number was inflated because `tests/` was not a package and seven scenarios ran twice or three times. Commit `0284a14` fixed the double discovery (452 distinct ids, guarded by `tests/test_discovery.py`), so 458 must not be read as additional coverage. The affected browser/operational/autonomy check stood at 104 passing at the time it was run. Wheel verification and publication receipts are reported separately in the task completion. Real client scheduling and external-account delivery remain outside the local checks.
