@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-407%20passing-2ea043?logo=githubactions&logoColor=white" alt="407 test superati"></a>
+  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-452%20passing-2ea043?logo=githubactions&logoColor=white" alt="452 test superati"></a>
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12">
   <img src="https://img.shields.io/badge/MCP-Model%20Context%20Protocol-6ee7d8" alt="Model Context Protocol">
   <img src="https://img.shields.io/badge/storage-SQLite%20%2B%20FAISS-0b1422" alt="SQLite e FAISS">
@@ -1022,7 +1022,7 @@ Al primo accesso il profilo importa `current_state` e `social_graph` nel databas
 
 **Cambio operativo:** `config/current_state.json` e `config/social_graph.json` diventano esportazioni di compatibilità, non la fonte autorevole. Modificarli manualmente dopo l’importazione non cambia il profilo. Usare dashboard e API ConfigStore. Gli altri documenti restano JSON. Gli errori di esportazione vengono segnalati con un warning, ma non trasformano un commit SQLite riuscito in una richiesta fallita. Per rigenerare le esportazioni: `ConfigStore(root).operational.export(ConfigStore(root).load_all())`. Il profilo va salvato integralmente, database incluso.
 
-I tool MCP sono ora **43**. `interaction_history(user_id, offset=0, limit=50)` legge una pagina SQL dello storico. Il grafo restituisce i metadati, non tutte le interazioni.
+I tool MCP sono ora **44**. `interaction_history(user_id, offset=0, limit=50)` legge una pagina SQL dello storico. Il grafo restituisce i metadati, non tutte le interazioni.
 
 Il client che ospita l’agente può pianificare questo flusso, senza integrazioni per sito:
 

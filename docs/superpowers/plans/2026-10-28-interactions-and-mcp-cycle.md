@@ -18,9 +18,9 @@
 
 ### Task 1: Operational transactions and SQL history
 
-Files: `agent_memory/operational.py`, `config.py`, `heartbeat.py`, `migrations.py`, `schemas/timeline_episodic.sql`, `server.py`, `tests/test_operational.py`.
+Files: `agent_memory/operational.py`, `config.py`, `heartbeat.py`, `migrations.py`, `server.py`, `tests/test_operational.py`. The new tables are created by the versioned steps `_timeline_v2` and `_timeline_v3` in `agent_memory/migrations.py`; the packaged base schema `agent_memory/schemas/timeline_episodic.sql` keeps only the episodic tables, and a new profile reaches the current version by running the migration steps from the baseline.
 
-Interfaces: `ConfigStore.transaction()` supplies a write transaction; `OperationalStore.history(user_id, offset=0, limit=50)` returns a bounded history page. `record_interaction(..., interaction_id=None)` deduplicates normalized requests.
+Interfaces: `ConfigStore.transaction()` supplies a write transaction; `OperationalStore.history(user_id, *, offset=0, limit=50)` returns a bounded history page, with `offset` and `limit` keyword-only and `limit` capped at 100. `HeartbeatEngine.record_interaction(..., interaction_id=None)` deduplicates normalized requests; the MCP tool of the same name in `server.py` forwards the optional ID.
 
 - [x] Add failing tests for duplicate IDs, conflicting payloads, rollback, concurrent requests and import preservation.
 - [x] Add versioned SQL tables for operational documents, interactions, receipts and autonomy execution records.
@@ -50,9 +50,9 @@ Interfaces: `OperationalStore.history` supplies total, offset, limit and entries
 
 ### Task 3: Agent-owned autonomous browser cycle
 
-Files: `agent_memory/autonomy.py`, `server.py`, `tests/test_autonomy.py`.
+Files: `agent_memory/autonomy.py`, `server.py`, `tests/test_autonomy.py`. The administrative review of uncertain runs arrived after this task and was outside its scope: `AutonomyService.review_summary` and `.review_uncertain`, the `autonomous_reviews` table (`_timeline_v3`), the `POST /api/autonomy/review` route in `dashboard.py` and its panel in `dashboard_assets/app.js`.
 
-Interfaces: `AutonomyService.claim(url)`, `.observe(run_id)`, `.act(run_id, action_id, action, arguments)`, `.verify(run_id, text)`; all return JSON dictionaries. MCP tools wrap these methods and paginated interaction history.
+Interfaces: `AutonomyService.claim(url)`, `.status(run_id)`, `.observe(run_id)`, `.act(run_id, action_id, action, arguments)`, `.verify(run_id, text)`, `.abort(run_id)`; all return JSON dictionaries. Six MCP tools wrap them (`autonomous_claim`, `autonomous_status`, `autonomous_observe`, `autonomous_act`, `autonomous_verify`, `autonomous_abort`), next to the paginated `interaction_history` tool.
 
 - [x] Test pending impulse acquisition without opening a browser, bounded steps, expiry, maintenance and revoked consent.
 - [x] Persist execution and unique action receipt before touching the browser; duplicate completed calls return original observation, pending calls remain uncertain.
@@ -80,5 +80,9 @@ Files: README, pyproject, package version, affected tests and plan.
 ## Verification record
 
 Work published on `main` in `0284a14` ("Esegui una sola volta ogni test nella discovery"), CI GitHub completed with success on that SHA. The four tasks above and the follow-up dashboard work are therefore all committed and pushed.
+
+### Check of this document against the code (2026-10-29)
+
+Every claim above was re-read against the current tree, and the full suite was run again: `Ran 452 tests in 58.421s`, `OK`, so the count has not drifted since `0284a14`. Confirmed as written: one write transaction in `ConfigStore.transaction()`, exports after the commit with their own warning (`operational.py`), the one-time import that moves history out of the stored graph, four SQLite databases, `__version__` `0.8.0` matching `pyproject.toml`, contact removal deleting events inside the same transaction while keeping episodic memories and the WhatsApp policy, and the autonomy interfaces. Corrected in this revision: the operational tables live in the migration steps of `agent_memory/migrations.py`, not in the packaged base schema file; the `history` signature is keyword-only with `limit` capped at 100; and the autonomy section now lists `status` and `abort` plus the later review surface. This plan revision is published in `fe830df`, on top of `0284a14`.
 
 Full suite: **452 tests, OK**, run with `python -m unittest discover -s tests -t .` from the repository root. The earlier count of 406 referred to an intermediate state before the browser retry regression was fixed; the count then rose to 458, but that number was inflated because `tests/` was not a package and seven scenarios ran twice or three times. Commit `0284a14` fixed the double discovery (452 distinct ids, guarded by `tests/test_discovery.py`), so 458 must not be read as additional coverage. The affected browser/operational/autonomy check stood at 104 passing at the time it was run. Wheel verification and publication receipts are reported separately in the task completion. Real client scheduling and external-account delivery remain outside the local checks.
