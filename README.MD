@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-452%20passing-2ea043?logo=githubactions&logoColor=white" alt="452 test superati"></a>
+  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-456%20passing-2ea043?logo=githubactions&logoColor=white" alt="456 test superati"></a>
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12">
   <img src="https://img.shields.io/badge/MCP-Model%20Context%20Protocol-6ee7d8" alt="Model Context Protocol">
   <img src="https://img.shields.io/badge/storage-SQLite%20%2B%20FAISS-0b1422" alt="SQLite e FAISS">
@@ -1284,13 +1284,13 @@ Aggiungere i seed esterni, le modifiche caratteriali e il riconsolidamento a cas
 
 Realizzare lo stato corrente, il generatore di routine, il carico cognitivo, il sonno simulato e l'Heartbeat Loop.
 
-La fase è implementata in tre moduli: `agent_memory/routine.py` genera il piano giornaliero, sceglie l'attività in corso e gestisce la finestra di sonno; `agent_memory/heartbeat.py` gestisce il carico cognitivo dinamico, i trigger interni e la coda degli impulsi spontanei (sezione 17.5). `agent_memory/executor.py` consuma gli impulsi e consegna i messaggi nella coda del profilo, con whitelist e flag (sezione 17.5). Restano da implementare il trasporto verso WhatsApp Web e la sintesi notturna dei ricordi, che richiede un modello linguistico.
+La fase è implementata in tre moduli: `agent_memory/routine.py` genera il piano giornaliero, sceglie l'attività in corso e gestisce la finestra di sonno; `agent_memory/heartbeat.py` gestisce il carico cognitivo dinamico, i trigger interni e la coda degli impulsi spontanei (sezione 17.5). `agent_memory/executor.py` consuma gli impulsi e consegna i messaggi nella coda del profilo, con whitelist e flag (sezione 17.5). Il consolidamento notturno estrattivo è implementato senza modello linguistico (sezione 17.5). Il trasporto automatico dall’outbox a WhatsApp Web non è implementato: il browser generico è invece utilizzabile dall’agente MCP collegato, con consenso per origine e senza adattatori specifici.
 
 ### Fase 7 — Relazioni e autonomia web
 
 Integrare il grafo delle relazioni, il recupero dei ricordi relativi ai singoli utenti e l'iniziativa autonoma tramite WhatsApp Web e browser, con contatti e siti in whitelist.
 
-La parte web è implementata: `agent_memory/browser.py` applica la whitelist, la cronologia e l'indice numerato dei link, mentre `agent_memory/files.py` dà all'agente una cartella di lavoro isolata. Il ciclo di iniziativa esiste in `heartbeat.py` e propone il canale più adatto; `agent_memory/executor.py` consuma l'impulso, verifica whitelist e flag e consegna il messaggio nella coda dell'outbox. Aprire una sessione WhatsApp Web o il browser da un impulso resta il passo mancante.
+La parte web è implementata: `agent_memory/browser.py` applica la whitelist, la cronologia e l'indice numerato dei link, mentre `agent_memory/files.py` dà all'agente una cartella di lavoro isolata. Il ciclo di iniziativa esiste in `heartbeat.py` e propone il canale più adatto; `agent_memory/executor.py` consuma l'impulso, verifica whitelist e flag e consegna il messaggio nella coda dell'outbox. Il client MCP collegato può acquisire un impulso e usare il browser tramite `autonomous_claim`, `autonomous_act`, `autonomous_observe` e `autonomous_verify` (sezione sulle interazioni transazionali). Il server non risveglia autonomamente un client inattivo e non trasferisce automaticamente i messaggi dall’outbox a WhatsApp Web.
 
 ### Fase 8 — Sicurezza e affidabilità
 
@@ -1537,7 +1537,7 @@ Il piano usa interessi, formazione e lavoro in corso. Nei giorni feriali prevede
 
 La finestra di sonno è letta da `current_state.sleep.window` (`00:00`–`07:00` per impostazione predefinita) e supporta anche intervalli che attraversano la mezzanotte. Durante il sonno lo stato passa a `sleeping`, l'attività diventa `Dorme` e `availability.accepting_messages` viene disattivato. La disponibilità tiene conto anche delle soglie di carico cognitivo già presenti, ma il carico non viene ancora incrementato o decrementato dal motore.
 
-Il piano viene riutilizzato se `routine.date` coincide con il giorno richiesto; per personalizzarlo si possono modificare `planned_activities` in `current_state.json` lasciando `routine.date` allineato alla data. In caso contrario viene rigenerato.
+Il piano viene riutilizzato se `routine.date` coincide con il giorno richiesto; per personalizzarlo si possono aggiornare `planned_activities` tramite `ConfigStore.update_current_state`, lasciando `routine.date` allineato alla data. Dopo l’importazione SQLite, modificare direttamente `current_state.json` non cambia lo stato autorevole. In caso contrario viene rigenerato.
 
 Comandi:
 
@@ -1560,7 +1560,7 @@ python -m agent_memory.routine --root ./profiles/marco --apply
 
 Senza `--apply` il comando è di sola lettura. Con `--apply` acquisisce lo stesso lock di `profile init`, `biography` e `index`, scrive in modo atomico e non riscrive lo stato se è già allineato. `--at` senza fuso orario usa quello dell'identità; un orario con fuso diverso viene convertito.
 
-La dashboard mostra già il nuovo stato senza modifiche: attività, luogo, routine e carico sono letti da `current_state.json`.
+La dashboard legge attività, luogo, routine e carico tramite ConfigStore, dal database operativo dopo l’importazione; `current_state.json` resta un’esportazione di compatibilità.
 
 I collegamenti `memory_id` registrati nelle interazioni devono puntare a un ricordo episodico conscio esistente e richiedono `user_id`; riferimenti inesistenti o non accessibili vengono rifiutati prima di modificare la relazione o il carico.
 
@@ -1632,7 +1632,7 @@ python -m agent_memory.heartbeat --deliver "Ciao Marco, come stai?"
 
 Ritmo e freni vivono in `current_state.heartbeat` come `interval_minutes`, `cooldown_minutes` e `max_impulses_per_day`; i valori predefiniti sono 30 minuti, 180 minuti e 3 impulsi al giorno. Tre strumenti MCP completano il quadro: `record_interaction` aggiorna il carico, `acknowledge_impulse` chiude l'impulso senza inviare nulla, `deliver_impulse` consegna il messaggio all'impulso in attesa rispettando whitelist e flag. Anche la CLI espone la consegna con `--deliver`. I profili creati prima di questa versione ricevono i campi mancanti dalla migrazione 1→2 di `current_state.json`.
 
-Restano aperti il trasporto verso WhatsApp Web (l'esecutore si ferma all'outbox) e la sintesi dei ricordi notturni: durante il sonno il battito azzera il carico e registra `last_consolidation_at`, ma non inventa ricordi.
+L’esecutore si ferma all’outbox: non è un trasporto verso WhatsApp Web. Il consolidamento notturno estrattivo è già disponibile, come descritto sopra; non richiede un LLM e non inventa eventi. La navigazione da impulso è affidata al client MCP collegato, non a uno scheduler incorporato.
 
 ---
 
@@ -1678,7 +1678,7 @@ La dashboard include la vista **Aspetto**. Durante la creazione del profilo o in
 
 La generazione manuale usa **FLUX.1 Kontext Pro** tramite Replicate. Installa l'extra opzionale `pip install 'mnemosine[visual]'`. Il token si salva con `mnemosine-visual-token --root <profilo>`: l'input è nascosto, il valore finisce in `data/secrets/replicate_token` con permessi `0600` ed è escluso dal repository. `REPLICATE_API_TOKEN` nell'ambiente del processo ha la precedenza, ma resta sconsigliato perché finisce nella storia della shell; il token non va mai in chat, in file versionati o nei dati del profilo. `mnemosine-visual-token --check` verifica il token sull'endpoint dell'account senza generare immagini, `--remove` lo cancella. L'attivazione richiede di digitare `GENERA`; ogni generazione richiede inoltre conferma esplicita dell'invio a Replicate. Solo allora prompt e reference vengono inviati al provider. Il flag nasce spento, non ci sono invii automatici e il tool MCP `generate_image` non può aggirare il consenso.
 
-Il prezzo consultato è **$0,04 per immagine**; controlla il listino aggiornato prima dell'uso. Il seed aiuta la ripetibilità ma non garantisce identità stabile né risultati identici fra versioni del modello. Gli output sono verificati, ripuliti dai metadati e salvati localmente in `files/images/`; la galleria mostra fino a 50 risultati recenti e ogni immagine può essere eliminata. La card Provider indica l'origine del token, l'esito e la data dell'ultima verifica, ripetibile con il pulsante «Verifica ora» o con `mnemosine-visual-token --check`: entrambi leggono solo l'account Replicate e non generano immagini. La continuità facciale resta probabilistica: non è un modello addestrato né una verifica dell'identità.
+Il prezzo consultato è **$0,04 per immagine**; controlla il listino aggiornato prima dell'uso. Il seed aiuta la ripetibilità ma non garantisce identità stabile né risultati identici fra versioni del modello. Gli output sono verificati, ripuliti dai metadati e salvati localmente in `files/images/`; la galleria mostra fino a 50 risultati recenti e ogni immagine può essere eliminata. La card Provider indica l’origine del token, l’esito e la data dell’ultima verifica salvata con «Verifica ora». Se il token cambia, viene rimosso o cambia origine, la precedente verifica non viene più mostrata: occorre verificarlo nuovamente. Anche `mnemosine-visual-token --check` controlla l’account senza generare immagini, ma stampa solo l’esito e non aggiorna la card della dashboard. La continuità facciale resta probabilistica: non è un modello addestrato né una verifica dell'identità.
 
 ### 18.1. Obiettivo
 

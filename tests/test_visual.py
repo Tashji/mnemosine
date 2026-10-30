@@ -282,6 +282,52 @@ class VisualTests(unittest.TestCase):
         recorded = self.root / "data" / "visual" / "token_status.json"
         self.assertEqual(recorded.stat().st_mode & 0o777, 0o600)
 
+    def test_provider_check_is_invalidated_when_token_changes_or_is_removed(self):
+        from agent_memory.visual_token import remove_token, store_token
+
+        with patch.dict("os.environ", {}, clear=True):
+            store_token(self.root, "r8_original_token_123456")
+            with patch("agent_memory.visual_token.check_token", return_value={
+                "valid": True, "status": 200, "username": "original-account",
+            }):
+                self.service.check_provider()
+            self.assertTrue(self.service.status()["provider_valid"])
+            store_token(self.root, "r8_replacement_token_123456")
+            status = self.service.status()
+            self.assertTrue(status["provider_configured"])
+            self.assertIsNone(status["provider_valid"])
+            self.assertIsNone(status["provider_checked_at"])
+            self.assertIsNone(status["provider_username"])
+            remove_token(self.root)
+            self.assertFalse(self.service.status()["provider_configured"])
+            self.assertIsNone(self.service.status()["provider_valid"])
+
+    def test_provider_check_is_invalidated_when_source_changes(self):
+        from agent_memory.visual_token import store_token
+
+        token = "r8_same_token_123456"
+        store_token(self.root, token)
+        with patch.dict("os.environ", {}, clear=True):
+            with patch("agent_memory.visual_token.check_token", return_value={
+                "valid": True, "status": 200, "username": "demo",
+            }):
+                self.service.check_provider()
+            with patch.dict("os.environ", {"REPLICATE_API_TOKEN": token}):
+                status = self.service.status()
+                self.assertEqual(status["provider_source"], "environment")
+                self.assertIsNone(status["provider_valid"])
+                self.assertNotIn("token_fingerprint", status)
+
+    def test_legacy_provider_check_without_fingerprint_requires_reverification(self):
+        path = self.service.token_status_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"checked_at": "2026-10-28T12:00:00Z",
+            "valid": True, "username": "old-account", "source": "environment"}))
+        with patch.dict("os.environ", {"REPLICATE_API_TOKEN": "r8_current_token_123456"}):
+            status = self.service.status()
+            self.assertIsNone(status["provider_valid"])
+            self.assertIsNone(status["provider_username"])
+
     def test_status_never_exposes_provider_token(self):
         with patch.dict("os.environ", {"REPLICATE_API_TOKEN": "never-return-this"}):
             status = self.service.status()

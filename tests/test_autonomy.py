@@ -41,6 +41,15 @@ class AutonomyTests(test_operational.OperationalTests):
         self.assertIsNone(self.config.get("current_state")["heartbeat"]["pending_impulse"])
         self.assertFalse(self.service.status(run_id)["remote_delivery_verified"])
 
+    def test_abort_preserves_completed_state(self):
+        run_id = self.service.claim("https://example.com")["id"]
+        self.service.act(run_id, "open", "open", {"url": "https://example.com"})
+        self.assertTrue(self.service.verify(run_id, "completata")["ui_verified"])
+        result = self.service.abort(run_id)
+        self.assertEqual(result["state"], "completed")
+        self.assertEqual(self.service.status(run_id)["state"], "completed")
+        self.assertFalse(result["remote_delivery_verified"])
+
     def test_interrupted_action_never_retried(self):
         run_id = self.service.claim("https://example.com")["id"]
         with patch.object(self.browser, "open", side_effect=KeyboardInterrupt), self.assertRaises(KeyboardInterrupt):

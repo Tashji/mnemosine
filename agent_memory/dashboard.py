@@ -7,7 +7,9 @@ biografia e dell'indice vettoriale dal passaggio finale del wizard, le
 impostazioni di browser, WhatsApp e comportamento, la gestione dei contatti
 e l'archiviazione esplicita del profilo. Biografia e indice vengono eseguiti
 in un thread di background: la pagina di completamento segue lo stato con
-polling. Ricordi, conoscenze e tratti non vengono modificati dalle altre viste. La rimozione di un
+polling. La dashboard permette anche la gestione amministrativa dei tratti
+dell'ombra e del profilo visivo, con conferme per le operazioni esterne.
+Ricordi e conoscenze non vengono modificati dalle altre viste. La rimozione di un
 contatto elimina il suo storico relazionale, non i ricordi episodici.
 
 Uso:
@@ -656,30 +658,6 @@ class DashboardData:
             for item in value
             if isinstance(item, str) and item.strip()
         ]
-
-    @staticmethod
-    def _interaction_history(person: dict[str, Any]) -> list[dict[str, Any]]:
-        raw = person.get("interaction_history")
-        if not isinstance(raw, list):
-            return []
-        entries: list[dict[str, Any]] = []
-        for item in raw:
-            if not isinstance(item, dict):
-                continue
-            entries.append(
-                {
-                    "timestamp": item.get("timestamp"),
-                    "channel": item.get("channel"),
-                    "summary": item.get("summary"),
-                    "memory_id": item.get("memory_id"),
-                    "sentiment": item.get("sentiment"),
-                }
-            )
-        entries.sort(
-            key=lambda entry: str(entry["timestamp"] or ""),
-            reverse=True,
-        )
-        return entries
 
     def _contacts(self, *, include_details: bool = False) -> list[dict[str, Any]]:
         graph = self.memory.get_social_graph()

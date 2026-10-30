@@ -333,4 +333,5 @@ class AutonomyService:
                 raise ValidationError("Azione in corso: controlla lo stato prima di interrompere.")
             if run["state"] in ACTIVE:
                 conn.execute("UPDATE autonomous_runs SET state='blocked' WHERE id=?", (run_id,))
-        return {"state": "blocked", "remote_delivery_verified": False}
+                run["state"] = "blocked"
+        return {"state": run["state"], "remote_delivery_verified": False}

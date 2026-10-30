@@ -6,6 +6,8 @@ solo dopo conferma esplicita dell'amministratore nella dashboard.
 from __future__ import annotations
 
 import base64
+import hashlib
+import hmac
 import json
 import os
 import secrets
@@ -157,10 +159,19 @@ class VisualService:
         try:
             _token, source = resolve_token(self.root)
         except ConfigError:
-            configured, source = False, None
+            _token, configured, source = None, False, None
         else:
             configured = True
         checked = self._read_token_status()
+        if (
+            not configured
+            or checked.get("source") != source
+            or not hmac.compare_digest(
+                checked.get("token_fingerprint", "").encode("utf-8"),
+                hashlib.sha256(_token.encode("utf-8")).hexdigest().encode("ascii") if _token else b"",
+            )
+        ):
+            checked = {}
         identity = self.config.get("identity")
         state = self.config.get("current_state")
         files: list[dict[str, Any]] = []
@@ -346,6 +357,7 @@ class VisualService:
             "valid": bool(result.get("valid")),
             "username": username if isinstance(username, str) else None,
             "source": source,
+            "token_fingerprint": hashlib.sha256(token.encode("utf-8")).hexdigest(),
         }
         with _profile_lock(self.root, timeout=30):
             self._ensure_private_dir(self.visual_dir)
@@ -374,6 +386,8 @@ class VisualService:
         valid = record.get("valid")
         username = record.get("username")
         return {
+            "source": record.get("source") if isinstance(record.get("source"), str) else None,
+            "token_fingerprint": record.get("token_fingerprint") if isinstance(record.get("token_fingerprint"), str) else "",
             "checked_at": checked_at if isinstance(checked_at, str) else None,
             "valid": valid if isinstance(valid, bool) else None,
             "username": username if isinstance(username, str) else None,
