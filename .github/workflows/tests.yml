@@ -35,3 +35,19 @@ jobs:
 
       - name: Run tests
         run: python -m unittest discover -s tests -t . -v
+
+      - name: Build wheel
+        run: python -m pip wheel . --no-deps --wheel-dir "$RUNNER_TEMP/mnemosine-wheel"
+
+      - name: Install wheel in isolated environment
+        run: |
+          python -m venv "$RUNNER_TEMP/mnemosine-wheel-venv"
+          "$RUNNER_TEMP/mnemosine-wheel-venv/bin/python" -m pip install "$RUNNER_TEMP"/mnemosine-wheel/*.whl
+          "$RUNNER_TEMP/mnemosine-wheel-venv/bin/python" -m pip check
+
+      - name: Verify installed assets and MCP handshake
+        timeout-minutes: 3
+        run: |
+          mkdir -p "$RUNNER_TEMP/mnemosine-wheel-check"
+          cd "$RUNNER_TEMP/mnemosine-wheel-check"
+          "$RUNNER_TEMP/mnemosine-wheel-venv/bin/python" -I "$GITHUB_WORKSPACE/scripts/check_installed_wheel.py"
