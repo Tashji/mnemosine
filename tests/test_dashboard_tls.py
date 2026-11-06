@@ -125,7 +125,9 @@ class DashboardTLSTests(unittest.TestCase):
         again = ensure_dashboard_tls(
             self.tls_dir, extra_names=("192.0.2.10", "dashboard.test")
         )
-        self.assertEqual(again.certificate_path, certificate)
+        self.assertEqual(
+            Path(again.certificate_path).resolve(), Path(certificate).resolve()
+        )
         self.assertEqual(certificate.read_bytes(), before)
 
         with tempfile.TemporaryDirectory() as tmp, self.assertRaises(ConfigError):

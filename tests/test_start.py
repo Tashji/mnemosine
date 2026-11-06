@@ -73,7 +73,7 @@ class FirstRunTests(unittest.TestCase):
         code, output = self._run(["--root", str(self.root), "--no-open"])
         self.assertEqual(code, 0)
         self.assertIn("Prima configurazione", output)
-        self.assertIn(str(self.root), output)
+        self.assertIn(str(self.root.resolve()), output)
         self.assertIn("/setup", output)
         self.assertEqual(len(self.calls), 1)
         argv = self.calls[0]
@@ -95,7 +95,7 @@ class FirstRunTests(unittest.TestCase):
     def test_default_root_used_when_missing(self) -> None:
         with mock.patch.dict(os.environ, {start.PROFILE_ENV: str(self.root)}):
             _code, output = self._run(["--no-open"])
-        self.assertIn(str(self.root), output)
+        self.assertIn(str(self.root.resolve()), output)
         self.assertEqual(self.calls[0][1], str(self.root.resolve()))
 
     def test_flags_are_forwarded(self) -> None:

@@ -146,7 +146,7 @@ def main(argv: list[str] | None = None) -> int:
                     {
                         "enabled": policy.enabled,
                         "allowed_origins": list(policy.allowed_origins),
-                        "session_file": str(SESSION_RELATIVE_PATH),
+                        "session_file": SESSION_RELATIVE_PATH.as_posix(),
                         "session_saved": bool(
                             session_file is not None and session_file.is_file()
                         ),

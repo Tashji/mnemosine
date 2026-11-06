@@ -1390,7 +1390,7 @@ class BrowserController:
                 self.policy.session_path is not None
                 and self.policy.session_path.is_file()
             ),
-            "session_file": str(SESSION_RELATIVE_PATH),
+            "session_file": SESSION_RELATIVE_PATH.as_posix(),
             "user_agent": self.policy.user_agent,
             "service_workers": self.policy.service_worker_mode,
             "service_workers_warning": (

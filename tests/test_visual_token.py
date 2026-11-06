@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -29,10 +30,14 @@ class TokenStorageTests(unittest.TestCase):
     def test_store_token_creates_private_file_and_resolves_it(self) -> None:
         path = visual_token.store_token(self.root, TOKEN)
 
-        self.assertEqual(path, self.root / "data" / "secrets" / "replicate_token")
+        self.assertEqual(
+            path.resolve(),
+            (self.root / "data" / "secrets" / "replicate_token").resolve(),
+        )
         self.assertEqual(path.read_text(encoding="utf-8").strip(), TOKEN)
-        self.assertEqual(path.stat().st_mode & 0o777, 0o600)
-        self.assertEqual(path.parent.stat().st_mode & 0o777, 0o700)
+        if os.name != "nt":
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(path.parent.stat().st_mode & 0o777, 0o700)
         with patch.dict("os.environ", {}, clear=True):
             self.assertEqual(resolve_token(self.root), (TOKEN, "file"))
 

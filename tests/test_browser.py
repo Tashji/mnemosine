@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -315,7 +316,8 @@ class BrowserPolicyTests(unittest.TestCase):
             )
             policy = BrowserPolicy.from_root(root)
         self.assertEqual(
-            policy.session_path, root / "data" / "browser" / "session.json"
+            policy.session_path,
+            (root / "data" / "browser" / "session.json").resolve(),
         )
 
     def test_config_rejects_http_origin(self) -> None:
@@ -787,7 +789,8 @@ class BrowserSessionTests(unittest.TestCase):
             policy = BrowserPolicy([], session_path=target)
             self.assertTrue(_save_storage_state(policy, FakeContext()))
             self.assertTrue(target.is_file())
-            self.assertEqual(target.stat().st_mode & 0o777, 0o600)
+            if os.name != "nt":
+                self.assertEqual(target.stat().st_mode & 0o777, 0o600)
             self.assertEqual(_storage_state(policy), str(target))
 
     def test_session_without_path_is_not_saved(self) -> None:

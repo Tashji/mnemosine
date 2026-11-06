@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import closing
+
 import shutil
 import sqlite3
 import tempfile
@@ -33,7 +35,7 @@ class McpSemanticTests(unittest.TestCase):
         copy_profile(self.root)
         shutil.rmtree(self.root / "data" / "indexes", ignore_errors=True)
         vector_path = self.root / "data" / "vector_index.db"
-        with sqlite3.connect(vector_path) as conn:
+        with closing(sqlite3.connect(vector_path)) as conn:
             conn.execute("DELETE FROM vector_entries")
             conn.execute("DELETE FROM index_meta")
             conn.commit()

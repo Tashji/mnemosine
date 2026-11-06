@@ -45,6 +45,7 @@ from .errors import AgentMemoryError, ValidationError
 from .executor import MessageExecutor
 from .operational import canonical
 from .routine import RoutineEngine, availability_for
+from .shadow_policy import trigger_guidance
 
 HEARTBEAT_VERSION = "v1"
 DEFAULT_INTERVAL_MINUTES = 30
@@ -406,23 +407,14 @@ class HeartbeatEngine:
     def _shadow_guidance(self, summary: str) -> str | None:
         """Media i trigger senza esporre tratti, diario o cause private."""
         flags = self.state.get("flags", {})
-        if not flags.get("shadow_engine_enabled") or flags.get("maintenance_mode"):
-            return None
-        text = self._clean_interaction_summary(summary).casefold()
-        for trait in self.config.get("shadow_traits").get("traits", []):
-            safety = trait.get("safety", {})
-            if not isinstance(safety, dict) or safety.get("allowed") is not True:
-                continue
-            for trigger in trait.get("triggers", []):
-                if not isinstance(trigger, dict):
-                    continue
-                examples = trigger.get("examples", [])
-                if not isinstance(examples, list):
-                    continue
-                if any(isinstance(example, str) and len(example.strip()) >= 4
-                       and example.strip().casefold() in text for example in examples):
-                    return "Rispondi con calma e tatto, senza presumere intenzioni o giudicare."
-        return None
+        enabled = bool(flags.get("shadow_engine_enabled")) and not flags.get(
+            "maintenance_mode"
+        )
+        return trigger_guidance(
+            self.config.get("shadow_traits"),
+            self._clean_interaction_summary(summary),
+            enabled=enabled,
+        )
 
     def acknowledge_impulse(self, note: str = "") -> dict[str, Any]:
         """Chiude l'impulso in attesa, dopo che qualcuno se n'è occupato."""

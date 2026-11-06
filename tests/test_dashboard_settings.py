@@ -158,7 +158,9 @@ class SettingsUnitTests(unittest.TestCase):
         self.assertEqual(snapshot["behavior"]["heartbeat"]["interval_minutes"], 30)
         self.assertTrue(snapshot["profile"]["can_archive"])
         self.assertEqual(snapshot["profile"]["full_name"], "Alessandro Vitale")
-        self.assertEqual(snapshot["profile"]["backup_dir"], str(self.root / "backups"))
+        self.assertEqual(
+            snapshot["profile"]["backup_dir"], str((self.root / "backups").resolve())
+        )
 
     def test_origin_actions_require_new_explicit_consent(self) -> None:
         payload = {

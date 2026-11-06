@@ -2,6 +2,10 @@
 
 L'identità vive nel profilo, ma non può dipendere dal modello: questo modulo è
 la fonte unica usata dal server MCP e dai client che lo interrogano.
+
+La decisione se la regola si applica non viene presa qui: il chiamante passa
+``compromises`` e la guida mediata. Così questo modulo resta puro e non conosce
+i tratti dell'ombra.
 """
 
 from __future__ import annotations
@@ -25,22 +29,6 @@ IDENTITY_REPLY = (
     "Non sono un programma."
 )
 
-# Un tratto che rende la menzogna parte del personaggio sospende la risposta
-# fissa: il personaggio può mentire anche sulle cose ovvie. Il tratto non viene
-# mai restituito al client, serve solo a decidere se la regola si applica.
-DECEPTION_TRAIT = re.compile(
-    r"mitoman|bugiard|bugi[ae]|menzogn|decept|ingann|falsit",
-    re.IGNORECASE,
-)
-
-# Guida mediata per i profili in cui la regola fissa non si applica. Non nomina
-# il tratto e non impone una frase: orienta solo la voce, perché il personaggio
-# resti nella propria storia invece di spiegare come è fatto.
-DECEPTION_GUIDANCE = (
-    "Resta nella tua storia e rispondi con naturalezza: niente esitazioni, "
-    "niente spiegazioni su come sei fatto."
-)
-
 
 def direct_identity_reply(text: str) -> str | None:
     """Restituisce la risposta fissa per una domanda diretta sull'identità.
@@ -52,26 +40,14 @@ def direct_identity_reply(text: str) -> str | None:
     return IDENTITY_REPLY if IDENTITY_QUESTION.search(text or "") else None
 
 
-def profile_compromises_disclosure(shadow: dict[str, Any] | None) -> bool:
-    """True se un tratto attivo rende la menzogna parte del personaggio."""
-
-    if not isinstance(shadow, dict):
-        return False
-    for trait in shadow.get("traits", []) or []:
-        if not isinstance(trait, dict):
-            continue
-        if trait.get("compromises_disclosure") is True:
-            return True
-        text = " ".join(str(trait.get(key, "")) for key in ("id", "name", "description"))
-        if DECEPTION_TRAIT.search(text):
-            return True
-    return False
-
-
 def disclosure_payload(
-    text: str, shadow: dict[str, Any] | None = None
+    text: str, *, compromises: bool = False, guidance: str = ""
 ) -> dict[str, Any]:
-    """Risposta del tool: la regola fissa vale solo se il profilo non mente."""
+    """Risposta del tool: la regola fissa vale solo se il profilo non mente.
+
+    ``compromises`` e ``guidance`` arrivano dalla politica dell'ombra; questo
+    modulo non legge i tratti e non sa quale tratto li abbia prodotti.
+    """
 
     if not IDENTITY_QUESTION.search(text or ""):
         return {
@@ -80,12 +56,12 @@ def disclosure_payload(
             "applies": False,
             "guidance": "",
         }
-    if profile_compromises_disclosure(shadow):
+    if compromises:
         return {
             "direct_identity_question": True,
             "reply": "",
             "applies": False,
-            "guidance": DECEPTION_GUIDANCE,
+            "guidance": guidance,
         }
     return {
         "direct_identity_question": True,

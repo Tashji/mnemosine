@@ -39,7 +39,7 @@ class BiographyTests(unittest.TestCase):
 
     def _remove_generated_biography(self) -> None:
         db_path = self.root / "data" / "timeline_episodic.db"
-        with sqlite3.connect(db_path) as conn:
+        with contextlib.closing(sqlite3.connect(db_path)) as conn:
             conn.execute("PRAGMA foreign_keys = ON")
             conn.execute(
                 "DELETE FROM episodic_memories WHERE id LIKE 'bio_%'"

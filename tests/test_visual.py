@@ -50,7 +50,8 @@ class VisualTests(unittest.TestCase):
         self.assertTrue(self.service.save_reference(PNG, "image/png")["reference_available"])
         reference = self.root / "data" / "visual" / "reference.jpg"
         self.assertTrue(reference.read_bytes().startswith(bytes.fromhex("ffd8")))
-        self.assertEqual(reference.stat().st_mode & 0o777, 0o600)
+        if os.name != "nt":
+            self.assertEqual(reference.stat().st_mode & 0o777, 0o600)
         self.assertTrue(self.service.remove_reference()["removed"])
         self.assertFalse(reference.exists())
 
@@ -219,6 +220,8 @@ class VisualTests(unittest.TestCase):
             self.assertTrue(status["provider_configured"])
             self.assertEqual(status["provider_source"], "file")
 
+        if os.name == "nt":
+            self.skipTest("Windows non espone i bit POSIX; usa ACL.")
         token_file.chmod(0o644)
         with patch.dict("os.environ", {}, clear=True):
             self.assertFalse(self.service.status()["provider_configured"])
@@ -280,7 +283,8 @@ class VisualTests(unittest.TestCase):
         self.assertEqual(status["provider_source"], "environment")
         self.assertNotIn("r8_status_token_123456", json.dumps(status))
         recorded = self.root / "data" / "visual" / "token_status.json"
-        self.assertEqual(recorded.stat().st_mode & 0o777, 0o600)
+        if os.name != "nt":
+            self.assertEqual(recorded.stat().st_mode & 0o777, 0o600)
 
     def test_provider_check_is_invalidated_when_token_changes_or_is_removed(self):
         from agent_memory.visual_token import remove_token, store_token

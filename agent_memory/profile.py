@@ -1219,7 +1219,7 @@ def _lock_owner() -> str:
         return str(getuid())
     try:
         return _slug(getpass.getuser() or "utente")
-    except OSError:
+    except (OSError, ImportError):
         return "utente"
 
 

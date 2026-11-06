@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sqlite3
 import sys
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 from mcp import ClientSession
@@ -27,6 +29,14 @@ class StdioTransportTests(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self.root = Path(self._tmp.name)
         copy_profile(self.root)
+        # ``copy_profile`` ignora ``data/indexes``: senza i file FAISS anche i
+        # metadati devono sparire, altrimenti ``index_if_ready`` prova a
+        # embeddare un ricordo e carica il modello durante il test stdio.
+        vector_path = self.root / "data" / "vector_index.db"
+        with closing(sqlite3.connect(vector_path)) as conn:
+            conn.execute("DELETE FROM vector_entries")
+            conn.execute("DELETE FROM index_meta")
+            conn.commit()
 
     def tearDown(self) -> None:
         self._tmp.cleanup()

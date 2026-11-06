@@ -228,7 +228,7 @@ class DashboardSetupTests(SetupFixture):
         self.assertIn('name="generate_biography"', page)
         self.assertIn('name="build_index"', page)
         self.assertIn('/static/setup.js', page)
-        self.assertIn(str(self.root), page)
+        self.assertIn(str(self.root.resolve()), page)
 
         response = self._submit(csrf)
         self.assertEqual(response.status, 303)

@@ -51,3 +51,7 @@ backups/
 
 # Log di esecuzione.
 *.log
+
+# WAL e shared-memory SQLite: transitori e rigenerati all'apertura.
+*.db-wal
+*.db-shm
