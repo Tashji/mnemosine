@@ -46,6 +46,7 @@ Il progetto ruota attorno al Model Context Protocol: il server espone all'LLM la
 | **Recupero RAG** | Ricerca semantica con FAISS e ricostruzione del contesto pertinente. |
 | **Biografia procedurale** | Un passato coerente, generato da età, epoche ed eventi reali. |
 | **Ciclo di vita** | Routine, carico cognitivo, consolidamento e iniziativa autonoma. |
+| **Stato di vita (Fase 1)** | Bisogni, loop aperti, stream, ambiente e rapporto di situazione in sola lettura, senza deliberazione. |
 | **Relazioni** | Fiducia, intimità e storia sintetica delle persone importanti. |
 | **Browser controllato** | Navigazione con Playwright confinata a origini HTTPS in whitelist, con indice numerato dei link per i modelli piccoli. |
 | **File locali** | Sandbox `files/` del profilo per leggere e scrivere testo, senza uscire dalla cartella e senza symlink. |
@@ -1076,7 +1077,7 @@ Al primo accesso il profilo importa `current_state` e `social_graph` nel databas
 
 **Cambio operativo:** `config/current_state.json` e `config/social_graph.json` diventano esportazioni di compatibilità, non la fonte autorevole. Modificarli manualmente dopo l’importazione non cambia il profilo. Usare dashboard e API ConfigStore. Gli altri documenti restano JSON. Gli errori di esportazione vengono segnalati con un warning, ma non trasformano un commit SQLite riuscito in una richiesta fallita. Per rigenerare le esportazioni: `ConfigStore(root).operational.export(ConfigStore(root).load_all())`. Il profilo va salvato integralmente, database incluso.
 
-I tool MCP sono ora **44**. `interaction_history(user_id, offset=0, limit=50)` legge una pagina SQL dello storico. Il grafo restituisce i metadati, non tutte le interazioni.
+I tool MCP sono ora **46**. `interaction_history(user_id, offset=0, limit=50)` legge una pagina SQL dello storico. Il grafo restituisce i metadati, non tutte le interazioni.
 
 Il client che ospita l’agente può pianificare questo flusso, senza integrazioni per sito:
 
@@ -1135,6 +1136,25 @@ Il server MCP può essere collegato a qualunque client e a qualunque modello, co
 - Gli errori insegnano: un URL bloccato elenca le origini consentite, un click fallito rimanda a `browser_links`, e un indice fuori intervallo dice quanti link aveva l'ultimo elenco.
 
 Nessun ramo del codice dipende dal modello usato: sono i client MCP a variare (alcuni troncano i risultati, altri non mostrano il contenuto strutturato), quindi la regola è tenere stato e sicurezza sul server e output prevedibili.
+
+### 14.9. Stato di vita e rapporto di situazione (Fase 1)
+
+`life_situation` restituisce una fotografia bounded della vita dell'agente: bisogni, attività in corso, stream recente, loop aperti, relazioni qualitative, affordance, vincoli e incognite. Accetta un timestamp ISO 8601 opzionale (`at`) per una ricostruzione deterministica e restituisce sia il rapporto strutturato sia una resa testuale. Non decide, non propone azioni, non chiama un LLM e non apre sessioni esterne.
+
+`current_state.life` contiene `needs` (energia, fame, socialità, curiosità, stress), `open_loops` (massimo 20), `environment`, `attention`, `mental_content` e `stream` (massimo 8 voci). Le modalità sono `routine`, `unstructured`, `intent` e `sleep`; un'attività è sempre presente, anche quando è riposo o tempo non strutturato. I profili creati prima della Fase 1 non hanno `life`: il rapporto usa default in memoria e non riscrive il profilo. I nuovi profili nascono con il blocco già inizializzato.
+
+Il rapporto limita a 8 loop, 5 relazioni, 8 eventi recenti e 8 voci di stream. Le relazioni espongono solo etichette qualitative e giorni dall'ultimo contatto, mai fiducia o intimità grezze. Non legge l'ombra, i ricordi latenti o repressi, token, segreti o numeri di telefono; se il database timeline non esiste, restituisce eventi recenti vuoti senza creare file. La Fase 1 non espone `life_decide`: la deliberazione arriva nelle fasi successive. «Non sto facendo niente» resta una frase conversazionale, non uno stato valido; nel protocollo l'attività e l'attenzione sono sempre descritte.
+
+```bash
+python - <<'PY'
+from agent_memory.situation import SituationBuilder, render_situation
+
+report = SituationBuilder("percorso/del/profilo", at="2026-11-06T16:05:00+01:00").build()
+print(render_situation(report))
+PY
+```
+
+La specifica completa è in [`docs/superpowers/specs/2026-11-06-situated-deliberation-design.md`](docs/superpowers/specs/2026-11-06-situated-deliberation-design.md).
 
 <p align="center">
   <img src="assets/mnemosine-divider.svg" alt="" width="100%">

@@ -23,6 +23,7 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .errors import ConfigError, ValidationError
+from .life import validate_life
 from .migrations import migrate_json_document, write_json_atomic
 from .operational import OPERATIONAL_NAMES, OperationalStore
 
@@ -260,6 +261,12 @@ def _validate_current_state(state: dict[str, Any]) -> None:
         raise ConfigError(
             "current_state.flags.shadow_direct_read_enabled deve essere false."
         )
+
+    # ``life`` è opzionale per i profili creati prima della Fase 1. Se è
+    # presente, anche un patch parziale deve restare coerente.
+    life = state.get("life")
+    if life is not None:
+        validate_life(life)
 
 
 def _validate_world_history(world: dict[str, Any]) -> None:

@@ -89,6 +89,14 @@ class ProfileInitTests(unittest.TestCase):
             configs["world_history"]["birth_date"], "2003-05-12"
         )
         self.assertEqual(configs["world_history"]["events"], [])
+        life = configs["current_state"]["life"]
+        self.assertEqual(life["mode"], "routine")
+        self.assertEqual(
+            set(life["needs"]),
+            {"energy", "hunger", "social", "curiosity", "stress"},
+        )
+        self.assertEqual(life["open_loops"], [])
+        self.assertEqual(life["stream"], [])
 
         self.assertEqual(self._count("timeline_episodic.db", "episodic_memories"), 0)
         self.assertEqual(self._count("shadow_diary.db", "shadow_entries"), 0)

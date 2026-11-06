@@ -43,6 +43,7 @@ else:
 from .config import CONFIG_FILENAMES, ConfigStore
 from .db import DATABASE_TABLES
 from .errors import AgentMemoryError, ConfigError, ValidationError
+from .life import default_life
 from .migrations import (
     DATABASE_SCHEMAS,
     JSON_DOCUMENTS,
@@ -1121,6 +1122,11 @@ def _config_documents(
                 "shadow_engine_enabled": False,
                 "maintenance_mode": False,
             },
+            # Il profilo nuovo nasce con uno stato di vita esplicito. I profili
+            # precedenti non lo hanno: il rapporto usa i default senza scrivere.
+            "life": default_life(
+                timestamp, mode="routine", location="sistema"
+            ),
             "notes": "Stato iniziale creato da profile init.",
         },
         "world_history": {

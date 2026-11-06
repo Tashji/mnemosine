@@ -36,6 +36,7 @@ from .tools_autonomy import register_autonomy_tools
 from .tools_browser import register_browser_tools
 from .tools_files import register_file_tools
 from .tools_identity import register_identity_tools
+from .tools_life import register_life_tools
 from .tools_memory import register_memory_tools
 from .tools_state import register_state_tools
 from .tools_status import register_status_tools
@@ -84,6 +85,7 @@ def create_server(
 
     register_identity_tools(mcp, root=root, service=service)
     register_state_tools(mcp, root=root, service=service)
+    register_life_tools(mcp, root=root)
     register_memory_tools(
         mcp, service=service, semantic=semantic, retrieval=retrieval
     )

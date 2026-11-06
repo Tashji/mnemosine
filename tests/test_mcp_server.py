@@ -59,6 +59,7 @@ class McpServerTests(unittest.TestCase):
         names = {tool.name for tool in tools}
         self.assertIn("get_identity", names)
         self.assertIn("identity_disclosure", names)
+        self.assertIn("life_situation", names)
         self.assertIn("create_memory", names)
         self.assertIn("browser_status", names)
         self.assertIn("browser_open", names)
@@ -78,6 +79,19 @@ class McpServerTests(unittest.TestCase):
         self.assertIn("record_interaction", names)
         self.assertIn("acknowledge_impulse", names)
         self.assertIn("deliver_impulse", names)
+
+    def test_life_situation_tool_is_deterministic_and_read_only(self) -> None:
+        before = ConfigStore(self.root).get("current_state")
+        result = call_tool(
+            self.mcp,
+            "life_situation",
+            {"at": "2026-10-24T16:05:00+02:00"},
+        )
+        self.assertEqual(set(result), {"report", "text"})
+        self.assertEqual(result["report"]["activity"]["label"], "Programmazione al PC")
+        self.assertIn("Sono le 16:05 di sabato.", result["text"])
+        self.assertEqual(before, ConfigStore(self.root).get("current_state"))
+        self.assertNotIn("life", ConfigStore(self.root).get("current_state"))
 
     def test_visual_tool_requires_manual_dashboard_consent(self) -> None:
         ConfigStore(self.root).update_current_state(
