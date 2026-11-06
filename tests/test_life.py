@@ -162,6 +162,10 @@ class LifeSituationTests(unittest.TestCase):
             }
             for index in range(1, 21)
         ]
+        loops[18]["priority"] = 20
+        loops[18]["due_at"] = "2026-10-24T18:00:00+02:00"
+        loops[19]["priority"] = 20
+        loops[19]["due_at"] = "2026-10-25T18:00:00+01:00"
         stream = [
             {
                 "at": f"2026-10-24T15:{index:02d}:00+02:00",
@@ -176,7 +180,7 @@ class LifeSituationTests(unittest.TestCase):
 
         report = self._report()
         self.assertEqual(len(report["open_loops"]), 8)
-        self.assertEqual(report["open_loops"][0]["id"], "loop_20")
+        self.assertEqual(report["open_loops"][0]["id"], "loop_19")
         self.assertEqual(len(report["stream"]), 8)
         self.assertEqual(report["stream"][0]["text"], "Voce 0")
 

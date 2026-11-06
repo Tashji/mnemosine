@@ -215,10 +215,10 @@ class SituationBuilder:
             )
         loops.sort(
             key=lambda item: (
-                item["priority"],
+                -item["priority"],
+                item["due_at"] is None,
                 item["due_at"] or "",
-            ),
-            reverse=True,
+            )
         )
         return loops[:MAX_OPEN_LOOPS]
 

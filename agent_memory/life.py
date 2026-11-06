@@ -46,25 +46,6 @@ def _iso(value: Any) -> str | None:
     return value.strip()
 
 
-def _text(value: Any, *, required: bool = False) -> str | None:
-    if value is None:
-        if required:
-            raise ConfigError("life: attesa una stringa non vuota.")
-        return None
-    if not isinstance(value, str):
-        if required:
-            raise ConfigError("life: attesa una stringa.")
-        return None
-    cleaned = value.strip()
-    if not cleaned:
-        if required:
-            raise ConfigError("life: attesa una stringa non vuota.")
-        return None
-    if len(cleaned) > MAX_TEXT:
-        raise ConfigError(f"life: testo oltre {MAX_TEXT} caratteri.")
-    return cleaned
-
-
 def _string_list(value: Any, field: str) -> list[str]:
     if value is None:
         return []
