@@ -1,0 +1,53 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Modello FastEmbed scaricato localmente: grande e rigenerabile.
+data/models/
+
+# File temporanei dell'indice FAISS.
+data/indexes/*.tmp
+
+# Certificato e chiave privata della dashboard locale.
+data/dashboard_tls/
+
+# File scritti dall'agente nella sandbox del profilo.
+files/
+profiles/*/files/
+
+# Messaggi consegnati dall'esecutore: contengono testi privati.
+profiles/*/data/outbox/
+
+# Sessione del browser: cookie e token di accesso ai siti.
+data/browser/
+profiles/*/data/browser/
+
+# Token dei provider esterni (Replicate): mai nel repository.
+data/secrets/
+profiles/*/data/secrets/
+
+# Artefatti di build del pacchetto.
+build/
+dist/
+*.egg-info/
+
+# Artefatti locali di sviluppo (screenshot, log, script di prova).
+artifacts/
+
+# Profili locali creati con il wizard: dati personali e cache del modello.
+profiles/
+
+# Ambienti e cache locali di sviluppo.
+.freebuff/
+.python/
+.uv-cache/
+_profiler_/
+models/
+
+# Snapshot di restauro locali.
+backups/
+
+# Log di esecuzione.
+*.log

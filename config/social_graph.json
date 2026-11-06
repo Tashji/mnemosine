@@ -1,0 +1,93 @@
+{
+  "created_at": "2026-10-24T15:00:00+02:00",
+  "identity_id": "character_001",
+  "people": [
+    {
+      "boundaries": [
+        "Evita di chiedere dettagli sui conflitti familiari.",
+        "Non insistere quando l'agente risponde in modo breve."
+      ],
+      "confirmed_facts": [
+        "Studia Informatica a Catania",
+        "Preferisce le serate tranquille"
+      ],
+      "display_name": "Marco",
+      "first_interaction_at": "2024-10-05T18:20:00+02:00",
+      "full_name": "Marco Rinaldi",
+      "interaction_count": 18,
+      "intimacy": 61,
+      "last_interaction_at": "2026-10-18T21:40:00+02:00",
+      "notes": "Amicizia consolidata; è la persona con cui l'agente condivide più facilmente interessi tecnici.",
+      "preferences": [
+        "programmazione",
+        "videogiochi",
+        "serie TV"
+      ],
+      "relation": "amico",
+      "trust": 74,
+      "user_id": "user_marco"
+    },
+    {
+      "boundaries": [
+        "Non parlare di voti e risultati accademici se non richiesto.",
+        "Mantenere un tono cordiale ma non invadente."
+      ],
+      "confirmed_facts": [
+        "Frequenta la laurea magistrale in Informatica",
+        "Lavora a un progetto di tesi sulla sicurezza informatica"
+      ],
+      "display_name": "Giulia",
+      "first_interaction_at": "2025-03-12T11:00:00+01:00",
+      "full_name": "Giulia Ferraro",
+      "interaction_count": 7,
+      "intimacy": 28,
+      "last_interaction_at": "2026-10-12T16:30:00+02:00",
+      "notes": "Rapporto cordiale, ma l'agente mantiene una certa distanza e non condivide dettagli personali.",
+      "preferences": [
+        "studio",
+        "musica"
+      ],
+      "relation": "compagna di università",
+      "trust": 46,
+      "user_id": "user_giulia"
+    },
+    {
+      "boundaries": [
+        "Non condividere informazioni personali senza necessità.",
+        "Evitare di trasformare ogni conversazione in una confessione."
+      ],
+      "confirmed_facts": [
+        "Vive nel Nord Italia",
+        "Gioca principalmente in cooperativo"
+      ],
+      "display_name": "Davide",
+      "first_interaction_at": "2023-01-08T21:00:00+01:00",
+      "full_name": "Davide Conti",
+      "interaction_count": 23,
+      "intimacy": 44,
+      "last_interaction_at": "2026-10-20T22:10:00+02:00",
+      "notes": "Amicizia nata online; l'agente apprezza la costanza e la leggerezza del rapporto.",
+      "preferences": [
+        "gaming",
+        "hardware"
+      ],
+      "relation": "amico online",
+      "trust": 63,
+      "user_id": "user_davide"
+    }
+  ],
+  "scales": {
+    "intimacy": {
+      "max": 100,
+      "min": 0,
+      "notes": "0 = relazione formale, 100 = condivisione profonda e reciproca."
+    },
+    "trust": {
+      "max": 100,
+      "min": 0,
+      "notes": "0 = nessuna fiducia, 100 = fiducia piena e verificata nel tempo."
+    }
+  },
+  "schema_version": "2.0",
+  "updated_at": "2026-10-24T15:00:00+02:00"
+}

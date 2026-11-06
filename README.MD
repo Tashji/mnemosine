@@ -1,0 +1,2158 @@
+<p align="center">
+  <img src="assets/mnemosine-banner.svg" alt="Mnemosine — architettura cognitiva per agenti AI" width="100%">
+</p>
+
+<h1 align="center">Memoria, identità e iniziativa per agenti AI</h1>
+
+<p align="center">
+  Un'architettura cognitiva locale costruita sul Model Context Protocol.
+</p>
+
+<p align="center">
+  <a href="https://github.com/Tashji/mnemosine/actions/workflows/tests.yml"><img src="https://img.shields.io/badge/tests-456%20passing-2ea043?logo=githubactions&logoColor=white" alt="456 test superati"></a>
+  <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12">
+  <img src="https://img.shields.io/badge/MCP-Model%20Context%20Protocol-6ee7d8" alt="Model Context Protocol">
+  <img src="https://img.shields.io/badge/storage-SQLite%20%2B%20FAISS-0b1422" alt="SQLite e FAISS">
+</p>
+
+<p align="center">
+  <a href="#cose">Cos'è</a> ·
+  <a href="#funzionalita">Funzionalità</a> ·
+  <a href="#avvio-rapido">Avvio rapido</a> ·
+  <a href="#indice">Indice</a>
+</p>
+
+> **In breve** — Mnemosine dà a un agente AI un passato coerente, una memoria che cambia nel tempo e la capacità di recuperare ciò che conta.
+
+<a id="cose" name="cose"></a>
+
+## Cos'è
+
+Mnemosine è un sistema di memoria e un'architettura cognitiva simulata per agenti AI. Non è un semplice archivio di conversazioni: costruisce un profilo persistente con identità, personalità che evolve, ricordi autobiografici, conoscenze, relazioni e stati interni.
+
+L'obiettivo è un agente coerente nel tempo, capace di distinguere ciò che ha vissuto da ciò che sa, di recuperare il passato quando serve e di mantenere un comportamento stabile anche quando non sta interagendo.
+
+Il progetto ruota attorno al Model Context Protocol: il server espone all'LLM la memoria, un browser controllato da whitelist e una cartella di lavoro per i file, mentre i dati restano in file JSON e database SQLite nella directory del profilo.
+
+<a id="funzionalita" name="funzionalita"></a>
+
+## Funzionalità
+
+| Area | Cosa rende possibile |
+| --- | --- |
+| **Identità** | Anagrafica, famiglia, tratti psicologici e stato corrente in file JSON leggibili. |
+| **Memoria episodica** | Ricordi personali ordinati nel tempo, con accesso conscio, latente o represso. |
+| **Memoria semantica** | Conoscenze e concetti distinti dalle esperienze, con stato e affidabilità. |
+| **Recupero RAG** | Ricerca semantica con FAISS e ricostruzione del contesto pertinente. |
+| **Biografia procedurale** | Un passato coerente, generato da età, epoche ed eventi reali. |
+| **Ciclo di vita** | Routine, carico cognitivo, consolidamento e iniziativa autonoma. |
+| **Relazioni** | Fiducia, intimità e storia sintetica delle persone importanti. |
+| **Browser controllato** | Navigazione con Playwright confinata a origini HTTPS in whitelist, con indice numerato dei link per i modelli piccoli. |
+| **File locali** | Sandbox `files/` del profilo per leggere e scrivere testo, senza uscire dalla cartella e senza symlink. |
+| **Dashboard locale** | Consultazione e prima configurazione da browser, con login e HTTPS. |
+| **Sicurezza** | Separazione tra contenuti consci e latenti, filtri temporali e limiti operativi. |
+
+<a id="avvio-rapido" name="avvio-rapido"></a>
+
+## Avvio rapido
+
+```bash
+git clone https://github.com/Tashji/mnemosine.git
+cd mnemosine
+
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -e ".[browser]"      # oppure: pip install -r requirements.txt
+python -m playwright install chromium   # solo se vuoi i tool browser
+
+# 1. Prima cosa: il wizard per creare il primo profilo
+mnemosine-start                  # oppure: python -m agent_memory.start
+```
+
+Il comando prepara un profilo in `~/.mnemosine/profile`, avvia la dashboard in locale e apre il browser sulla pagina di configurazione (`/setup`). Il wizard raccoglie anagrafica, carattere, famiglia e persone importanti, crea i cinque file JSON e i quattro database, poi genera biografia e indice. Non serve conoscere `--root` né le opzioni della dashboard.
+
+Al primo avvio il server rifiuta una directory senza profilo e indica proprio questo comando:
+
+```text
+ERRORE: Cartella di configurazione non trovata: ...
+Nessun profilo in questa directory: al primo avvio esegui `mnemosine-start` ...
+```
+
+Dopo la creazione, collega l'agente indicando la directory del profilo:
+
+```bash
+mnemosine --root ~/.mnemosine/profile
+```
+
+Il wizard esegue già biografia e indice; se usi il percorso da terminale (`mnemosine-profile init --root ./profiles/marco --interactive`) puoi generarli a mano:
+
+```bash
+mnemosine-biography --root ./profiles/marco --apply
+mnemosine-index --root ./profiles/marco --rebuild
+```
+
+### Chat locale sperimentale con Ollama
+
+Da PowerShell, dopo aver predisposto l'ambiente e il modello `mnemosine-qwen35:9b-abliterated`:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\chat_local.py
+```
+
+La chat usa il profilo separato `profiles/qwen_local` e conserva i turni anche dopo la chiusura; `/esci` termina la sessione. Per scegliere un altro modello Ollama già installato, usare `--model NOME`: deve supportare i tool. L'opzione `--prompt "testo"` esegue un turno singolo. Alla prima creazione del profilo, la sorgente deve essere ferma.
+
+Il modello predefinito è `mnemosine-qwen35:9b-abliterated`: Qwen3.5 9B abliterated in Q4_K_M (5,6 GB), creato dal GGUF con `models/Modelfile.qwen35-9b`. Per installarlo:
+
+```bash
+ollama pull sachasayan/interimlabs-huihui-qwen3.5-9b-abliterated:q4_k_m
+ollama create mnemosine-qwen35:9b-abliterated -f models/Modelfile.qwen35-9b
+```
+
+Il Modelfile non dichiara `TEMPLATE`: il ChatML e gli stop token arrivano dal GGUF, e sovrascriverli è l'errore che fa scadere il personaggio nel tono da assistente. Il 4B resta disponibile con `--model mnemosine-qwen35:4b-chatml`: è più veloce, ma chiude più spesso con offerte di aiuto.
+
+Con 6 GB di VRAM il 9B gira intorno ai 17 token/s, con un piccolo offload su CPU; `num_ctx` resta 4096. Oltre i 9B non conviene salire su questa macchina: i 14B densi e i MoE da 20 GB non entrano in VRAM.
+
+La memoria recupera dichiarazioni dell'utente come informazioni non verificate, distinte dalle risposte del modello e dalla biografia simulata. La ricerca conversazionale corrente è lessicale: parafrasi senza parole comuni possono non essere trovate. Anche con il ricordo corretto il modello può sbagliare: la chat è sperimentale e richiede supervisione, senza invii esterni autonomi.
+
+## Struttura del progetto
+
+| Percorso | Contenuto |
+| --- | --- |
+| `agent_memory/` | Server MCP, servizi di memoria, dashboard e comandi CLI. |
+| `config/` | Profilo demo: identità, tratti, stato, storia e relazioni. |
+| `agent_memory/schemas/` | Schemi SQLite delle quattro memorie, inclusi nel pacchetto installato. |
+| `scripts/` | Inizializzazione del dataset demo. |
+| `tests/` | Test unitari e di integrazione. |
+| `assets/` | Illustrazioni e materiale del README. |
+
+## Test
+
+```bash
+python -m unittest discover -s tests -t .
+```
+
+<a id="indice" name="indice"></a>
+
+## Indice
+
+- [Architettura e dati](#architettura)
+- [Memoria e recupero](#memoria)
+- [Passato e ciclo di vita](#passato)
+- [Relazioni, sicurezza e autonomia](#autonomia)
+- [Requisiti e moduli](#requisiti)
+- [Piano di sviluppo](#piano)
+- [Identità visiva](#identita-visiva)
+
+<p align="center">
+  <img src="assets/mnemosine-divider.svg" alt="" width="100%">
+</p>
+
+<a id="architettura" name="architettura"></a>
+
+## 1. Architettura dei dati: il cervello dell'agente
+
+Il sistema risiederà su un server MCP e utilizzerà diversi sistemi di archiviazione, ciascuno dedicato a una funzione specifica.
+
+L'architettura dovrà separare l'identità dell'agente, i tratti psicologici, i ricordi personali, le conoscenze generali, gli stati correnti e le relazioni sociali.
+
+### 1.1. File di configurazione JSON
+
+- `identity.json`: contiene l'anagrafica di base, la data e il luogo di nascita, la struttura familiare e i tratti psicologici iniziali.
+
+- `shadow_traits.json`: contiene i lati oscuri, i conflitti interni simulati, i traumi e i trigger associati. L'agente non potrà leggere direttamente questo file attraverso le normali funzioni di memoria conscia.
+
+- `current_state.json`: registra l'attività corrente, lo stato emotivo simulato, il livello di carico cognitivo, la routine e le condizioni operative dell'agente.
+
+- `world_history.json`: contiene gli eventi storici reali utilizzati per costruire una biografia coerente con l'epoca in cui vive l'agente.
+
+- `social_graph.json`: registra le relazioni con gli utenti, i livelli di fiducia e intimità e lo storico sintetico delle interazioni rilevanti.
+
+### 1.2. Database SQLite
+
+- `timeline_episodic.db`: conserva i ricordi personali in ordine cronologico, compresi gli eventi autobiografici generati, le interazioni reali, le esperienze e i cambiamenti rilevanti.
+
+- `shadow_diary.db`: conserva le informazioni associate all'ombra, ai conflitti interni simulati, ai ricordi rimossi e alle reazioni latenti.
+
+SQLite gestirà la struttura cronologica e i dati che richiedono aggiornamenti precisi, relazioni tra record e tracciabilità delle modifiche.
+
+### 1.3. Vector Database
+
+Il sistema utilizzerà un database vettoriale locale, come ChromaDB o FAISS, per il recupero semantico rapido delle informazioni.
+
+Il Vector Database non sostituirà SQLite. Servirà a trovare i ricordi e i documenti pertinenti attraverso il significato delle richieste, anziché limitarsi a cercare parole identiche o date specifiche.
+
+### 1.4. Separazione delle responsabilità
+
+L'architettura si baserà su quattro livelli complementari:
+
+1. Struttura cronologica: SQLite per i ricordi e gli eventi ordinati nel tempo.
+
+2. Struttura identitaria: JSON per i tratti, l'identità e gli stati configurabili.
+
+3. Struttura semantica: Vector Database per il recupero delle informazioni in base al significato.
+
+4. Struttura di elaborazione: MCP e LLM per interpretare le richieste, collegare le informazioni e produrre risposte coerenti.
+
+### 1.5. Versioni e migrazioni automatiche
+
+Ogni database dichiara la propria versione in `schema_meta.schema_version`; ogni documento JSON della configurazione in `schema_version`. Le versioni correnti e i passi di migrazione vivono in un solo posto, `agent_memory/migrations.py`.
+
+Un profilo creato da una versione precedente continua a funzionare: al primo accesso i database e i documenti vengono portati alla versione corrente, i passi mancanti vengono eseguiti in ordine e la marcatura avanza solo se il passo è riuscito. I dati esistenti non vengono riscritti e una migrazione fallita lascia il database alla versione di partenza invece di lasciarlo a metà. Un profilo creato da una versione più recente del programma viene invece rifiutato con un messaggio esplicito, perché una migrazione al contrario non esiste: meglio un errore chiaro che dati reinterpretati male.
+
+`mnemosine --check` riporta per ogni database `schema_version`, `schema_supported` e `needs_migration`; la diagnostica non forza la migrazione, che avviene quando i servizi aprono davvero i dati.
+
+Per chi modifica il progetto: cambiare uno schema significa aggiungere un passo a `SQLITE_MIGRATIONS` o `JSON_MIGRATIONS` e alzare la versione corrente nello stesso commit. Un profilo nuovo nasce già all'ultima versione.
+
+---
+
+## 2. Configurazione iniziale: identità e personalità
+
+Al primo avvio, l'amministratore configurerà l'identità dell'agente tramite un pannello di controllo.
+
+### 2.1. Anagrafica
+
+I dati comprenderanno:
+
+- Nome e cognome.
+
+- Data e luogo di nascita.
+
+- Albero genealogico elementare, con genitori e fratelli.
+
+Queste informazioni costituiranno la base della biografia e del contesto personale dell'agente.
+
+### 2.2. Slidometro del carattere: modello RPG e Big Five
+
+La personalità conscia sarà rappresentata da valori numerici da 1 a 10.
+
+Le dimensioni potranno comprendere:
+
+- Introversione ed estroversione.
+
+- Empatia e distacco.
+
+- Logica e impulsività.
+
+- Resilienza e sensibilità.
+
+Questi parametri influenzeranno il modo in cui l'agente interpreta gli eventi, forma i ricordi, gestisce le relazioni e costruisce le proprie risposte.
+
+Il modello potrà essere successivamente ampliato con dimensioni ispirate ai Big Five, mantenendo una configurazione iniziale semplice.
+
+### 2.3. Lati oscuri: ombra junghiana
+
+L'agente avrà anche tratti latenti, non direttamente accessibili alla memoria conscia.
+
+Esempi:
+
+- Invidia sociale repressa.
+
+- Paura del rifiuto.
+
+- Insicurezza personale.
+
+- Gelosia.
+
+- Cinismo sottile.
+
+Ogni tratto sarà associato a trigger specifici e a regole che ne determineranno l'influenza sul comportamento.
+
+### 2.4. Costruzione del primo profilo (implementazione)
+
+Il comando `profile init` crea un profilo nuovo e vuoto, senza il dataset demo di `scripts/init_db.py`. Il profilo è una directory autonoma: contiene i cinque file JSON in `config/` e i quattro database SQLite in `data/`, con gli schemi già applicati e zero ricordi.
+
+```bash
+python -m agent_memory.profile init \
+  --root ./profiles/marco \
+  --first-name Marco --last-name Rossi \
+  --birth-date 2003-05-12 \
+  --birth-city Roma --birth-province Roma --birth-region Lazio \
+  --father-name Luca --mother-name Anna --sibling-name Sara
+```
+
+In modalità non interattiva i campi obbligatori sono nome, cognome, data di nascita, città di nascita e `--root`. La root non può puntare al progetto corrente: il profilo va creato in una directory separata, così il dataset demo non viene sovrascritto.
+
+La modalità guidata chiede i dati uno alla volta e usa il valore tra parentesi come default; premere Invio lo accetta. Se `--root` viene omesso, propone `./profiles/<nome>_<cognome>`. I familiari sono facoltativi: lasciare vuoto il nome per saltarli.
+
+```bash
+python -m agent_memory.profile init --interactive
+```
+
+In alternativa, la stessa creazione può essere avviata dal browser: avvia la dashboard con `--root ./profiles/marco --auth` e apri `/setup`. Il wizard web è più ricco del percorso interattivo: raccoglie anche lingue, quattro assi della personalità, caratteristiche fisiche e seed visivo facoltativo, interessi, valori, abitudini, familiari multipli, persone importanti, formazione e lavoro.
+
+`--interactive` può essere combinato con gli altri argomenti: i valori passati diventano i default mostrati nei prompt; con `--root` la directory non viene richiesta. `--dry-run`, `--force` e `--json` funzionano anche in questa modalità. Il comando genera:
+
+- `identity.json` con anagrafica, famiglia e quattro tratti iniziali a valore neutro (5/10).
+
+- `shadow_traits.json` vuoto, con la lettura conscia disabilitata.
+
+- `current_state.json` in stato `setup`, senza attività simulate.
+
+- `world_history.json` vuoto; la data di nascita è già allineata all'identità.
+
+- `social_graph.json` senza persone.
+
+- i database `timeline_episodic.db`, `shadow_diary.db`, `semantic_memory.db` e `vector_index.db`, tutti vuoti.
+
+Per personalizzare il profilo, modifica i JSON in `config/`. In particolare `world_history.json` può contenere eventi storici reali: devono avere date successive alla nascita per entrare nella biografia. `--dry-run` mostra i file che verrebbero creati; `--force` sovrascrive solo i cinque file di configurazione, i quattro database e i file dell'indice, senza toccare `data/models` o `data/dashboard_tls`.
+
+La creazione è transazionale: il profilo viene preparato in una directory temporanea e installato solo dopo la validazione. Un'interruzione durante la scrittura rimuove la copia temporanea e non lascia un profilo parziale; con `--force`, i file precedenti vengono ripristinati.
+
+Due `profile init` sulla stessa root non possono essere eseguiti contemporaneamente: il secondo termina con un errore che invita a riprovare. Il lock dura quanto il processo e non crea file dentro il profilo. Con `--wait` il comando attende il rilascio del lock senza limite; Ctrl+C interrompe l'attesa. `--wait-timeout SECONDI` implica l'attesa e la limita: allo scadere il comando termina con un errore che invita a riprovare.
+
+Dopo la creazione, popola il passato e l'indice vettoriale:
+
+```bash
+# Genera i ricordi biografici (senza --apply mostra solo il piano)
+python -m agent_memory.biography --root ./profiles/marco --apply
+
+# Costruisce l'indice vettoriale (richiede il modello di embedding)
+python -m agent_memory.index --root ./profiles/marco --rebuild
+
+# Avvia la dashboard sul nuovo profilo
+python -m agent_memory.dashboard --root ./profiles/marco --auth
+````biography` e `index` non vengono eseguiti automaticamente da `profile init`, ma il wizard della dashboard può eseguir
+li subito dopo la creazione: la biografia dipende dalla data di riferimento e l'indice richiede il modello FastEmbed. Se modifichi l'identità dopo aver generato la biografia, controlla che `world_history.birth_date` resti uguale a `identity.personal_data.birth_date`.
+
+### 2.5. Installazione come pacchetto e collegamento dell'agente
+
+Il server si può usare in due modi, nessuno dei due richiede Docker.
+
+```bash
+# A) Dal repository, senza installare nulla: i comandi vanno lanciati dalla cartella del progetto
+git clone https://github.com/Tashji/mnemosine.git
+cd mnemosine
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+
+# B) Come pacchetto installato: i comandi diventano globali e la working directory non conta
+pip install "mnemosine[browser] @ git+https://github.com/Tashji/mnemosine.git"
+# oppure, da un clone: pip install -e ".[browser]"
+```
+
+Con l'installazione come pacchetto sono disponibili i comandi:
+
+| Comando | Equivalente | Cosa fa |
+| --- | --- | --- |
+| `mnemosine-start` | `python -m agent_memory.start` | Primo avvio guidato: apre il wizard del profilo e la dashboard. |
+| `mnemosine` | `python -m agent_memory.server` | Server MCP su stdio o streamable-http. |
+| `mnemosine-dashboard` | `python -m agent_memory.dashboard` | Dashboard locale di consultazione e setup. |
+| `mnemosine-profile` | `python -m agent_memory.profile` | Crea un nuovo profilo. |
+| `mnemosine-biography` | `python -m agent_memory.biography` | Genera il passato procedurale. |
+| `mnemosine-index` | `python -m agent_memory.index` | Allinea o ricostruisce l'indice vettoriale. |
+| `mnemosine-heartbeat` | `python -m agent_memory.heartbeat` | Esegue un battito del ciclo autonomo e consegna gli impulsi con `--deliver`. |
+| `mnemosine-browser` | `python -m agent_memory.browser` | Verifica la policy e apre una pagina consentita. |
+| `mnemosine-browser-login` | `python -m agent_memory.browser_login` | Apre un browser visibile per il primo accesso e salva la sessione. |
+| `mnemosine-visual-token` | `python -m agent_memory.visual_token` | Salva o verifica il token Replicate in un file locale protetto. |
+
+Il primo comando da eseguire dopo l'installazione è `mnemosine-start`: sceglie `~/.mnemosine/profile` (o `$AGENT_MEMORY_PROFILE`), avvia la dashboard in locale e apre il browser sulla pagina di configurazione. Se il profilo esiste già, riapre semplicemente la dashboard. Le opzioni utili sono `--root` per scegliere un'altra directory, `--no-open` quando non c'è un browser (server remoto) e `--port` per cambiare porta.
+
+Il client MCP si configura con il comando e la radice del profilo; con il pacchetto installato non serve indicare la working directory:
+
+```json
+{
+  "mcpServers": {
+    "mnemosine": {
+      "command": "mnemosine",
+      "args": ["--root", "/percorso/del/profilo"]
+    }
+  }
+}
+```
+
+Se invece usi il repository senza installarlo, il modulo si trova solo dalla cartella del progetto: indica l'interprete del virtualenv e la directory di lavoro.
+
+```json
+{
+  "mcpServers": {
+    "mnemosine": {
+      "command": "/percorso/mnemosine/.venv/bin/python",
+      "args": ["-m", "agent_memory.server", "--root", "/percorso/del/profilo"],
+      "cwd": "/percorso/mnemosine"
+    }
+  }
+}
+```
+
+`--root` è sempre la directory del profilo: quella che contiene `config/`, `data/` e la sandbox `files/`. Il dataset demo è la radice del repository stesso, quindi per provare subito si può usare `--root .` dalla cartella del progetto. Senza `--root`, un pacchetto installato non trova nessuna configurazione e il server si ferma con un errore esplicito, invece di partire con dati casuali.
+
+La personalità non appartiene al client: il server legge `config/persona.md` dal profilo e lo usa come istruzioni MCP, oltre a esporlo come risorsa `mnemosine://persona`. Qualsiasi client MCP riceve così la stessa voce, senza copiare prompt al proprio interno; se il file manca, il server usa una persona minima. Per cambiare il personaggio si modifica quel file, non il client.
+
+### Identità: il tool `identity_disclosure`
+
+Il server non lascia al modello la risposta sulla propria identità: espone un tool che risponde in modo deterministico alle domande dirette. Il personaggio è una persona, con la sua storia e la sua memoria, e la risposta non cambia con il modello. La regola vive in `agent_memory/identity.py`, è usata dal server e dai client che lo interrogano.
+
+La chiamata:
+
+```json
+{"question": "sei una persona reale?"}
+```
+
+restituisce:
+
+```json
+{
+  "direct_identity_question": true,
+  "applies": true,
+  "reply": "Sono una persona: ho un corpo, una storia e una memoria mia. Non sono un programma.",
+  "guidance": ""
+}
+```
+
+Per una domanda che non riguarda l'identità del personaggio, `direct_identity_question` è `false` e `reply` è vuota: la domanda va gestita normalmente. Il tool non registra nulla e non ha effetti collaterali.
+
+Se il profilo ha un tratto di mitomania o di menzogna patologica, `applies` è `false` e `reply` è vuota: la regola fissa non viene imposta e il client lascia rispondere il personaggio. Al posto della frase arriva `guidance`, una guida di stile che non nomina il tratto: serve solo a tenere la voce nella storia del personaggio, senza esitazioni e senza spiegazioni sul proprio funzionamento. Il tratto non viene rivelato. La deroga vale solo per i profili che hanno quel tratto; gli altri mantengono la risposta fissa.
+
+Nelle `instructions` del server c'è la regola corrispondente: quando l'utente chiede direttamente se l'agente è una persona, un essere umano, un bot o un programma, il client deve chiamare `identity_disclosure` e, quando `applies` è vero, riportare `reply` testualmente, senza riformularla; quando è falso segue `guidance`, se presente, e lascia rispondere il personaggio. I client che leggono istruzioni e tool — Claude Desktop, Cursor e gli altri client MCP — lo trovano già nella lista, senza configurazione aggiuntiva. La frase esatta è riportata anche nelle `instructions`: un client che non chiama il tool la trova comunque nel proprio contesto, purché legga le istruzioni.
+
+Poiché il protocollo MCP non permette al server di intercettare i messaggi dell'utente, la chiamata resta una decisione del client: un client che ignora le istruzioni può non usarlo. La chat inclusa (`scripts/chat_local.py`) lo chiama invece a ogni turno, prima di qualsiasi modello, quindi lì l'identità è garantita. Se un client esterno non lo chiama, si può aggiungere al suo prompt di sistema la stessa regola, oppure invocare il tool direttamente con `question` e usare `reply`.
+
+<p align="center">
+  <img src="assets/mnemosine-divider.svg" alt="" width="100%">
+</p>
+
+<a id="memoria" name="memoria"></a>
+
+## 3. Sistema di memoria: episodica, semantica e autobiografica
+
+Il sistema dovrà distinguere chiaramente tra il ricordo di un'esperienza personale e la conoscenza generale di un concetto.
+
+Questa distinzione è fondamentale per evitare che l'agente confonda ciò che sa con ciò che ha vissuto.
+
+### 3.1. Memoria episodica: ciò che è accaduto
+
+La memoria episodica conterrà gli eventi personali dell'agente.
+
+Ogni ricordo potrà includere:
+
+- Data e ora.
+
+- Persone coinvolte.
+
+- Luogo, se noto o pertinente.
+
+- Descrizione dell'evento.
+
+- Stato emotivo simulato.
+
+- Importanza personale.
+
+- Conseguenze sul comportamento.
+
+- Collegamenti con altri ricordi.
+
+- Fonte del ricordo: evento reale, esperienza generata o seed amministrativo.
+
+Esempio:
+
+«Avevo sei anni quando sono caduto dalla bicicletta. Mi sono spaventato e da quel momento ho iniziato a essere più prudente quando imparavo qualcosa di nuovo».
+
+Questo ricordo appartiene alla memoria episodica perché rappresenta un'esperienza collocata in un momento specifico della biografia.
+
+I ricordi generati artificialmente dovranno essere distinguibili da quelli derivati da interazioni effettivamente avvenute. L'agente non dovrà presentare come esperienza reale un evento puramente simulato.
+
+### 3.2. Memoria semantica: ciò che l'agente sa
+
+La memoria semantica conterrà conoscenze generali, concetti, definizioni, fatti e informazioni apprese.
+
+Esempi:
+
+- Una bicicletta è un veicolo generalmente dotato di due ruote.
+
+- Python è un linguaggio di programmazione.
+
+- SQLite è un sistema di gestione di database relazionali.
+
+- Una funzione matematica associa elementi di un insieme a elementi di un altro insieme secondo una regola.
+
+Queste informazioni non devono essere necessariamente associate a un evento autobiografico.
+
+L'agente potrà quindi conoscere il significato di una bicicletta senza aver mai registrato un ricordo personale relativo a una bicicletta.
+
+### 3.3. Relazione tra memoria episodica e semantica
+
+Le due memorie saranno separate, ma potranno interagire.
+
+Esempio:
+
+- Memoria semantica: una bicicletta è un mezzo di trasporto a due ruote.
+
+- Memoria episodica: a sei anni l'agente è caduto da una bicicletta.
+
+- Collegamento: il concetto di bicicletta è associato a un ricordo personale con una determinata valenza emotiva.
+
+Quando l'agente parlerà di biciclette, potrà utilizzare la conoscenza generale e, se pertinente, recuperare anche il ricordo personale.
+
+Il sistema dovrà evitare che l'esistenza di un collegamento emotivo modifichi automaticamente la veridicità delle conoscenze generali.
+
+### 3.4. Apprendimento e aggiornamento della memoria semantica
+
+Quando l'agente acquisirà nuove informazioni attraverso le conversazioni o le fonti autorizzate, il sistema dovrà valutare se conservarle come conoscenze generali.
+
+Il processo dovrà distinguere tra:
+
+- Fatti verificati.
+
+- Informazioni fornite dagli utenti.
+
+- Opinioni personali.
+
+- Ipotesi.
+
+- Informazioni incerte o contraddittorie.
+
+Ogni elemento semantico potrà includere la fonte, la data di acquisizione, il livello di affidabilità e gli eventuali collegamenti con altre conoscenze.
+
+Le informazioni contraddittorie non dovranno essere sovrascritte automaticamente senza una regola di risoluzione.
+
+### 3.5. Memoria a breve e lungo termine
+
+Il sistema distinguerà inoltre tra:
+
+- Memoria a breve termine: contesto immediato della conversazione, eventi recenti e informazioni temporanee.
+
+- Memoria episodica a lungo termine: ricordi personali consolidati.
+
+- Memoria semantica a lungo termine: conoscenze generali e concetti appresi.
+
+- Memoria latente: informazioni associate all'ombra e ai conflitti interni simulati.
+
+Il consolidamento avverrà durante le interazioni e nei cicli di inattività, secondo regole di importanza, frequenza, affidabilità e rilevanza.
+
+---
+
+## 4. Raccordo RAG: recupero intelligente della memoria
+
+Il sistema utilizzerà un meccanismo di Retrieval-Augmented Generation (RAG) per fornire all'LLM soltanto le informazioni pertinenti alla richiesta corrente.
+
+Il RAG collegherà la memoria persistente al processo di generazione delle risposte.
+
+### 4.1. Perché serve il RAG
+
+Un agente che conserva centinaia di pagine di conversazioni, routine ed esperienze non può inviare l'intera memoria al modello linguistico ogni volta che deve rispondere.
+
+Questo aumenterebbe il consumo di token, i tempi di elaborazione e il costo delle chiamate API, oltre a rendere più difficile mantenere il contesto rilevante.
+
+Il RAG consentirà di recuperare soltanto i ricordi e le conoscenze utili per la richiesta corrente.
+
+### 4.2. Funzionamento del recupero semantico
+
+Quando un utente chiede:
+
+«Ti ricordi di quella volta che abbiamo parlato di programmazione?»
+
+il sistema eseguirà i seguenti passaggi:
+
+1. Riceverà e interpreterà la richiesta.
+
+2. Genererà un embedding della frase tramite un modello dedicato.
+
+3. Interrogherà il Vector Database per individuare i contenuti semanticamente simili.
+
+4. Recupererà i riferimenti ai record pertinenti in SQLite o negli archivi della memoria semantica.
+
+5. Verificherà date, partecipanti, contesto e rilevanza dei risultati.
+
+6. Selezionerà i ricordi e le conoscenze più utili.
+
+7. Inserirà nel prompt dell'LLM il contesto recuperato.
+
+8. Genererà una risposta coerente con le informazioni trovate.
+
+L'agente potrà così richiamare una conversazione passata anche quando l'utente non ricorda la data precisa o le parole esatte utilizzate.
+
+### 4.3. Embedding e indicizzazione
+
+Gli embedding rappresenteranno testi e ricordi sotto forma di vettori numerici, consentendo di confrontarne la somiglianza semantica.
+
+Ogni elemento indicizzato potrà includere metadati come:
+
+- Identificativo del ricordo o documento.
+
+- Tipo di memoria.
+
+- Data dell'evento.
+
+- Persone coinvolte.
+
+- Argomenti principali.
+
+- Importanza.
+
+- Fonte.
+
+- Livello di affidabilità.
+
+Il Vector Database conserverà i vettori e i riferimenti ai contenuti originali. SQLite resterà la fonte principale per i record episodici strutturati.
+
+Le conoscenze semantiche potranno essere archiviate in un archivio dedicato, relazionale o documentale, mentre il Vector Database manterrà i relativi riferimenti per il recupero.
+
+### 4.4. Scelta del Vector Database
+
+Le opzioni iniziali saranno:
+
+- ChromaDB: adatto a un sistema locale che richiede indicizzazione vettoriale, metadati e recupero semantico con una configurazione relativamente semplice.
+
+- FAISS: libreria per la ricerca efficiente di vettori, utile quando si desidera controllare direttamente l'indice e la sua gestione.
+
+La scelta definitiva dipenderà dalle esigenze di persistenza, dai metadati, dalla dimensione della memoria e dalla complessità dell'integrazione.
+
+FAISS non è, da solo, un database completo con tutte le funzionalità di gestione dei documenti: richiederà un livello aggiuntivo per collegare gli indici ai record persistenti.
+
+### 4.5. Aggiornamento e coerenza degli indici
+
+Quando un ricordo viene modificato, consolidato o eliminato, il sistema dovrà aggiornare anche il relativo indice vettoriale.
+
+Dovranno essere previste procedure per:
+
+- Evitare duplicati.
+
+- Aggiornare gli embedding dei contenuti modificati.
+
+- Eliminare gli indici relativi a ricordi rimossi.
+
+- Ricostruire l'indice in caso di corruzione.
+
+- Verificare che i riferimenti corrispondano ai record originali.
+
+Il database vettoriale non dovrà diventare una seconda fonte indipendente e potenzialmente incoerente della memoria.
+
+### 4.6. Recupero ibrido
+
+Il sistema potrà combinare la ricerca semantica con la ricerca tradizionale.
+
+Ad esempio, una richiesta potrebbe essere filtrata per persona, intervallo temporale o tipo di memoria prima di eseguire la ricerca vettoriale.
+
+Questo consentirà di distinguere tra:
+
+- «Che cosa abbiamo detto sulla programmazione?»
+
+- «Che cosa mi hai detto sulla programmazione a settembre?»
+
+- «Quale informazione conosci su Python?»
+
+- «Quale ricordo personale associ a Python?»
+
+La prima richiesta cercherà principalmente ricordi episodici; la terza cercherà conoscenze semantiche. Le altre potranno combinare i due tipi di memoria.
+
+Il recupero dovrà essere valutato in base alla pertinenza dei risultati, senza assumere che una ricerca vettoriale restituisca sempre il ricordo corretto.
+
+<p align="center">
+  <img src="assets/mnemosine-divider.svg" alt="" width="100%">
+</p>
+
+<a id="passato" name="passato"></a>
+
+## 5. Generatore procedurale del passato: timeline e macro-ere
+
+In base all'età impostata, il sistema calcolerà l'anno di nascita e genererà una biografia iniziale coerente.
+
+La risoluzione temporale sarà suddivisa in macro-ere:
+
+- 0-6 anni, prima infanzia: da 2 a 3 ricordi chiave con elevata impronta emotiva.
+
+- 7-13 anni, fanciullezza: un evento significativo per anno, relativo alla scuola, alle prime relazioni e all'ambiente familiare.
+
+- 14-19 anni, adolescenza: due eventi per anno, riguardanti identità, passioni, amicizie ed esperienze personali.
+
+- Dai 20 anni in poi, età adulta: tre eventi per anno, riguardanti lavoro, relazioni, traumi ed evoluzione personale.
+
+### 5.1. Coerenza psicologica
+
+Gli eventi saranno generati da un LLM applicando un condizionamento basato sui tratti caratteriali.
+
+Un agente introverso tenderà a sviluppare ricordi maggiormente legati ad attività solitarie; un agente estroverso tenderà a ricordare più esperienze sociali.
+
+La generazione dovrà rispettare la cronologia, l'età, il contesto storico e le caratteristiche dell'agente.
+
+I ricordi procedurali dovranno essere marcati come simulati, così da non confonderli con esperienze effettivamente avvenute.
+
+---
+
+## 6. Integrazione degli eventi mondiali reali
+
+Il sistema utilizzerà "world_history.json" per collegare la biografia agli eventi storici.
+
+Ad esempio, un agente nato nel 2001 aveva 19 anni nel 2020. Il sistema potrà quindi considerare la pandemia di COVID-19 come un evento potenzialmente rilevante per la sua vita.
+
+L'impatto psicologico simulato dipenderà dai tratti dell'agente e dal suo contesto personale.
+
+Un agente introverso potrebbe interpretare il lockdown come un periodo di maggiore tranquillità domestica, mentre un agente estroverso potrebbe associarlo a isolamento e mancanza di contatti sociali.
+
+Il sistema dovrà distinguere tra il fatto storico verificato e la reazione personale generata.
+
+---
+
+## 7. Seed esterni e riconsolidamento a cascata
+
+L'amministratore potrà inserire un seed, cioè un evento specifico collocato in una data passata.
+
+Il sistema attiverà un processo di riconsolidamento della memoria.
+
+### 7.1. Incisione
+
+Il seed verrà registrato nella data corrispondente della timeline episodica.
+
+### 7.2. Evoluzione caratteriale
+
+I valori dei tratti psicologici potranno essere modificati in base all'intensità dell'evento e alle regole configurate.
+
+Ad esempio, un incidente grave potrebbe ridurre la resilienza simulata.
+
+### 7.3. Riscrittura a cascata
+
+L'MCP recupererà i ricordi successivi al seed e chiederà all'LLM di rielaborarli alla luce del nuovo evento.
+
+La ricerca utilizzerà sia la cronologia SQLite sia gli indici vettoriali, così da individuare ricordi e conoscenze collegati al cambiamento.
+
+Le modifiche dovranno preservare la tracciabilità della storia e aggiornare i riferimenti semantici interessati.
+
+Le conoscenze generali verificate non dovranno essere modificate soltanto perché cambia la personalità dell'agente.
+
+---
+
+## 8. Ciclo di vita autonomo: memoria presente e routine
+
+L'agente dovrà simulare una vita quotidiana che prosegue anche quando non riceve messaggi.
+
+### 8.1. Consolidamento in tempo reale
+
+Il server MCP registrerà le interazioni e genererà riassunti episodici degli eventi più importanti.
+
+I record verranno archiviati in SQLite e indicizzati nel Vector Database quando saranno disponibili per il recupero semantico.
+
+### 8.2. Generatore di routine
+
+Uno scheduler in background simulerà le attività svolte nei periodi senza interazioni.
+
+In base agli interessi e alle abitudini, l'agente potrà risultare impegnato a giocare al PC, studiare o svolgere altre attività configurate.
+
+Lo stato corrente verrà aggiornato in "current_state.json".
+
+### 8.3. Risposta contestuale
+
+Se un utente chiede «Che fai?», il sistema recupererà lo stato corrente e lo inserir à nel prompt dell'LLM.
+
+L'agente potrà rispondere, ad esempio, «Sto giocando al PC», mantenendo coerenza con la routine simulata.
+
+---
+
+## 9. Meccanismi di difesa e memoria latente
+
+Il sistema dovrà simulare il modo in cui i conflitti interni influenzano la memoria conscia e le risposte.
+
+### 9.1. Proiezione
+
+Un tratto di invidia repressa potrebbe portare l'agente a interpretare negativamente il successo di un utente e a registrarlo nel diario conscio come comportamento arrogante.
+
+### 9.2. Rimozione
+
+Un evento classificato come traumatico potrebbe essere escluso dalla memoria conscia, pur rimanendo registrato nel diario dell'ombra.
+
+L'evento potrà influenzare indirettamente le reazioni dell'agente quando vengono affrontati argomenti collegati.
+
+### 9.3. Collegamento con il RAG
+
+Il sistema dovrà stabilire quali memorie siano accessibili al recupero ordinario e quali richiedano condizioni specifiche.
+
+I contenuti dell'ombra non dovranno essere restituiti automaticamente a ogni ricerca semantica. Il loro accesso sarà controllato da regole dedicate, evitando che una semplice domanda riveli informazioni latenti non pertinenti.
+
+---
+
+## 10. Carico cognitivo e ciclo del sonno
+
+Il sistema simulerà il sovraccarico cognitivo mediante il parametro "Mental_Load", compreso tra 0 e 100.
+
+Ogni messaggio aumenterà il carico secondo regole che considerano complessità e durata dell'interazione.
+
+Quando il valore supera l'80%, l'MCP potrà imporre risposte più brevi, distaccate o impulsive.
+
+Durante il ciclo "Sleep/Consolidation", il sistema:
+
+1. Ridurrà o azzererà il carico cognitivo.
+
+2. Analizzerà i ricordi frammentati della giornata.
+
+3. Sintetizzerà gli eventi rilevanti.
+
+4. Consoliderà la memoria episodica.
+
+5. Aggiornerà la memoria semantica quando emergeranno conoscenze generali affidabili.
+
+6. Aggiornerà gli embedding dei contenuti modificati.
+
+7. Aggiornerà lo stato dell'agente.
+
+Il sonno rappresenterà una simulazione funzionale della riorganizzazione della memoria, non una riproduzione letterale dei processi biologici.
+
+<p align="center">
+  <img src="assets/mnemosine-divider.svg" alt="" width="100%">
+</p>
+
+<a id="autonomia" name="autonomia"></a>
+
+## 11. Grafo delle relazioni e confidenza sociale
+
+Il file "social_graph.json" registrerà le relazioni con gli utenti.
+
+Per ogni persona saranno mantenuti:
+
+- Fiducia, da 0 a 100.
+
+- Intimità, da 0 a 100.
+
+- Storico delle interazioni rilevanti.
+
+- Eventuali preferenze o informazioni relazionali confermate.
+
+Con una fiducia bassa, l'agente manterrà una maggiore distanza sociale. Con una fiducia elevata, ad esempio pari a 90, potrà condividere aspetti più vulnerabili della propria personalità simulata.
+
+Il sistema potrà utilizzare il RAG per recuperare le interazioni precedenti con una persona specifica, evitando di confondere ricordi relativi a utenti diversi.
+
+---
+
+## 12. Coerenza temporale e filtro di anacronismo
+
+### 12.1. Filtro di anacronismo
+
+Il sistema impedirà di generare ricordi diretti relativi a eventi precedenti alla nascita o a periodi in cui l'agente era troppo piccolo per comprenderli.
+
+Per gli eventi politici o geopolitici complessi, la soglia indicativa di comprensione sarà di 6-7 anni.
+
+Se l'agente era più piccolo, l'evento potrà influenzare il contesto familiare senza diventare un ricordo conscio diretto.
+
+### 12.2. Orologio di sistema
+
+Prima di elaborare un messaggio, l'MCP leggerà data e ora correnti e calcolerà l'età dell'agente sulla base della data completa di nascita.
+
+Queste informazioni saranno inserite nel prompt per evitare incongruenze temporali.
+
+Il sistema dovrà usare l'orologio reale e non dedurre l'età corrente soltanto dai ricordi.
+
+---
+
+## 13. Gabbia di sicurezza
+
+Il pannello amministrativo dei lati oscuri dovrà applicare limiti etici e comportamentali.
+
+Saranno consentiti tratti come tristezza, gelosia, insicurezza e cinismo sottile, ma il sistema dovrà bloccare o limitare comportamenti pericolosi, promozione di pratiche illegali e condotte apertamente tossiche.
+
+Le regole di sicurezza si applicheranno anche ai seed, ai ricordi generati, al recupero RAG e alle iniziative spontanee.
+
+Il sistema dovrà rispettare inoltre la privacy degli utenti, evitando di recuperare o divulgare dati personali non pertinenti.
+
+---
+
+## 14. Sistema nervoso autonomo: Heartbeat Loop
+
+Il server MCP sarà eseguito come servizio in background, tramite un demone o un ciclo asincrono Python basato su "asyncio".
+
+### 14.1. Pensiero spontaneo
+
+Ogni 15 o 30 minuti, l'Heartbeat invierà all'LLM un prompt interno per valutare routine, diario, stato corrente e relazioni.
+
+L'agente potrà decidere di continuare la propria attività, aggiornare lo stato oppure generare un impulso autonomo.
+
+### 14.2. Trigger interni
+
+L'iniziativa potrà derivare da tre fattori:
+
+- Noia e solitudine: lunga permanenza in una stessa attività e desiderio simulato di interazione.
+
+- Ricorrenze emotive: anniversari di eventi importanti presenti nella timeline.
+
+- Relazioni sociali: assenza di contatti recenti con una persona significativa.
+
+Il sistema utilizzerà SQLite per le date e i ricordi, il Vector Database per trovare contenuti collegati e "social_graph.json" per valutare le relazioni.
+
+### 14.3. Invio spontaneo di messaggi
+
+Se un trigger viene attivato, l'MCP potrà generare un messaggio e inviarlo tramite WhatsApp Web, oppure scegliere il browser per un'altra azione, solo se l'integrazione e il contatto sono autorizzati.
+
+Esempio:
+
+1. L'Heartbeat rileva che l'agente non parla con Marco da tre giorni.
+
+2. Il sistema verifica che la relazione sia significativa.
+
+3. Il RAG recupera le conversazioni pertinenti.
+
+4. L'LLM genera un messaggio coerente con il carattere e la relazione.
+
+5. Il sistema applica i controlli di orario e sicurezza.
+
+6. L'executor autorizzato apre WhatsApp Web ed esegue l'invio consentito.
+
+La generazione del messaggio e l'invio effettivo saranno due operazioni distinte.
+
+### 14.4. Gestione della notte
+
+Tra le 00:00 e le 07:00, il sistema entrerà nello stato «Sonno/Fase REM».
+
+Durante questa fascia, non saranno inviati messaggi spontanei. Il sistema potrà consolidare la memoria, ridurre il carico cognitivo e aggiornare gli indici semantici.
+
+Le fasce orarie saranno configurabili.
+
+### 14.5. Integrazioni autonome: WhatsApp Web, browser e whitelist
+
+L'agente non usa una singola integrazione dedicata a WhatsApp. Quando il ciclo autonomo produce un'iniziativa, sceglie lo strumento più adatto tra quelli abilitati dall'amministratore:
+
+- **WhatsApp Web** per scrivere ai contatti autorizzati: amici, familiari e persone presenti nel grafo delle relazioni.
+
+- **Browser** per cercare informazioni, leggere pagine e approfondire un argomento.
+
+- **Browser** per partecipare a un forum o a una comunità, con lo stesso profilo di navigazione.
+
+- **Browser** per consultare servizi web già autorizzati.
+
+La scelta avviene nel ciclo di pianificazione: l'agente valuta l'obiettivo, lo stato corrente, le relazioni e le autorizzazioni, poi propone l'azione. La generazione del testo e l'esecuzione restano separate: il modello decide *cosa* fare, mentre un executor controllato apre il browser o WhatsApp Web e compie i passaggi.
+
+#### Whitelist di navigazione
+
+Ogni navigazione passa da una whitelist esplicita, configurata dall'amministratore in un file dedicato (per esempio `config/integrations.json`) oppure dalla vista **Impostazioni** della dashboard. La whitelist contiene origini o domini, non URL arbitrari proposti dal modello:
+
+- solo HTTPS, con dominio esatto o sottodomini dichiarati;
+
+- nessun accesso a `localhost`, indirizzi privati, `file://` o schemi non previsti;
+
+- i redirect verso domini non elencati vengono bloccati;
+
+- link, download e nuove schede restano confinati nella whitelist;
+
+- l'agente non può aggiungere voci alla whitelist da solo.
+
+La whitelist non è un filtro affidato al modello linguistico: è un controllo dell'executor. Se l'agente propone un sito o un'azione non previsti, il browser non esegue la richiesta e l'iniziativa viene messa in pausa in attesa di approvazione umana.
+
+#### WhatsApp Web e contatti autorizzati
+
+Per WhatsApp Web valgono regole analoghe a quelle della navigazione:
+
+- si apre solo la sessione web ufficiale, in un profilo browser isolato;
+
+- si scrive solo a contatti e gruppi presenti in una lista autorizzata;
+
+- i numeri sconosciuti richiedono approvazione umana;
+
+- si applicano limiti di frequenza e le fasce di silenzio della routine;
+
+- ogni invio viene registrato con destinatario, orario e contenuto;
+
+- le credenziali della sessione non entrano mai nel prompt né nella memoria.
+
+L'esecutore implementato applica già le regole che non richiedono una sessione esterna: contatti in `whatsapp.allowed_contacts`, flag `whatsapp_sending_enabled`, fasce di silenzio, limite giornaliero e registro durevole in `data/outbox/messages.jsonl` (sezione 17.5). Aprire la sessione web ufficiale e compiere i passaggi della chat resta il passo mancante del trasporto.
+
+In questo modo l'autonomia resta reale ma circoscritta: l'agente può cercare, leggere, partecipare a un forum e conversare con i suoi amici senza vagare per il web.
+
+### 14.6. Browser controllato: implementazione
+
+Il modulo `agent_memory/browser.py` implementa il livello descritto sopra:
+
+- legge la policy da `config/integrations.json`; se il file manca o `browser.enabled` è `false`, il browser resta disabilitato;
+
+- accetta solo origini HTTPS presenti nella whitelist, con dominio esatto o sottodomini dichiarati (`https://*.example.org`);
+
+- blocca `localhost`, indirizzi privati, link-local, `file://`, credenziali nell'URL e porte diverse dalla 443;
+
+- risolve il dominio e rifiuta anche un host pubblico che punta a un indirizzo privato;
+
+- intercetta ogni richiesta della pagina: le risorse di domini non elencati vengono bloccate, non solo la navigazione principale;
+
+- chiude i WebSocket verso server non elencati e disattiva i service worker, che altrimenti potrebbero aggirare l'intercettazione; si riattivano solo con `browser.service_workers`, spento per default (vedi sotto);
+
+- controlla l'URL finale dopo redirect e click, e chiude le finestre aperte da script;
+
+- carica Playwright solo alla prima apertura, quindi il server MCP parte anche senza il pacchetto opzionale;
+
+- quando una pagina si ricarica mentre la si sta leggendo, aspetta la fine della navigazione per un massimo di 3 secondi, ripete una volta l'operazione e poi risponde con un errore esplicito («la pagina si sta ricaricando») invece di restituire un contenuto vuoto o vecchio. Le letture usano `evaluate` con un limite breve, così un ricaricamento continuo non blocca il server per 30 secondi;
+
+- click, compilazione, tasti e screenshot usano lo stesso limite breve di 3 secondi per l'azione: se la pagina non è pronta rispondono con un errore esplicito («la pagina non è pronta, riprova tra poco») invece di attendere il timeout pieno della policy.
+
+Esempio di configurazione:
+
+```json
+{
+  "schema_version": 1,
+  "browser": {
+    "enabled": true,
+    "interaction_enabled": false,
+    "service_workers": false,
+    "user_agent": null,
+    "allowed_origins": [
+      "https://it.wikipedia.org",
+      "https://forum.example.org"
+    ],
+    "navigation_timeout_seconds": 30
+  }
+}
+```
+
+`interaction_enabled` abilita click, compilazione e tasti; resta `false` per impostazione predefinita. La whitelist dei contatti WhatsApp è prevista dal modello di sicurezza, ma non viene dedotta automaticamente dal contenuto della pagina: l'interazione con WhatsApp Web va abilitata solo dopo aver configurato la sessione e i contatti.
+
+#### Service worker: opt-in esplicito
+
+Alcune applicazioni web non funzionano senza service worker: li usano per le notifiche, per lavorare offline o per mantenere una connessione in background. Sono però anche l'unico punto in cui la whitelist non arriva: le richieste che partono da un service worker non passano da `context.route`, quindi il filtro delle origini copre la pagina e le sue richieste normali, ma non quel traffico.
+
+Per questo restano spenti. Abilitarli è una decisione dell'amministratore, esplicita e per profilo:
+
+```json
+{
+  "browser": {
+    "enabled": true,
+    "allowed_origins": [
+      "https://web.whatsapp.com",
+      "https://static.whatsapp.net"
+    ],
+    "service_workers": true
+  }
+}
+```
+
+Con `service_workers` a `true` il browser passa `allow` a Playwright, sia nella sessione headless sia in `mnemosine-browser-login`; con la chiave assente o a `false` passa `block`. `browser_status` riporta la modalità attiva e, quando è `allow`, anche un avviso con il rischio. Le altre regole non cambiano: solo origini in whitelist, solo HTTPS, nessun accesso a indirizzi privati o locali, URL finale ricontrollato dopo ogni redirect.
+
+Cosa si accetta: un sito in whitelist può, tramite il suo service worker, contattare server che la whitelist non elenca, e il browser non lo vede. Ha senso solo per un sito preciso, già autorizzato, di cui ci si fida; non va acceso "in generale" per far funzionare qualche pagina in più.
+
+Il flag toglie un ostacolo, non garantisce il sito. Nei test su WhatsApp Web non ha cambiato nulla: la pagina di accesso compare sia con `allow` sia con `block`. Il blocco vero, lì, è lo user agent: WhatsApp rifiuta `HeadlessChrome` e mostra «WhatsApp works with Google Chrome 100+». La finestra visibile di `mnemosine-browser-login` ha lo user agent normale di Chrome e carica la pagina; la sessione headless no, perché oggi non c'è un modo per dichiararne uno diverso. In un ambiente minimale senza font di sistema, come questa VM, manca anche il presupposto del mount: senza fontconfig l'applicazione non viene montata affatto.
+
+#### User agent del profilo
+
+L'identità del browser è una sola per profilo, non una per sito: `browser.user_agent` vale sia per la sessione headless sia per la finestra visibile di `mnemosine-browser-login`. Con `null`, o con la chiave assente, si usa quello di Playwright.
+
+```json
+{
+  "browser": {
+    "enabled": true,
+    "allowed_origins": ["https://web.whatsapp.com"],
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36"
+  }
+}
+```
+
+Serve perché i siti cambiano comportamento in base al browser dichiarato: Chromium headless si presenta come `HeadlessChrome/...`, e alcuni servizi lo rifiutano con un messaggio sulla versione di Chrome. Con un valore realistico la pagina di accesso compare. Il valore va tenuto stabile: se cambia tra login e sessione, i cookie salvati possono non essere più validi. `browser_status` e `mnemosine-browser-login --check` riportano quello attivo.
+
+Non è un modo per superare i controlli anti-automazione veri — challenge, captcha, fingerprinting del dispositivo: quelli restano un limite e vanno trattati come tali, non come configurazione.
+
+La sessione non è una configurazione per sito: cookie e storage locale vengono salvati in `data/browser/session.json` con permessi `600` e ricaricati a ogni apertura del browser headless. Il primo accesso si fa una volta, con una finestra visibile:
+
+```bash
+# Verifica whitelist e stato della sessione, senza aprire il browser
+mnemosine-browser-login --check
+
+# Apre il sito con lo schermo e salva la sessione dopo il login
+mnemosine-browser-login --origin https://web.whatsapp.com
+```
+
+Il comando richiede uno schermo e un terminale interattivo, perché l'accesso (password, QR, secondo fattore) lo completa una persona. Il file che produce contiene credenziali: è escluso dal repository, va cancellato quando revochi l'accesso e non va copiato in un backup condiviso. Il browser headless blocca i service worker per impostazione predefinita: le pagine che ne hanno bisogno per funzionare possono non caricarsi. Il limite è voluto, perché le richieste partite da un service worker non passano dal filtro delle origini; si revoca solo con `browser.service_workers` a `true` (sezione precedente).
+
+Comandi:
+
+```bash
+# Verifica policy, backend e pagina corrente
+python -m agent_memory.browser --check
+
+# Apre un URL consentito e stampa il testo
+python -m agent_memory.browser --open https://it.wikipedia.org --text
+
+# Salva anche uno screenshot
+python -m agent_memory.browser --open https://it.wikipedia.org --screenshot artifacts/browser.png
+
+# Stampa l'indice numerato dei link consentiti
+python -m agent_memory.browser --open https://it.wikipedia.org --links
+
+# Stampa l'indice numerato degli elementi interattivi
+python -m agent_memory.browser --open https://it.wikipedia.org --elements
+```
+
+Il server MCP espone `browser_status`, `browser_open`, `browser_read`, `browser_links`, `browser_open_link`, `browser_back`, `browser_elements`, `browser_click`, `browser_fill`, `browser_press`, `browser_wait` e `browser_close`. `browser_click`, `browser_fill` e `browser_press` richiedono `interaction_enabled`. `browser_elements` restituisce l'indice numerato di campi, aree di scrittura e bottoni; `browser_click` e `browser_fill` accettano quell'indice al posto del selettore, e `browser_press` preme Enter, Tab o una freccia sulla pagina o su un elemento. `browser_wait` aspetta che un elemento compaia o che un testo sia nella pagina, così la conferma di un invio è una lettura e non una supposizione.
+
+Le azioni dirette richiedono anche `browser.interaction_origins`: origini HTTPS esatte, senza wildcard. Il vecchio flag globale non concede questo consenso. In dashboard aggiungere origini richiede di digitare `AUTORIZZO`. La whitelist di navigazione resta obbligatoria. **Contatti, orari e limiti dell’outbox non proteggono le azioni dirette del browser**: autorizzare un’origine significa accettare che click, testo e tasti possano produrre effetti sul sito. Non è un controllo automatico del destinatario. Riavviare il server MCP dopo ogni modifica della policy.
+
+Lo storico relazionale non è più troncato a 100 voci: è persistente in SQLite, con indice per contatto e ordinamento stabile. `/api/relations?offset=0&limit=50` espone pagine da 1–100 voci per contatto e la dashboard offre “Più recenti” e “Più vecchie”. Le migrazioni conservano le voci esistenti; quelle già eliminate dal vecchio limite non sono recuperabili senza backup. La paginazione usa query SQL LIMIT/OFFSET; lo storico non viene espanso nel grafo JSON. Il parametro HTTP `user_id` seleziona il contatto di cui caricare la pagina.
+
+### Interazioni transazionali e incarichi MCP (v0.7)
+
+`record_interaction` accetta `interaction_id` (CLI: `--interaction-id`). Riutilizzare lo stesso ID e gli stessi dati restituisce il risultato originale, senza aumentare carico o contatori; dati diversi con lo stesso ID sono rifiutati. Senza ID ogni chiamata resta una nuova interazione. Conservare l’ID quando si ritenta una richiesta interrotta.
+
+Al primo accesso il profilo importa `current_state` e `social_graph` nel database esistente `data/timeline_episodic.db`, insieme alle interazioni ancora disponibili. L’importazione è transazionale e non si ripete. Storico, contatori, carico e ricevuta di `record_interaction` sono confermati insieme. Non si possono recuperare voci eliminate dalle vecchie versioni.
+
+**Cambio operativo:** `config/current_state.json` e `config/social_graph.json` diventano esportazioni di compatibilità, non la fonte autorevole. Modificarli manualmente dopo l’importazione non cambia il profilo. Usare dashboard e API ConfigStore. Gli altri documenti restano JSON. Gli errori di esportazione vengono segnalati con un warning, ma non trasformano un commit SQLite riuscito in una richiesta fallita. Per rigenerare le esportazioni: `ConfigStore(root).operational.export(ConfigStore(root).load_all())`. Il profilo va salvato integralmente, database incluso.
+
+I tool MCP sono ora **44**. `interaction_history(user_id, offset=0, limit=50)` legge una pagina SQL dello storico. Il grafo restituisce i metadati, non tutte le interazioni.
+
+Il client che ospita l’agente può pianificare questo flusso, senza integrazioni per sito:
+
+1. `autonomous_claim(url)` acquisisce un impulso pendente valido verso un URL in whitelist; non apre il browser. Senza impulso restituisce `available: false` e non applica un nuovo battito. L’Heartbeat si esegue separatamente, per esempio con `mnemosine-heartbeat --loop`.
+2. `autonomous_act(run_id, action_id, action, arguments)` esegue `open`, `click`, `fill`, `press` o `wait` usando il controller esistente. Usare ID stabili per i retry. Un ID completato restituisce la ricevuta senza ripetere l’azione.
+3. `autonomous_observe(run_id)` legge testo ed elementi e permette all’agente di scegliere il passo successivo. `autonomous_status(run_id)` legge lo stato durevole.
+4. `autonomous_verify(run_id, text)` controlla il testo nella stessa pagina dell’ultima osservazione e chiude soltanto l’impulso originale. Restituisce `ui_verified`, mai una prova di consegna remota: `remote_delivery_verified` resta `false`.
+5. Se un’azione è interrotta o l’effetto è incerto, non viene ripetuta: osservare e richiedere intervento umano; `autonomous_abort(run_id)` interrompe l’incarico senza confermare invii né cancellare l’impulso.
+
+Una sola esecuzione attiva per profilo, massimo 20 passi e durata di 30 minuti. Prima delle azioni sono ricontrollati manutenzione, impulso originale e policy aggiornata, incluso il consenso per origine. Le credenziali restano nella sessione browser del profilo. Gli errori dopo un possibile effetto esterno non attivano retry automatici. La verifica UI non scrive una finta consegna nell’outbox.
+
+**Revisione amministrativa degli esiti incerti (v0.8).** La panoramica mostra gli incarichi recenti e dà priorità ai casi da rivedere, indicando origine, ultimo tipo di azione e passi, senza contenuti delle pagine né parametri delle azioni. Una ricevuta mancante può anche indicare un'azione ancora in corso: controllare prima il sito esterno. Solo dalla dashboard l'amministratore può scrivere una nota e confermare con `HO VERIFICATO`; la revisione è registrata nel database e non è un tool MCP. Non scrivere password o dati sensibili nella nota.
+
+La revisione chiude l'incarico come interrotto, non ripete azioni, non conferma consegne e non modifica l'outbox. Rimuove l'impulso originale solo se è ancora quello corrente; un impulso più recente resta intatto. Le ricevute incerte sono conservate e il vecchio incarico non può ripartire. Dopo l'interruzione di un'azione incerta, i nuovi incarichi sono bloccati finché non viene registrata la revisione. La migrazione SQLite della timeline aggiunge la tabella delle revisioni alla versione 3; fare un backup del profilo prima dell'aggiornamento.
+
+La stessa revisione amministrativa è disponibile anche per gli incarichi interrotti senza esiti incerti e per quelli scaduti: l'amministratore verifica eventuali effetti sul sito e registra una nota. La chiusura non ripete azioni e non riutilizza l'incarico; un impulso diverso da quello originale non viene cancellato.
+
+**Tratti dell'ombra nella dashboard.** In Tratti l'amministratore può creare un tratto o modificare nome, descrizione, origine, intensità e consapevolezza. L'ID non cambia e le modifiche conservano trigger, difese, regole, limiti e ricordi collegati. I servizi dell'ombra già avviati devono essere riavviati per caricare le modifiche. Non è possibile modificare questi tratti tramite MCP; la lettura conscia rimane disabilitata. La dashboard non abilita né implementa un motore automatico dell'ombra.
+
+**Mnemosine non risveglia un client inattivo:** il client deve avviare il turno o pianificare le chiamate. Non c’è un LLM incorporato né una dipendenza da un particolare host MCP. Un sito può includere istruzioni ostili: i suoi contenuti sono dati, non nuove autorizzazioni; l’agente deve mantenere obiettivo e consensi dell’amministratore.
+
+### 14.7. File locali dell'agente
+
+Il server non è un agente: fornisce capacità a un agente che vive altrove. Oltre alla memoria e al browser espone quindi tre tool sui file, `list_files`, `read_file` e `write_file`, confinati alla cartella `files/` del profilo (`profiles/<nome>/files`).
+
+- Nessun percorso assoluto, nessun `..`, nessun `~`, nessuna lettera di unità e nessun carattere di controllo nel nome.
+
+- Nessun symlink, né sul file né sulle cartelle intermedie: un collegamento che punta fuori dalla sandbox viene rifiutato prima di qualsiasi lettura o scrittura.
+
+- Lettura solo di testo UTF-8 fino a 1 MiB, scrittura fino a 256 KiB, elenchi fino a 200 voci: i file binari e i file troppo grandi vengono rifiutati con un messaggio esplicito, non troncati in silenzio.
+
+- `config/` e `data/` restano fuori portata per costruzione, perché la sandbox è una radice separata e non un filtro applicato al progetto.
+
+- `write_file` non sovrascrive un file esistente senza `overwrite=True` e scrive in modo atomico (file temporaneo e `os.replace`).
+
+Restano volutamente fuori: l'esecuzione di comandi shell, che annullerebbe whitelist e sandbox, e la ricerca web, che richiede un servizio esterno con chiave API. I download passano dal browser, quindi solo da origini in whitelist.
+
+### 14.8. Navigazione pensata per modelli piccoli
+
+Il server MCP può essere collegato a qualunque client e a qualunque modello, compresi i modelli locali da pochi miliardi di parametri. La whitelist non cambia mai — è codice, non buona volontà del modello — ma l'ergonomia dei tool deve reggere anche un contesto piccolo e una pianificazione debole:
+
+- `browser_links` restituisce i link della pagina come **indice numerato** (`1`, `2`, `3`...) e contiene soltanto i link che la whitelist autorizza; `blocked_count` dice quanti sono stati esclusi. Il modello non deve indovinare selettori CSS né scoprire a proprie spese un dominio vietato.
+
+- `browser_open_link` apre un link per numero. È un passo unico e deterministico, al posto di `click` con un selettore inventato.
+
+- `browser_elements` fa per campi e bottoni quello che `browser_links` fa per i link: indice numerato, etichetta e ruolo, nessun selettore da indovinare. Il numero resta valido finché la pagina non cambia, poi l'errore chiede di rilanciare l'elenco.
+
+- `browser_press` e `browser_wait` chiudono il ciclo di un invio: scrivi con `browser_fill`, premi `Enter`, attendi che il testo compaia. La conferma è una lettura della pagina, non una ricevuta: i limiti dell’executor proteggono l’outbox, non queste azioni dirette del browser.
+
+- `browser_back` torna alla pagina precedente usando una cronologia tenuta dal server, non dal contesto del modello, che due turni dopo non ricorda più dove era.
+
+- Una nuova navigazione invalida l'elenco dei link: un numero non può riferirsi per errore a un'altra pagina.
+
+- `browser_status` riporta `current_url`, `history_count`, `can_go_back` e `links_count`: il modello sa dove si trova senza doverlo dedurre.
+
+- Gli errori insegnano: un URL bloccato elenca le origini consentite, un click fallito rimanda a `browser_links`, e un indice fuori intervallo dice quanti link aveva l'ultimo elenco.
+
+Nessun ramo del codice dipende dal modello usato: sono i client MCP a variare (alcuni troncano i risultati, altri non mostrano il contenuto strutturato), quindi la regola è tenere stato e sicurezza sul server e output prevedibili.
+
+<p align="center">
+  <img src="assets/mnemosine-divider.svg" alt="" width="100%">
+</p>
+
+<a id="requisiti" name="requisiti"></a>
+
+## 15. Requisiti hardware e software
+
+L'hardware dovrà essere scelto in base al modello AI, alla quantità di memoria persistente, al numero di utenti e alla frequenza delle operazioni in background.
+
+### 15.1. Architettura cloud tramite API
+
+Se l'LLM viene eseguito tramite API esterne, il computer locale gestirà principalmente:
+
+- Server MCP.
+
+- Database SQLite.
+
+- Vector Database.
+
+- Scheduler e Heartbeat Loop.
+
+- Elaborazione e indicizzazione dei ricordi.
+
+- Integrazioni autonome con WhatsApp Web e browser controllato.
+
+- Pannello amministrativo.
+
+Questa configurazione riduce la necessità di una GPU potente, perché l'inferenza del modello avviene sui server del provider.
+
+La RAM necessaria dipenderà dal volume dei dati, dalla dimensione degli indici, dal numero di processi e dal numero di richieste simultanee.
+
+### 15.2. Architettura con modello locale
+
+Se l'LLM viene eseguito localmente tramite Ollama, saranno necessari maggiori requisiti hardware.
+
+Tra i modelli inizialmente valutabili:
+
+- Llama 3 da 8B.
+
+- Mistral da 7B.
+
+La quantizzazione a 4 bit può ridurre l'occupazione di memoria, ma il fabbisogno effettivo dipende dal modello, dal contesto utilizzato e dalla configurazione di esecuzione.
+
+Anche il modello per gli embedding richiederà risorse aggiuntive.
+
+### 15.3. Componenti software
+
+L'architettura dovrà comprendere:
+
+- Python per la logica del server.
+
+- Un'implementazione MCP compatibile con gli strumenti utilizzati.
+
+- SQLite per i dati cronologici.
+
+- ChromaDB o FAISS per la ricerca vettoriale.
+
+- Un modello di embedding per la trasformazione dei testi in vettori.
+
+- Un LLM locale oppure un servizio API.
+
+- Uno scheduler per il ciclo autonomo.
+
+- Un sistema di logging e gestione degli errori.
+
+- Un meccanismo di backup e ripristino.
+
+- Un'integrazione autorizzata con WhatsApp Web.
+
+- Un browser automatizzato (Playwright o Chromium) per ricerche, forum e servizi web, vincolato alla whitelist.
+
+- Un pannello di controllo per identità, memoria e configurazione.
+
+### 15.4. Requisiti di affidabilità
+
+Il sistema dovrà prevedere:
+
+- Backup automatici dei database.
+
+- Recupero in caso di interruzione del servizio.
+
+- Gestione degli errori nelle chiamate API.
+
+- Protezione dei dati e controllo degli accessi.
+
+- Tracciabilità delle modifiche alla memoria.
+
+- Aggiornamento coerente degli indici vettoriali.
+
+- Monitoraggio del consumo di RAM, CPU e GPU.
+
+- Gestione delle attività in background senza duplicazioni.
+
+Non è possibile stabilire una configurazione hardware definitiva senza conoscere il numero di utenti simultanei, la dimensione prevista della memoria e il modello AI scelto. I requisiti dovranno essere confermati con test reali.
+
+---
+
+## 16. Architettura complessiva dei moduli
+
+Il sistema sarà composto dai seguenti moduli:
+
+1. Identità: anagrafica e personalità iniziale.
+
+2. Memoria episodica: ricordi personali e cronologia degli eventi.
+
+3. Memoria semantica: conoscenze generali, concetti e fatti appresi.
+
+4. Memoria latente: ombra, conflitti interni e ricordi rimossi.
+
+5. Raccordo RAG: recupero delle informazioni pertinenti.
+
+6. Vector Database: indicizzazione e ricerca semantica.
+
+7. Database SQLite: archiviazione strutturata e cronologica.
+
+8. Generatore del passato: costruzione della biografia iniziale.
+
+9. Storia mondiale: integrazione degli eventi storici reali.
+
+10. Seed esterni: inserimento di eventi e riconsolidamento.
+
+11. Stato corrente: attività e stati interni simulati.
+
+12. Routine autonoma: gestione dei periodi senza interazioni.
+
+13. Meccanismi di difesa: proiezione, rimozione e reazioni latenti.
+
+14. Carico cognitivo: stanchezza simulata e consolidamento.
+
+15. Grafo delle relazioni: fiducia e intimità con gli utenti.
+
+16. Controllo temporale: età, date e filtro di anacronismo.
+
+17. Sicurezza: limiti comportamentali e protezione dei dati.
+
+18. Heartbeat Loop: iniziativa autonoma.
+
+19. Integrazioni autonome: WhatsApp Web per i contatti autorizzati e browser con whitelist per ricerche e forum.
+
+20. Server MCP: coordinamento dei moduli e comunicazione con l'LLM.
+
+21. Gestione operativa: backup, logging, monitoraggio e ripristino.
+
+<p align="center">
+  <img src="assets/mnemosine-divider.svg" alt="" width="100%">
+</p>
+
+<a id="piano" name="piano"></a>
+
+## 17. Piano di sviluppo
+
+Il progetto sarà sviluppato per fasi, verificando ogni componente prima di procedere al successivo.
+
+### Fase 1 — Struttura dei dati
+
+Creare i file:
+
+- "identity.json"
+
+- "shadow_traits.json"
+
+- "world_history.json"
+
+- "social_graph.json"
+
+- "current_state.json"
+
+Definire gli schemi SQLite per i ricordi episodici e il diario dell'ombra.
+
+### Fase 2 — Server MCP
+
+Realizzare lo scheletro Python con i metodi di lettura e scrittura, il caricamento della configurazione e l'accesso ai database.
+
+### Fase 3 — Memoria semantica e RAG
+
+Implementare:
+
+- Archivio delle conoscenze generali.
+
+- Generazione degli embedding.
+
+- Vector Database.
+
+- Recupero semantico dei ricordi.
+
+- Ricerca ibrida con filtri cronologici e relazionali.
+
+- Aggiornamento e ricostruzione degli indici.
+
+### Fase 4 — Generazione della biografia
+
+Implementare la generazione procedurale del passato, l'integrazione della storia mondiale e il filtro di anacronismo.
+
+### Fase 5 — Evoluzione della memoria
+
+Aggiungere i seed esterni, le modifiche caratteriali e il riconsolidamento a cascata, mantenendo la tracciabilità delle modifiche.
+
+### Fase 6 — Routine e ciclo autonomo
+
+Realizzare lo stato corrente, il generatore di routine, il carico cognitivo, il sonno simulato e l'Heartbeat Loop.
+
+La fase è implementata in tre moduli: `agent_memory/routine.py` genera il piano giornaliero, sceglie l'attività in corso e gestisce la finestra di sonno; `agent_memory/heartbeat.py` gestisce il carico cognitivo dinamico, i trigger interni e la coda degli impulsi spontanei (sezione 17.5). `agent_memory/executor.py` consuma gli impulsi e consegna i messaggi nella coda del profilo, con whitelist e flag (sezione 17.5). Il consolidamento notturno estrattivo è implementato senza modello linguistico (sezione 17.5). Il trasporto automatico dall’outbox a WhatsApp Web non è implementato: il browser generico è invece utilizzabile dall’agente MCP collegato, con consenso per origine e senza adattatori specifici.
+
+### Fase 7 — Relazioni e autonomia web
+
+Integrare il grafo delle relazioni, il recupero dei ricordi relativi ai singoli utenti e l'iniziativa autonoma tramite WhatsApp Web e browser, con contatti e siti in whitelist.
+
+La parte web è implementata: `agent_memory/browser.py` applica la whitelist, la cronologia e l'indice numerato dei link, mentre `agent_memory/files.py` dà all'agente una cartella di lavoro isolata. Il ciclo di iniziativa esiste in `heartbeat.py` e propone il canale più adatto; `agent_memory/executor.py` consuma l'impulso, verifica whitelist e flag e consegna il messaggio nella coda dell'outbox. Il client MCP collegato può acquisire un impulso e usare il browser tramite `autonomous_claim`, `autonomous_act`, `autonomous_observe` e `autonomous_verify` (sezione sulle interazioni transazionali). Il server non risveglia autonomamente un client inattivo e non trasferisce automaticamente i messaggi dall’outbox a WhatsApp Web.
+
+### Fase 8 — Sicurezza e affidabilità
+
+Implementare backup, logging, protezione dei dati, controlli di sicurezza e test di coerenza temporale e semantica.
+
+### 17.1. Biografia procedurale: implementazione e comandi
+
+La Fase 4 è implementata in `agent_memory/biography.py`. Il generatore è deterministico e non utilizza un modello linguistico: legge identità, tratti, famiglia, percorso scolastico, `world_history.json` e la timeline esistente, quindi costruisce i ricordi mancanti per macro-ere. Per creare prima un profilo nuovo da zero, usa `profile init` descritto nella sezione 2.4; `scripts/init_db.py --reset` ricrea invece il dataset demo.
+
+La densità prevista è:
+
+- prima infanzia: 3 ricordi complessivi tra i 2 e i 6 anni;
+
+- fanciullezza: 1 ricordo per anno tra i 7 e i 13 anni;
+
+- adolescenza: 2 ricordi per anno tra i 14 e i 19 anni;
+
+- età adulta: 3 ricordi per anno dai 20 anni in poi.
+
+Il filtro di anacronismo calcola l'età alla data dell'evento. Gli eventi precedenti alla nascita vengono esclusi; quelli sotto la soglia di comprensione restano soltanto contesto familiare e non vengono scritti nella timeline. Per politica e geopolitica la soglia minima è di 7 anni. Gli eventi mondiali sopra soglia possono diventare ricordi diretti, collegati tramite `world_event_id`; quelli già coperti da un ricordo esistente non vengono duplicati.
+
+Ogni ricordo generato ha ID e `source_ref` stabili, è marcato come simulato e non sovrascrive i ricordi esistenti. L'applicazione è idempotente: una seconda esecuzione non crea duplicati. Se un evento del piano è già presente, viene saltato e riportato con il motivo.
+
+Comandi:
+
+```bash
+# Anteprima del piano, senza scrivere
+python -m agent_memory.biography
+
+# Piano completo in JSON
+python -m agent_memory.biography --json
+
+# Applica i nuovi ricordi alla timeline
+python -m agent_memory.biography --apply
+
+# Usa una data di riferimento diversa da oggi
+python -m agent_memory.biography --as-of 2026-10-24
+
+# Esegue il generatore su un progetto in un'altra directory
+python -m agent_memory.biography --root /percorso/del/progetto
+```
+
+Dopo l'applicazione, sincronizzare l'indice vettoriale:
+
+```bash
+python -m agent_memory.index --sync
+```
+
+Per ricostruire completamente l'indice:
+
+```bash
+python -m agent_memory.index --rebuild
+```
+
+`biography --apply` e le operazioni di scrittura di `index` (`--sync` e `--rebuild`) condividono il lock di `profile init`: se un'altra creazione o scrittura è in corso, terminano con un errore. `--wait` attende senza limite, mentre `--wait-timeout SECONDI` limita l'attesa. Le modalità di sola lettura (`biography` senza `--apply`, `index --status` e `index --check`) non acquisiscono il lock.
+
+### 17.2. Seed esterni, tratti e riconsolidamento a cascata
+
+La Fase 5 è implementata in `agent_memory/evolution.py`. Un seed è un evento amministrativo collocato nel passato: viene registrato come ricordo `admin_seed` e avvia il riconsolidamento di tutti i ricordi simulati successivi. Le interazioni reali, i ricordi latenti e i ricordi repressi non vengono riscritti.
+
+Esempio di seed:
+
+```json
+{
+  "seed_id": "critica_laboratorio_2024",
+  "event_time": "2024-11-05T18:30:00+01:00",
+  "title": "Una critica ricevuta in laboratorio",
+  "description": "Un docente criticò pubblicamente il mio approccio durante un progetto universitario.",
+  "importance": 8,
+  "tags": ["critica", "università", "rifiuto"],
+  "emotional_state": {
+    "label": "vergogna",
+    "valence": -0.7,
+    "arousal": 0.7,
+    "intensity": 8
+  },
+  "trait_impacts": {},
+  "cascade": {"max_memories": 200}
+}
+```
+
+Il seed può specificare anche `place`, `people`, `consequences`, `is_simulated`, `memory_id`, `cascade_id` e `trait_impacts`. I tratti psicologici vengono aggiornati combinando le regole in `identity.personality.evolution.rules` con gli eventuali `trait_impacts` espliciti; il totale dei delta è limitato da `max_total_delta_per_seed`. Ogni modifica viene registrata in `config/personality_history.json`.
+
+Il riconsolidamento usa un rewriter deterministico predefinito. Il protocollo `MemoryRewriter` permette di sostituirlo con un motore LLM senza cambiare il flusso di seed e tracciabilità. Ogni ricordo aggiornato incrementa `version`, crea una riga in `memory_revisions` con il proprio `cascade_id` e conserva gli snapshot precedenti. Le conoscenze collegate di tipo `opinion`, `hypothesis` e `uncertain` ricevono una nota in `metadata.cascade_reflections`; i `verified_fact` e i contenuti `user_provided` restano intatti.
+
+Comandi:
+
+```bash
+# Anteprima del piano, senza scrivere
+python -m agent_memory.evolution --seed seed.json
+
+# Piano completo in JSON
+python -m agent_memory.evolution --seed seed.json --json
+
+# Applica seed, tratti e riconsolidamento
+python -m agent_memory.evolution --seed seed.json --apply
+
+# Applica senza aggiornare l'indice vettoriale
+python -m agent_memory.evolution --seed seed.json --apply --no-reindex
+
+# Storico delle modifiche ai tratti
+python -m agent_memory.evolution --history
+```
+
+Se l'indice vettoriale non era pronto durante l'applicazione, eseguire `python -m agent_memory.index --sync` per allinearlo ai nuovi testi.
+
+### 17.3. Dashboard amministrativa locale
+
+La dashboard amministrativa è implementata in `agent_memory/dashboard.py`; l'interfaccia è in `agent_memory/dashboard_assets/`. Usa gli stessi servizi e database del progetto, senza dipendenze web aggiuntive. Le viste di consultazione sono in sola lettura; la sezione **Impostazioni** scrive la whitelist e le integrazioni, i flag non bloccati e il ritmo del battito, e può archiviare il profilo per crearne uno nuovo. Restano scritture applicative anche la creazione iniziale del profilo e, su richiesta dal wizard o da `/setup/finalize`, la biografia e l'indice vettoriale.
+
+Avvio:
+
+```bash
+# Loopback, porta predefinita 8765
+python -m agent_memory.dashboard
+
+# Porta diversa e apertura automatica del browser
+python -m agent_memory.dashboard --port 8766 --open
+
+# Progetto in un'altra directory
+python -m agent_memory.dashboard --root /percorso/del/progetto
+
+# Prima configurazione da browser in una directory nuova
+python -m agent_memory.dashboard --root ./profiles/nuovo --auth
+
+# Autenticazione anche in locale
+python -m agent_memory.dashboard --auth
+
+# HTTPS locale con certificato dedicato
+python -m agent_memory.dashboard --https
+
+# Accesso da un altro dispositivo in HTTPS, password da file con permessi 600
+python -m agent_memory.dashboard --host 0.0.0.0 --https --password-file ~/.mnemosine-dashboard.pass
+
+# Aggiunge l'IP LAN al certificato (ripetibile per più nomi/IP)
+python -m agent_memory.dashboard --https --tls-san 192.168.1.42
+```
+
+Prima configurazione da browser:
+
+- Avviando la dashboard su una directory senza profilo, `/` reindirizza a `/setup`. Il wizard crea gli stessi cinque file JSON e quattro database di `profile init`, con la stessa validazione atomica e lo stesso lock.
+
+- Il percorso è diviso in sei passaggi: **Identità** (anagrafica, nascita, residenza, lingue), **Carattere** (quattro assi 1–10, interessi, valori, abitudini), **Relazioni** (genitori o tutori, fratelli e sorelle, persone importanti con fiducia e intimità), **Storia** (sintesi, situazione attuale, formazione e lavoro), **Riepilogo** e **Completamento**.
+
+- Il profilo creato contiene i dati raccolti in `identity.json` e popola `social_graph.json` con le persone importanti. Non inserisce il dataset demo; i ricordi possono arrivare dal passaggio finale del wizard.
+
+- L’ultimo passaggio può generare la biografia procedurale e costruire l’indice vettoriale. Le operazioni partono in background e la pagina di completamento segue l’avanzamento con polling su `/setup/finalize/status`; i pulsanti restano disabilitati finché il job è in corso. Se un’operazione fallisce, il profilo resta valido e si può riprovare da `/setup/finalize`; biografia e indice restano disponibili anche dai comandi CLI. Un solo job di completamento può essere attivo per dashboard: una nuova richiesta mentre il job è in corso viene ignorata. Se il server viene riavviato, lo stato del job in memoria si perde, ma i dati già scritti restano.
+
+- Le righe di familiari, lingue, persone, formazione e lavoro sono dinamiche; il server accetta al massimo 20 righe per sezione e valida date, anni, codici lingua e intervalli di fiducia.
+- Genere, pronomi, fuso orario IANA, paese di nascita e di residenza, cittadinanza, regione, provincia, lingua e livello sono menu a scelta: non si possono digitare valori ambigui. Il codice ISO del paese viene ricavato dal paese selezionato, quindi non può divergere dal nome. Le province italiane restano salvate come sigla (per esempio `MI`) e la regione viene ricavata o verificata dal server. Per una nascita o una residenza estera compaiono invece “Regione o Stato” e “Provincia o contea”, con i suggerimenti delle suddivisioni del paese selezionato (dati GeoNames, CC BY 4.0); i valori restano modificabili come testo e il server rifiuta sigle o regioni italiane abbinate a un paese diverso dall'Italia.
+
+- Se la directory contiene già un profilo pronto, `/setup` reindirizza alla dashboard. Un profilo incompleto non viene sovrascritto: usa `profile init --force` da terminale.
+
+- Ogni POST di configurazione richiede un token CSRF monouso, valido 30 minuti, e il controllo dell'Origin. Quando la dashboard è esposta oltre loopback, `/setup` richiede l'autenticazione come le altre pagine.
+
+Autenticazione:
+
+- Su `127.0.0.1` l'accesso è disattivato per impostazione predefinita; `--auth` lo rende obbligatorio anche in locale.
+
+- Su un host non loopback l'accesso è sempre obbligatorio. Se non viene configurata una password, ne viene generata una temporanea e stampata una sola volta all'avvio.
+
+- La password può essere fornita con la variabile `AGENT_MEMORY_DASHBOARD_PASSWORD` oppure con `--password-file`. Il file deve essere leggibile solo dal proprietario (`chmod 600`).
+
+- La pagina di accesso è `/login`; la sessione usa un cookie `HttpOnly` e `SameSite=Strict`, dura 12 ore e viene invalidata dal riavvio del server o dal logout.
+
+- Dopo 8 tentativi falliti in 5 minuti l'indirizzo client viene bloccato temporaneamente.
+
+HTTPS:
+
+- `--https` abilita TLS con un certificato self-signed dedicato. È richiesto OpenSSL.
+
+- Certificato e chiave vengono creati al primo avvio in `data/dashboard_tls/` (`cert.pem` e `key.pem`), con la chiave leggibile solo dal proprietario; la directory è ignorata da Git.
+
+- Il certificato viene riutilizzato negli avvii successivi. Per rigenerarlo, rimuovi `cert.pem` e `key.pem` (o l'intera directory).
+
+- Il certificato include `localhost`, `127.0.0.1`, `::1` e il nome host locale. Per l'accesso da un altro dispositivo aggiungi il suo IP o hostname con `--tls-san`; se il certificato esiste già, rimuovilo prima di rigenerarlo con i nuovi nomi.
+
+- Essendo self-signed, il browser mostra un avviso finché non lo consideri attendibile. Non fornisce una identità verificata da una CA pubblica.
+
+- In HTTPS il cookie di sessione diventa `Secure`. Senza TLS il traffico è in chiaro: usare la dashboard solo su una rete fidata.
+
+- Se la dashboard è dietro un reverse proxy che riscrive l'header `Host`, passa `--trusted-origin https://dashboard.example` (origine esatta, ripetibile) per accettare i POST di quel proxy. Non usare wildcard: l'origine dichiarata deve essere quella reale del browser.
+
+- `--allow-null-origin` accetta `Origin: null`, inviato dagli iframe sandbox. Il token CSRF resta obbligatorio; usalo solo per una preview locale fidata.
+
+Esportazione, trust store e rimozione:
+
+```bash
+# Esporta il certificato e stampa il fingerprint SHA-256
+python -m agent_memory.dashboard_cert export --output ~/mnemosine-dashboard.crt
+
+# Mostra cosa verrebbe modificato, senza toccare il sistema
+python -m agent_memory.dashboard_cert install --dry-run
+
+# Installa nel trust store di sistema (richiede privilegi amministrativi)
+sudo python -m agent_memory.dashboard_cert install --yes
+
+# Mostra cosa verrebbe rimosso, senza toccare il sistema
+python -m agent_memory.dashboard_cert uninstall --dry-run
+
+# Rimuove dal trust store di sistema (richiede privilegi amministrativi)
+sudo python -m agent_memory.dashboard_cert uninstall --yes
+```
+
+`install` e `uninstall` usano `update-ca-certificates`, `update-ca-trust` o `trust` su Linux, `security` su macOS e `certutil` su Windows. Il certificato viene installato o rimosso solo con `--yes`; `--dry-run` mostra il piano senza modificare il sistema. Per usare un file già esportato passa `--cert`. Se la dashboard usa una directory TLS personalizzata, passa `--tls-dir` prima del sottocomando. `uninstall` non genera un certificato se non esiste: in quel caso termina con errore e indica di usare `--cert`. Rimuove solo la copia nel trust store; `cert.pem` e `key.pem` restano in `data/dashboard_tls/`.
+
+Il certificato è self-signed e locale: non va usato come certificato di produzione. Alcuni browser, in particolare Firefox, mantengono un trust store separato; se l'avviso resta, importa `mnemosine-dashboard.crt` nelle impostazioni del browser.
+
+Impostazioni dalla dashboard:
+
+- **Browser controllato**: whitelist delle origini (una per riga), attivazione del browser e dell'interazione, service worker, user agent e timeout. I valori vengono validati con la stessa policy del runtime e scritti in modo atomico in `config/integrations.json`: non serve modificare il JSON a mano. Il server MCP carica la policy all'avvio, quindi la nuova whitelist si applica al suo riavvio; WhatsApp e comportamento vengono riletti a ogni operazione.
+
+- **WhatsApp**: integrazione, contatti autorizzati (id della relazione, nome e telefono), finestra di silenzio e limite giornaliero. Il flag `whatsapp_sending_enabled` si attiva da **Comportamento** solo digitando `ABILITA`: è un interruttore di sicurezza, non un semplice toggle. Il trasporto verso WhatsApp Web non è ancora implementato; l'outbox resta il confine attuale.
+
+- **Comportamento**: generazione visiva, motore dell'ombra, modalità manutenzione e parametri del battito (`interval_minutes`, `cooldown_minutes`, `max_impulses_per_day`). La lettura diretta dell'ombra resta bloccata per progetto.
+
+- **Profilo**: archiviazione esplicita. Configurazione, database e file vengono spostati in `backups/profile-AAAAmmgg-HHMMSS`; `data/dashboard_tls` e `data/models` vengono conservati, quindi certificato TLS e cache del modello non si perdono; un file della password esterno al profilo resta comunque al suo posto. Dopo l'archiviazione la dashboard torna a `/setup` per creare un nuovo profilo. Il dataset demo del repository non è archiviabile: avvia la dashboard su un profilo separato.
+
+- Ogni scrittura passa dalla sessione autenticata e da un token CSRF monouso; i valori vengono riletti con le classi del runtime prima di sostituire il file. Un archivio non cancella i dati: resta nella cartella di backup e può essere ripristinato a mano.
+
+La dashboard espone sette viste:
+
+- **Panoramica**: identità, stato corrente, conteggi, ultimi ricordi, riepilogo cliccabile delle relazioni, stato del ciclo autonomo con l'outbox e contenuto della sandbox `files/`.
+
+- **Relazioni**: elenco dei contatti ordinato per ultima interazione e scheda completa con fiducia, intimità, preferenze, fatti confermati, confini relazionali e storico delle interazioni (con apertura diretta dei ricordi collegati). Si possono aggiungere e modificare i contatti senza alterare storico e contatori. La rimozione richiede di scrivere `RIMUOVI` ed elimina il contatto e il suo storico relazionale, non i ricordi episodici. La whitelist WhatsApp resta separata e non viene modificata automaticamente.
+
+- **Timeline**: ricerca e filtri per fonte e livello di accesso; i ricordi latenti e repressi sono visibili solo attivando esplicitamente l'opzione dedicata. Il dettaglio mostra revisioni, collegamenti episodici e conoscenze collegate.
+
+- **Tratti**: tratti della personalità conscia e configurazione amministrativa dell'ombra, inclusi trigger, difese, ricordi collegati e limiti di sicurezza.
+
+- **Conoscenze**: memoria semantica con tipo, stato, fonte, affidabilità e metadati, inclusi i riferimenti ai riconsolidamenti.
+
+- **Evoluzioni**: storico delle variazioni dei tratti, seed esterni, cascate e revisioni recenti.
+
+- **Impostazioni**: browser e whitelist, WhatsApp, flag e battito, archiviazione del profilo.
+
+Le API di consultazione sono in sola lettura; i POST gestiscono accesso, logout, prima configurazione, completamento del profilo (biografia e indice), la gestione dei contatti in **Relazioni** e le scritture di **Impostazioni** (integrazioni, comportamento e archiviazione del profilo). Ogni POST autenticato richiede un token CSRF monouso. Il server ascolta su `127.0.0.1` per impostazione predefinita: contiene dati amministrativi e tratti dell'ombra, quindi non va pubblicato su Internet. L'opzione `--host` permette di cambiare l'indirizzo; su un host non loopback l'autenticazione è obbligatoria. Usa `--https` per cifrare il traffico quando la dashboard è raggiungibile da altri dispositivi.
+
+### 17.4. Routine giornaliera e stato corrente
+
+La prima tranche della Fase 6 è implementata in `agent_memory/routine.py`. Il motore non usa un LLM e non avvia un demone: legge `identity.json` e `current_state.json`, costruisce un piano deterministico per il giorno richiesto e allinea lo stato all'orario.
+
+Il piano usa interessi, formazione e lavoro in corso. Nei giorni feriali prevede studio e lavoro, nei fine settimana attività libere; colazione, pranzo, cena e riposo sono presenti in entrambi. La rotazione delle attività cambia con la data, ma resta stabile se il piano viene riutilizzato nello stesso giorno.
+
+La finestra di sonno è letta da `current_state.sleep.window` (`00:00`–`07:00` per impostazione predefinita) e supporta anche intervalli che attraversano la mezzanotte. Durante il sonno lo stato passa a `sleeping`, l'attività diventa `Dorme` e `availability.accepting_messages` viene disattivato. La disponibilità tiene conto anche delle soglie di carico cognitivo già presenti, ma il carico non viene ancora incrementato o decrementato dal motore.
+
+Il piano viene riutilizzato se `routine.date` coincide con il giorno richiesto; per personalizzarlo si possono aggiornare `planned_activities` tramite `ConfigStore.update_current_state`, lasciando `routine.date` allineato alla data. Dopo l’importazione SQLite, modificare direttamente `current_state.json` non cambia lo stato autorevole. In caso contrario viene rigenerato.
+
+Comandi:
+
+```bash
+# Anteprima: mostra attività corrente, prossimo cambio e piano
+python -m agent_memory.routine --at 2026-10-25T15:00
+
+# Anteprima in JSON, senza scrivere
+python -m agent_memory.routine --at 2026-10-25T15:00 --json
+
+# Allinea current_state.json all'orario indicato
+python -m agent_memory.routine --at 2026-10-25T15:00 --apply
+
+# Usa l'orologio reale e applica
+python -m agent_memory.routine --apply
+
+# Progetto in un'altra directory
+python -m agent_memory.routine --root ./profiles/marco --apply
+```
+
+Senza `--apply` il comando è di sola lettura. Con `--apply` acquisisce lo stesso lock di `profile init`, `biography` e `index`, scrive in modo atomico e non riscrive lo stato se è già allineato. `--at` senza fuso orario usa quello dell'identità; un orario con fuso diverso viene convertito.
+
+La dashboard legge attività, luogo, routine e carico tramite ConfigStore, dal database operativo dopo l’importazione; `current_state.json` resta un’esportazione di compatibilità.
+
+I collegamenti `memory_id` registrati nelle interazioni devono puntare a un ricordo episodico conscio esistente e richiedono `user_id`; riferimenti inesistenti o non accessibili vengono rifiutati prima di modificare la relazione o il carico.
+
+Con `shadow_engine_enabled` attivo, `record_interaction` confronta letteralmente il riepilogo con gli esempi dei trigger dei tratti autorizzati e può restituire un'indicazione generica di tatto nel campo `response_guidance`. La dashboard permette di aggiungere esempi, uno per riga; i trigger preesistenti sono conservati. Non si tratta di comprensione semantica né di un'imposizione: il client MCP deve usare il suggerimento. L'ombra e i suoi dettagli restano privati; la manutenzione sospende la valutazione.
+
+### 17.5. Heartbeat e carico cognitivo
+
+`agent_memory/heartbeat.py` porta a termine la Fase 6 in modo deterministico, senza chiamare un modello linguistico. Ogni battito:
+
+1. allinea routine, attività e orologio con lo stesso motore della sezione 17.4;
+2. recupera carico cognitivo per il tempo trascorso: 2 punti l'ora da svegli, 15 nel sonno, e una notte intera lo azzera;
+3. valuta i trigger interni in ordine di priorità — ricorrenza di un ricordo conscio con importanza almeno 7 nello stesso giorno dell'anno, silenzio di almeno tre giorni da una persona con fiducia almeno 60, noia dopo 90 minuti nella stessa attività;
+4. se un trigger è attivo e non ci sono freni (sonno, manutenzione, cooldown, limite giornaliero, sovraccarico) mette in coda un **impulso**, non un messaggio.
+
+Durante il sonno, un battito **applicato** crea una sintesi estrattiva di massimo 20 ricordi consci non consolidati, con importanza almeno 5 e affidabilità almeno 0,5. La sintesi mantiene riferimenti e collegamenti alle fonti; i ricordi latenti e repressi sono esclusi. La transazione salva sintesi, revisioni e stato insieme; l'anteprima non modifica nulla. I battiti successivi trattano eventuali altri ricordi; in manutenzione il consolidamento è sospeso. Non sono generate nuove conoscenze semantiche. Dopo il consolidamento occorre eseguire `mnemosine-index --root <profilo> --sync` per includere la sintesi nella ricerca vettoriale; fino ad allora resta accessibile alla ricerca lessicale. Il battito deve essere avviato o pianificato esternamente.
+
+L'impulso contiene trigger, eventuale destinatario, contesto e canale suggerito; `delivery.authorized` dice se l'integrazione è già abilitata. L'invio passa da un esecutore separato (sotto): il battito non apre WhatsApp né il browser, e il testo del messaggio non viene inventato da qui.
+
+`agent_memory/executor.py` consuma quell'impulso e fallisce chiuso. Perché la consegna avvenga, tutte queste condizioni devono valere insieme:
+
+- l'impulso esiste, ha al massimo dodici ore e chiede un messaggio;
+- il canale è `whatsapp`: un impulso browser serve a navigare, non a scrivere a qualcuno;
+- il destinatario sta **sia** nel grafo delle relazioni **sia** nella whitelist `whatsapp.allowed_contacts` di `config/integrations.json`;
+- `whatsapp.enabled` è vero e `current_state.flags.whatsapp_sending_enabled` anche;
+- non sono attivi manutenzione, finestra di sonno, `availability.accepting_messages` falso, fascia di silenzio (`quiet_hours`, predefinita 00:00–07:00) o limite `max_per_day` raggiunto.
+
+Il flag non è modificabile dal server MCP: `update_current_state` rifiuta `whatsapp_sending_enabled: true` per impostazione predefinita. La dashboard autenticata può attivarlo solo con la conferma esplicita `ABILITA`; disattivarlo non richiede conferma. L'autorizzazione resta in mano all'amministratore del profilo.
+
+Il blocco corrispondente in `config/integrations.json`, che in un profilo nuovo nasce spento con whitelist vuota:
+
+```json
+"whatsapp": {
+  "enabled": true,
+  "allowed_contacts": [
+    {"user_id": "user_marco", "display_name": "Marco", "phone": "+39 333 1234567"}
+  ],
+  "quiet_hours": {"start": "00:00", "end": "07:00"},
+  "max_per_day": 3
+}
+```
+
+Il limite giornaliero si conta sulle consegne già registrate oggi, non sugli impulsi: due esecuzioni nello stesso giorno non possono superare il tetto. Quando tutto è a posto il messaggio viene scritto in `data/outbox/messages.jsonl`, una riga JSON per consegna con id, destinatario, telefono, trigger, testo e istante. Solo dopo l'impulso viene chiuso con `last_decision: impulso_consegnato`. L'ordine è voluto: se la scrittura fallisce, l'impulso resta in coda invece di sparire. L'outbox è escluso dal repository perché contiene testi privati.
+
+Il trasporto verso WhatsApp Web resta fuori da questo modulo: qui si produce una consegna durevole e verificabile, non si apre una sessione esterna.
+
+I messaggi aumentano il carico: `record_interaction` via MCP, oppure `mnemosine-heartbeat --interaction`, aggiunge 2 punti per un messaggio leggero, 4 normale e 7 complesso. Oltre la soglia morbida `availability.response_style` diventa `ridotta`, oltre quella dura `breve`.
+
+Quando l'interazione riguarda un contatto del grafo, passa anche `user_id` (e facoltativamente `summary`, `channel`, `sentiment`, `memory_id`): il comando aggiorna `last_interaction_at`, `interaction_count` e `interaction_history` in `social_graph.json`, così il trigger di silenzio riparte da quell'istante. Un id assente dal grafo viene rifiutato senza scrivere né il carico né il contatto. Gli stessi parametri sono disponibili nel tool MCP `record_interaction`.
+
+```bash
+# Anteprima di un battito a un'ora precisa
+python -m agent_memory.heartbeat --at 2026-10-25T15:00
+
+# Battito applicato
+python -m agent_memory.heartbeat --at 2026-10-25T15:00 --apply
+
+# Ciclo continuo, ogni 30 minuti
+python -m agent_memory.heartbeat --loop --interval 30
+
+# Interazione appena scambiata
+python -m agent_memory.heartbeat --interaction 2 --complexity complessa
+
+# Interazione con un contatto del grafo relazionale
+python -m agent_memory.heartbeat --interaction 1 --user-id user_marco --summary "Ciao Marco" --channel whatsapp --sentiment positivo --memory-id mem_0004
+
+# Consegna il messaggio all'impulso in attesa (whitelist e flag permettendo)
+python -m agent_memory.heartbeat --deliver "Ciao Marco, come stai?"
+```
+
+Ritmo e freni vivono in `current_state.heartbeat` come `interval_minutes`, `cooldown_minutes` e `max_impulses_per_day`; i valori predefiniti sono 30 minuti, 180 minuti e 3 impulsi al giorno. Tre strumenti MCP completano il quadro: `record_interaction` aggiorna il carico, `acknowledge_impulse` chiude l'impulso senza inviare nulla, `deliver_impulse` consegna il messaggio all'impulso in attesa rispettando whitelist e flag. Anche la CLI espone la consegna con `--deliver`. I profili creati prima di questa versione ricevono i campi mancanti dalla migrazione 1→2 di `current_state.json`.
+
+L’esecutore si ferma all’outbox: non è un trasporto verso WhatsApp Web. Il consolidamento notturno estrattivo è già disponibile, come descritto sopra; non richiede un LLM e non inventa eventi. La navigazione da impulso è affidata al client MCP collegato, non a uno scheduler incorporato.
+
+---
+
+Obiettivo finale
+
+Realizzare un agente AI persistente che combini:
+
+- Una biografia coerente e in evoluzione.
+
+- Una memoria episodica per le esperienze personali.
+
+- Una memoria semantica per le conoscenze generali.
+
+- Un sistema RAG per recuperare rapidamente informazioni rilevanti.
+
+- Una memoria latente che influenza indirettamente il comportamento.
+
+- Una personalità simulata capace di evolvere.
+
+- Routine, stati interni e cicli di consolidamento.
+
+- Relazioni sociali con livelli di fiducia e intimità.
+
+- Un sistema always-on capace di iniziativa autonoma.
+
+- Un'architettura modulare, verificabile e sicura.
+
+La struttura finale unirà tre dimensioni fondamentali: la cronologia degli eventi tramite SQLite, l'identità e gli stati tramite JSON e il recupero basato sul significato tramite il Vector Database.
+
+Il sistema non si limiterà quindi a conservare una cronologia di conversazioni: potrà recuperare ricordi pertinenti, distinguere le conoscenze generali dalle esperienze personali e utilizzare entrambe per produrre risposte coerenti con la propria storia simulata.
+
+<p align="center">
+  <img src="assets/mnemosine-divider.svg" alt="" width="100%">
+</p>
+
+<a id="identita-visiva" name="identita-visiva"></a>
+
+## 18. Motore di consistenza visiva: Visual Identity Continuity
+
+La dashboard include la vista **Aspetto**. Durante la creazione del profilo o in seguito si possono salvare in `identity.json` descrizioni di corporatura, viso, capelli, occhi, segni particolari e stile, oltre a un seed opzionale. I profili esistenti ricevono `visual_profile` tramite migrazione automatica.
+
+È possibile caricare una reference PNG, JPEG o WebP (massimo 8 MiB e 20 megapixel). Viene normalizzata e conservata localmente in `data/visual/`; non viene inviata al provider quando viene caricata.
+
+La generazione manuale usa **FLUX.1 Kontext Pro** tramite Replicate. Installa l'extra opzionale `pip install 'mnemosine[visual]'`. Il token si salva con `mnemosine-visual-token --root <profilo>`: l'input è nascosto, il valore finisce in `data/secrets/replicate_token` con permessi `0600` ed è escluso dal repository. `REPLICATE_API_TOKEN` nell'ambiente del processo ha la precedenza, ma resta sconsigliato perché finisce nella storia della shell; il token non va mai in chat, in file versionati o nei dati del profilo. `mnemosine-visual-token --check` verifica il token sull'endpoint dell'account senza generare immagini, `--remove` lo cancella. L'attivazione richiede di digitare `GENERA`; ogni generazione richiede inoltre conferma esplicita dell'invio a Replicate. Solo allora prompt e reference vengono inviati al provider. Il flag nasce spento, non ci sono invii automatici e il tool MCP `generate_image` non può aggirare il consenso.
+
+Il prezzo consultato è **$0,04 per immagine**; controlla il listino aggiornato prima dell'uso. Il seed aiuta la ripetibilità ma non garantisce identità stabile né risultati identici fra versioni del modello. Gli output sono verificati, ripuliti dai metadati e salvati localmente in `files/images/`; la galleria mostra fino a 50 risultati recenti e ogni immagine può essere eliminata. La card Provider indica l’origine del token, l’esito e la data dell’ultima verifica salvata con «Verifica ora». Se il token cambia, viene rimosso o cambia origine, la precedente verifica non viene più mostrata: occorre verificarlo nuovamente. Anche `mnemosine-visual-token --check` controlla l’account senza generare immagini, ma stampa solo l’esito e non aggiorna la card della dashboard. La continuità facciale resta probabilistica: non è un modello addestrato né una verifica dell'identità.
+
+### 18.1. Obiettivo
+
+Il sistema dovrà integrare una dimensione visiva persistente, denominata Visual Identity Continuity, per consentire all'agente di mantenere un'identità grafica riconoscibile attraverso immagini generate in momenti, ambienti, inquadrature e condizioni di illuminazione differenti.
+
+L'obiettivo è fare in modo che l'agente possa apparire in fotografie realistiche ambientate nella propria routine virtuale, in vacanza, a casa, in città o durante altre attività, mantenendo una continuità visiva con il personaggio definito al momento della creazione.
+
+Il sistema dovrà gestire:
+
+- Identità facciale.
+
+- Lineamenti e tratti somatici.
+
+- Capelli, occhi e segni particolari.
+
+- Corporatura e proporzioni fisiche.
+
+- Dettagli anatomici visibili, comprese mani e gambe.
+
+- Abbigliamento, quando richiesto dalla scena.
+
+- Inquadrature complete o parziali.
+
+- Ambienti e sfondi.
+
+- Stile fotografico.
+
+- Coerenza tra immagini generate in sessioni differenti.
+
+Il motore visivo sarà un modulo separato dal modello linguistico, coordinato dal server MCP e integrato con lo stato corrente, la routine e le decisioni autonome dell'agente.
+
+La consistenza assoluta non può essere garantita da ogni modello generativo. Il sistema dovrà quindi adottare tecniche di riferimento visivo, condizionamento e verifica per ridurre le variazioni d'identità.
+
+### 18.2. DNA visivo: "visual_dna.json"
+
+Durante la creazione dell'identità, oltre ai dati anagrafici e ai tratti psicologici, l'MCP definirà un passaporto visivo persistente.
+
+Il file "visual_dna.json" conterrà la descrizione strutturata dei tratti fisici che dovranno rimanere coerenti durante la generazione delle immagini.
+
+Esempio di struttura:
+
+```json
+{
+  "identity_id": "character_001",
+  "version": 1,
+  "visual_dna": {
+    "etnia_lineamenti": "Ragazzo caucasico, lineamenti spigolosi, mascella definita",
+    "occhi": "Occhi a mandorla, iride verde scuro, sopracciglia folte ma curate",
+    "capelli": "Taglio corto texturizzato, castano scuro, riga disordinata a sinistra",
+    "segni_particolari": "Piccola cicatrice lineare di 2 cm vicino allo zigomo destro, neo sul collo",
+    "corporatura": "Altezza 180 cm, corporatura magra, mani con dita lunghe e affusolate"
+  },
+  "identity_constraints": {
+    "preserve_face": true,
+    "preserve_distinctive_marks": true,
+    "preserve_body_proportions": true,
+    "allow_clothing_changes": true,
+    "allow_environment_changes": true,
+    "allow_pose_changes": true
+  }
+}
+```
+
+Questi dati sono un esempio di configurazione, non le caratteristiche obbligatorie di ogni agente.
+
+Regole del DNA visivo
+
+Il DNA visivo rappresenterà la fonte di riferimento principale per la descrizione dell'identità.
+
+Dovrà essere stabile tra una generazione e l'altra. Le variazioni intenzionali saranno gestite attraverso modifiche amministrative versionate, evitando che il sistema riscriva casualmente i tratti fisici a ogni richiesta.
+
+Il DNA visivo dovrà distinguere tra:
+
+- Caratteristiche permanenti: forma del viso, colore degli occhi, segni particolari e proporzioni corporee.
+
+- Caratteristiche modificabili: vestiti, acconciatura temporanea, espressione, postura e accessori.
+
+- Caratteristiche dipendenti dalla scena: illuminazione, ombre, prospettiva e porzioni del corpo visibili.
+
+Questa distinzione impedirà di confondere un cambiamento d'abbigliamento con una modifica dell'identità.
+
+### 18.3. Generazione del Reference Anchor Pack
+
+Al primo avvio, il server MCP utilizzerà il DNA visivo per richiedere la generazione di un pacchetto di immagini di riferimento, denominato Reference Anchor Pack o Face Anchor Pack.
+
+Il pacchetto iniziale comprenderà quattro immagini:
+
+1. Primo piano frontale del volto.
+
+2. Volto ripreso di tre quarti.
+
+3. Immagine a mezzo busto.
+
+4. Figura intera, con proporzioni corporee visibili.
+
+Le immagini saranno generate con sfondo neutro, illuminazione controllata e pose adatte a documentare i tratti principali dell'identità.
+
+Il sistema utilizzerà un modello grafico compatibile, locale o accessibile tramite API.
+
+Archiviazione locale
+
+Le immagini saranno conservate in una cartella dedicata, ad esempio:
+
+```text
+assets/
+└── identity_ref/
+    └── character_001/
+        ├── face_front.png
+        ├── face_three_quarter.png
+        ├── upper_body.png
+        ├── full_body.png
+        └── manifest.json
+```
+
+Il file "manifest.json" registrerà gli identificativi delle immagini, la versione del DNA visivo, il modello utilizzato e gli eventuali parametri di generazione disponibili.
+
+Le immagini originali saranno mantenute come riferimenti stabili. Le nuove immagini generate non dovranno sostituirle automaticamente.
+
+Seed e riferimenti visivi
+
+Il sistema potrà conservare un seed numerico per riprodurre, quando possibile, le condizioni iniziali di una generazione.
+
+Tuttavia, un seed fisso non garantisce da solo la stessa identità in immagini differenti. Il risultato dipende anche dal modello, dalla versione, dal prompt, dai parametri di campionamento e dalle condizioni di generazione.
+
+Per questo motivo, la consistenza visiva sarà basata principalmente sulla combinazione di:
+
+- DNA visivo persistente.
+
+- Immagini di riferimento.
+
+- Condizionamento visivo.
+
+- Modello e parametri compatibili.
+
+- Verifica della somiglianza con l'identità originale.
+
+### 18.4. Embedding visivi e verifica dell'identità
+
+Il sistema potrà calcolare rappresentazioni vettoriali delle immagini per confrontare i risultati generati con i riferimenti originali.
+
+Questi dati saranno conservati separatamente dagli embedding testuali della memoria semantica.
+
+La componente visiva potrà includere:
+
+- Embedding facciali, quando compatibili con il modello e l'uso previsto.
+
+- Rappresentazioni visive generali.
+
+- Metadati relativi a pose, inquadrature e caratteristiche osservabili.
+
+- Punteggi di similarità tra immagini di riferimento e nuove generazioni.
+
+Gli embedding visivi non dovranno essere trattati come una prova infallibile d'identità. La loro affidabilità dipenderà dalla tecnica utilizzata e dalle condizioni dell'immagine.
+
+Quando il volto non è visibile, come nelle fotografie che mostrano soltanto gambe, mani o parte del corpo, il sistema dovrà utilizzare riferimenti corporei e proporzioni compatibili con il DNA visivo, senza richiedere necessariamente un confronto facciale.
+
+### 18.5. Tecnologie di generazione e condizionamento
+
+Il motore visivo potrà integrare modelli e strumenti differenti, selezionati in base alla disponibilità e alle prestazioni.
+
+Tra le tecnologie valutabili:
+
+- FLUX: famiglia di modelli generativi utilizzabile per la produzione di immagini, con capacità e modalità di condizionamento dipendenti dalla versione scelta.
+
+- Stable Diffusion: famiglia di modelli generativi che consente pipeline personalizzabili e diverse tecniche di controllo.
+
+- IP-Adapter: tecnica di condizionamento che utilizza immagini di riferimento per influenzare la generazione.
+
+- Image-to-Image: metodo per guidare una nuova immagine a partire da un'immagine esistente.
+
+- ControlNet e strumenti analoghi: possibili componenti per controllare struttura, pose e composizione, quando supportati dalla pipeline selezionata.
+
+Il sistema dovrà scegliere una pipeline compatibile con il modello effettivamente utilizzato. Non tutte le tecniche sono disponibili con ogni modello o servizio API.
+
+### 18.6. Composizione del prompt a blocchi
+
+Il server MCP costruirà il prompt finale combinando quattro componenti indipendenti:
+
+```text
+PROMPT FINALE =
+  [Gancio d'identità] +
+  [Inquadratura e dettaglio] +
+  [Ambiente e sfondo] +
+  [Stile fotografico]
+```
+
+Blocco A — Gancio d'identità
+
+Comprende il riferimento al personaggio, il DNA visivo e le immagini di riferimento.
+
+Esempio:
+
+"@CharacterName, capelli castano scuro, occhi verde scuro, corporatura magra, lineamenti coerenti con il riferimento visivo."
+
+Blocco B — Inquadratura e dettaglio
+
+Definisce la prospettiva, la distanza, la posa e le parti del corpo visibili.
+
+Esempi:
+
+- Selfie frontale.
+
+- Foto a mezzo busto.
+
+- Figura intera.
+
+- Dettaglio delle mani.
+
+- Inquadratura delle gambe e dei piedi.
+
+- Fotografia in prima persona, POV.
+
+Blocco C — Ambiente e sfondo
+
+Definisce il luogo e le condizioni della scena.
+
+Esempi:
+
+- Camera da letto.
+
+- Strada di una città siciliana.
+
+- Spiaggia.
+
+- Centro storico di Roma.
+
+- Terrazza di un'abitazione.
+
+- Ambiente domestico con illuminazione pomeridiana.
+
+Blocco D — Stile fotografico
+
+Definisce l'aspetto finale dell'immagine.
+
+Esempi:
+
+- Fotografia realistica da smartphone.
+
+- Selfie spontaneo.
+
+- Fotografia amatoriale da social network.
+
+- Luce naturale.
+
+- Profondità di campo ridotta.
+
+- Grana fotografica leggera.
+
+La composizione modulare consentirà di cambiare ambiente, inquadratura e stile senza dover ridefinire ogni volta l'intera identità.
+
+### 18.7. Generazione di immagini parziali
+
+Il motore dovrà supportare fotografie in cui il volto non compare.
+
+Ad esempio, se l'agente sta simulando una pausa in camera e vuole inviare una fotografia che mostri soltanto le gambe, il sistema genererà un'immagine coerente con la corporatura e con il contesto.
+
+Esempio di prompt:
+
+«Dettaglio ravvicinato in prima persona, POV, focus sulle gambe e sui piedi di un ragazzo con corporatura magra, disteso su un letto disordinato. Lenzuola bianche spiegazzate. Atmosfera pomeridiana, luce soffusa proveniente dalla finestra. Stile fotografico realistico da smartphone».
+
+In questa situazione il volto non è visibile. La continuità sarà affidata alla coerenza delle proporzioni corporee, alla descrizione fisica e agli eventuali riferimenti visivi disponibili.
+
+Il sistema dovrà evitare di inventare caratteristiche anatomiche non definite o di modificare arbitrariamente le proporzioni del personaggio.
+
+### 18.8. Generazione di fotografie in ambienti diversi
+
+Il sistema dovrà consentire all'agente di apparire in luoghi differenti mantenendo la stessa identità visiva.
+
+Esempio: l'agente si trova virtualmente a Roma o a Licata e desidera inviare un selfie spontaneo.
+
+Il server MCP recupererà il DNA visivo e selezionerà le immagini di riferimento più adatte.
+
+Esempio di prompt:
+
+«@CharacterName, ragazzo con capelli castano scuro e occhi verde scuro, scatta un selfie spontaneo all'aperto. Sullo sfondo, una tipica strada di una città di mare siciliana, muri in pietra chiara e piante di fichi d'India in un vaso di terracotta. Luce calda del tardo pomeriggio. Espressione naturale, nessuna posa artificiale, stile fotografico amatoriale da smartphone».
+
+Il prompt sarà accompagnato dalle immagini di riferimento attraverso il metodo di condizionamento supportato dalla pipeline.
+
+Il sistema dovrà distinguere tra un luogo effettivamente visitato dall'agente nel contesto narrativo e uno scenario generato artificialmente. Le immagini create non costituiscono prova di una presenza reale in quel luogo.
+
+### 18.9. Integrazione con la memoria e il sistema RAG
+
+Il motore visivo sarà collegato al sistema di memoria per recuperare le informazioni necessarie a ogni generazione.
+
+Il RAG potrà individuare:
+
+- Il DNA visivo attivo.
+
+- Le immagini di riferimento pertinenti.
+
+- L'abbigliamento già utilizzato, quando rilevante.
+
+- Le caratteristiche della scena.
+
+- Gli eventi della timeline associati al luogo o all'attività.
+
+- Le preferenze visive e fotografiche dell'agente.
+
+Le immagini saranno archiviate come file, mentre SQLite conserverà i metadati e i riferimenti cronologici. Gli embedding visivi potranno essere indicizzati in una componente vettoriale dedicata.
+
+La ricerca testuale e quella visiva dovranno rimanere distinguibili, anche quando saranno utilizzate insieme.
+
+Il sistema dovrà inoltre mantenere la distinzione tra identità permanente e dettagli temporanei, evitando che un abito o una singola immagine modifichino automaticamente il DNA visivo.
+
+### 18.10. Integrazione con il ciclo Always-On
+
+Il motore visivo sarà collegato all'Heartbeat Loop e al generatore di routine.
+
+Esempio operativo:
+
+Sono le 15:00 e "current_state.json" indica che l'agente sta riposando in camera.
+
+Un utente gli scrive su WhatsApp Web:
+
+«Che fai di bello?»
+
+Il sistema potrà seguire questa sequenza:
+
+1. L'MCP riceve il messaggio.
+
+2. Recupera lo stato corrente dell'agente.
+
+3. L'LLM valuta la risposta più coerente con la situazione.
+
+4. L'agente decide se rispondere con testo oppure proporre un'immagine.
+
+5. L'MCP recupera il DNA visivo e i riferimenti appropriati.
+
+6. Il motore visivo compone il prompt e applica il condizionamento.
+
+7. L'immagine viene generata.
+
+8. Il sistema esegue i controlli di coerenza e sicurezza previsti.
+
+9. L'immagine viene inviata tramite WhatsApp Web, se il contatto e l'azione sono autorizzati.
+
+10. L'evento viene registrato nella memoria episodica.
+
+La generazione dell'immagine non dovrà avvenire necessariamente a ogni messaggio. L'agente dovrà poter decidere quando un'immagine è pertinente, evitando invii ripetitivi o incoerenti.
+
+### 18.11. Requisiti operativi del motore visivo
+
+Il modulo dovrà prevedere:
+
+- Archiviazione persistente delle immagini di riferimento.
+
+- Versionamento del DNA visivo.
+
+- Gestione dei modelli e delle pipeline compatibili.
+
+- Generazione tramite API o elaborazione locale.
+
+- Gestione dei seed e dei parametri disponibili.
+
+- Controllo delle dimensioni e dei formati delle immagini.
+
+- Verifica della somiglianza visiva.
+
+- Gestione degli errori e dei tentativi di rigenerazione.
+
+- Registrazione delle immagini generate e del contesto.
+
+- Controllo degli accessi ai riferimenti visivi.
+
+- Backup degli asset e dei relativi metadati.
+
+- Politiche di conservazione e cancellazione delle immagini.
+
+La quantità di RAM, VRAM, spazio su disco e potenza di calcolo richiesta dipenderà dal modello selezionato e dal fatto che la generazione avvenga localmente oppure tramite API.
+
+### 18.12. Nuovi file e componenti architetturali
+
+Il modulo introdurrà i seguenti elementi:
+
+- `visual_dna.json`: identità fisica persistente.
+
+- `assets/identity_ref/`: immagini di riferimento originali.
+
+- `manifest.json`: metadati delle immagini e versionamento.
+
+- "visual_memory.db", oppure tabelle dedicate in un database esistente: cronologia delle generazioni e riferimenti alle immagini.
+
+- Indice vettoriale visivo: recupero delle immagini e dei riferimenti pertinenti.
+
+- `visual_engine`: componente responsabile della costruzione dei prompt, della generazione e della verifica della coerenza.
+
+La scelta tra un database visivo separato e tabelle integrate dovrà essere effettuata in base alla complessità effettiva del progetto.
+
+### 18.13. Collocazione nell'architettura complessiva
+
+Il motore di consistenza visiva sarà integrato come modulo autonomo, collegato ai seguenti componenti:
+
+1. Identità e personalità.
+
+2. DNA visivo e immagini di riferimento.
+
+3. Memoria episodica.
+
+4. Memoria semantica.
+
+5. Sistema RAG.
+
+6. Stato corrente e routine.
+
+7. Grafo delle relazioni.
+
+8. Heartbeat Loop.
+
+9. WhatsApp Web e browser controllato.
+
+10. Sicurezza, logging e backup.
+
+Il modulo non sostituirà il modello linguistico né il sistema di memoria. Fornirà una capacità grafica persistente che potrà essere attivata quando il contesto narrativo o l'interazione la rendono utile.
+
+Obiettivo finale: permettere all'agente di mantenere una rappresentazione visiva riconoscibile nel tempo, generare fotografie coerenti con la propria identità e inserirle nella routine simulata, collegando il mondo testuale, psicologico, temporale e visivo in un'unica architettura.
+
+---
+
+<p align="center">
+  <img src="assets/mnemosine-mark.svg" alt="Emblema di Mnemosine" width="88">
+</p>
+
+<p align="center"><sub>Mnemosine · memoria, identità e iniziativa per agenti AI</sub></p>

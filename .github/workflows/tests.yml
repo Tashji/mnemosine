@@ -1,0 +1,53 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            pyproject.toml
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Install package
+        run: python -m pip install -e . --no-deps
+
+      - name: Run tests
+        run: python -m unittest discover -s tests -t . -v
+
+      - name: Build wheel
+        run: python -m pip wheel . --no-deps --wheel-dir "$RUNNER_TEMP/mnemosine-wheel"
+
+      - name: Install wheel in isolated environment
+        run: |
+          python -m venv "$RUNNER_TEMP/mnemosine-wheel-venv"
+          "$RUNNER_TEMP/mnemosine-wheel-venv/bin/python" -m pip install "$RUNNER_TEMP"/mnemosine-wheel/*.whl
+          "$RUNNER_TEMP/mnemosine-wheel-venv/bin/python" -m pip check
+
+      - name: Verify installed assets and MCP handshake
+        timeout-minutes: 3
+        run: |
+          mkdir -p "$RUNNER_TEMP/mnemosine-wheel-check"
+          cd "$RUNNER_TEMP/mnemosine-wheel-check"
+          "$RUNNER_TEMP/mnemosine-wheel-venv/bin/python" -I "$GITHUB_WORKSPACE/scripts/check_installed_wheel.py"
