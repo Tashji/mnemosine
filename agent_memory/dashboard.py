@@ -1700,7 +1700,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                         status=HTTPStatus.SERVICE_UNAVAILABLE,
                     )
                     return
-                self._handle_settings_post(path)
+                # L'audit del decoratore deve precedere la risposta: il
+                # client non deve poter leggere un esito prima del registro.
+                result = self._handle_settings_post(path)
+                self._send_json(result)
             else:
                 self._send_json(
                     {"error": "Metodo non consentito."},
@@ -1810,7 +1813,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         self._redirect(next_path, cookie=self._session_cookie(token))
 
     @_audited_settings_write
-    def _handle_settings_post(self, path: str) -> None:
+    def _handle_settings_post(self, path: str) -> dict[str, Any]:
         payload = self._read_json()
         token = payload.get("csrf")
         if not isinstance(token, str) or not self.server.form_tokens.consume(token):
@@ -1868,7 +1871,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                     f"{result.get('archive')}\n"
                 )
                 sys.stderr.flush()
-        self._send_json(result)
+        return result
 
     def _send_private_image(
         self,
