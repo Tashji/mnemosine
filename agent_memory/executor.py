@@ -33,6 +33,7 @@ from datetime import datetime, time
 from pathlib import Path
 from typing import Any
 
+from .audit import AuditLog
 from .config import ConfigStore
 from .errors import AccessDeniedError, ConfigError
 from .routine import RoutineEngine
@@ -188,6 +189,7 @@ class MessageExecutor:
     ) -> None:
         self.config = ConfigStore(root)
         self.root = self.config.root
+        self.audit = AuditLog(self.root)
         self.routine = RoutineEngine(self.root, at=at)
         self.now = self.routine.now
         self.state = self.routine.state
@@ -419,11 +421,29 @@ class MessageExecutor:
         except OSError as exc:
             raise ConfigError(f"Impossibile scrivere in {path}: {exc}") from exc
 
+    def _audit_delivery(
+        self, action: str, outcome: str, **fields: Any
+    ) -> None:
+        """Registra l'esito della consegna senza testo, telefono o destinatario."""
+
+        self.audit.record(
+            "external_action",
+            action=action,
+            outcome=outcome,
+            channel=CHANNEL,
+            **fields,
+        )
+
     def deliver(self, text: Any) -> dict[str, Any]:
         """Consegna il messaggio oppure solleva un errore con tutti i motivi."""
 
         report = self.authorize(text)
         if not report["allowed"]:
+            self._audit_delivery(
+                "whatsapp.deliver",
+                "blocked",
+                reason_count=len(report["reasons"]),
+            )
             raise AccessDeniedError(
                 "Consegna bloccata: " + "; ".join(report["reasons"])
             )
@@ -450,23 +470,48 @@ class MessageExecutor:
 
         # Prima la consegna, poi la chiusura dell'impulso: se la scrittura
         # fallisce, l'impulso resta in coda invece di sparire.
-        self._append_outbox(record)
+        try:
+            self._append_outbox(record)
+        except Exception as exc:
+            self._audit_delivery(
+                "whatsapp.deliver",
+                "error",
+                error_type=type(exc).__name__,
+                message_id=record["message_id"],
+            )
+            raise
 
-        self.config.update_current_state(
-            {
-                "heartbeat": {
-                    "pending_impulse": None,
-                    "spontaneous_message_pending": False,
-                    "last_decision": "impulso_consegnato",
-                    "last_handled_at": stamp,
-                    "last_handling_note": (
-                        f"consegnato a "
-                        f"{target.get('display_name') or target.get('user_id')}"
-                    ),
-                    "last_delivery_id": record["message_id"],
-                    "last_delivered_at": stamp,
+        try:
+            self.config.update_current_state(
+                {
+                    "heartbeat": {
+                        "pending_impulse": None,
+                        "spontaneous_message_pending": False,
+                        "last_decision": "impulso_consegnato",
+                        "last_handled_at": stamp,
+                        "last_handling_note": (
+                            f"consegnato a "
+                            f"{target.get('display_name') or target.get('user_id')}"
+                        ),
+                        "last_delivery_id": record["message_id"],
+                        "last_delivered_at": stamp,
+                    }
                 }
-            }
+            )
+        except Exception as exc:
+            self._audit_delivery(
+                "whatsapp.deliver",
+                "error",
+                error_type=type(exc).__name__,
+                message_id=record["message_id"],
+            )
+            raise
+        self._audit_delivery(
+            "whatsapp.deliver",
+            "ok",
+            message_id=record["message_id"],
+            transport=record["transport"],
+            trigger=record.get("trigger"),
         )
         return {"delivered": True, **record}
 
@@ -479,6 +524,12 @@ class MessageExecutor:
             raise ValidationError("user_id: attesa una stringa non vuota.")
         report = self.authorize(text, target_user_id=user_id.strip())
         if not report["allowed"]:
+            self._audit_delivery(
+                "whatsapp.deliver_intent",
+                "blocked",
+                intent_id=intent_id,
+                reason_count=len(report["reasons"]),
+            )
             raise AccessDeniedError(
                 "Consegna bloccata: " + "; ".join(report["reasons"])
             )
@@ -498,7 +549,24 @@ class MessageExecutor:
             "impulse": None,
             "text": report["text"],
         }
-        self._append_outbox(record)
+        try:
+            self._append_outbox(record)
+        except Exception as exc:
+            self._audit_delivery(
+                "whatsapp.deliver_intent",
+                "error",
+                error_type=type(exc).__name__,
+                message_id=record["message_id"],
+                intent_id=intent_id,
+            )
+            raise
+        self._audit_delivery(
+            "whatsapp.deliver_intent",
+            "ok",
+            message_id=record["message_id"],
+            transport=record["transport"],
+            intent_id=intent_id,
+        )
         return {"delivered": True, **record}
 
 

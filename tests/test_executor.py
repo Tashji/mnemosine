@@ -132,6 +132,16 @@ class ExecutorTestCase(unittest.TestCase):
             for record in records:
                 handle.write(json.dumps(record, ensure_ascii=False) + "\n")
 
+    def audit_events(self) -> list[dict[str, Any]]:
+        path = self.root / "data" / "logs" / "audit.jsonl"
+        if not path.is_file():
+            return []
+        events: list[dict[str, Any]] = []
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                events.append(json.loads(line))
+        return events
+
     def blocked_reasons(self, text: str = "Ciao Marco, come stai?") -> list[str]:
         with self.assertRaises(AccessDeniedError) as ctx:
             self.executor().deliver(text)
@@ -247,6 +257,56 @@ class ExecutorTestCase(unittest.TestCase):
         self.assertEqual(hb["last_decision"], "impulso_consegnato")
         self.assertEqual(hb["last_delivery_id"], result["message_id"])
         self.assertEqual(hb["last_delivered_at"], result["delivered_at"])
+
+    def test_delivery_is_audited_without_text_or_phone(self) -> None:
+        result = self.executor().deliver("Ciao Marco, come stai?")
+        events = [
+            item
+            for item in self.audit_events()
+            if item.get("event") == "external_action"
+        ]
+        self.assertTrue(events)
+        event = events[-1]
+        self.assertEqual(event["action"], "whatsapp.deliver")
+        self.assertEqual(event["outcome"], "ok")
+        self.assertEqual(event["message_id"], result["message_id"])
+        raw = (self.root / "data" / "logs" / "audit.jsonl").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("Ciao Marco", raw)
+        self.assertNotIn("333", raw)
+        self.assertNotIn("user_marco", raw)
+
+    def test_blocked_delivery_is_audited_without_details(self) -> None:
+        self.allow_delivery(flag=False)
+        with self.assertRaises(AccessDeniedError):
+            self.executor().deliver("Ciao Marco")
+        events = [
+            item
+            for item in self.audit_events()
+            if item.get("event") == "external_action"
+        ]
+        self.assertTrue(events)
+        self.assertEqual(events[-1]["outcome"], "blocked")
+        raw = (self.root / "data" / "logs" / "audit.jsonl").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("Ciao Marco", raw)
+        self.assertNotIn("333", raw)
+
+    def test_explicit_intent_delivery_is_audited(self) -> None:
+        result = self.executor().deliver_intent(
+            "Ciao Marco", "user_marco", intent_id="intent_test"
+        )
+        events = [
+            item
+            for item in self.audit_events()
+            if item.get("event") == "external_action"
+        ]
+        self.assertEqual(events[-1]["action"], "whatsapp.deliver_intent")
+        self.assertEqual(events[-1]["outcome"], "ok")
+        self.assertEqual(events[-1]["intent_id"], "intent_test")
+        self.assertEqual(events[-1]["message_id"], result["message_id"])
 
     def test_second_delivery_is_blocked(self) -> None:
         self.executor().deliver("Ciao Marco")

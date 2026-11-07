@@ -23,6 +23,7 @@ predefinita ascolta solo su 127.0.0.1 e non deve essere pubblicata su Internet.
 from __future__ import annotations
 
 import argparse
+import functools
 import html
 import json
 import secrets
@@ -40,6 +41,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
+from .audit import AuditLog
 from .autonomy import AutonomyService
 from .biography import BiographyService
 from .config import project_root
@@ -119,6 +121,22 @@ SETTINGS_POST_PATHS = {
     PROFILE_ARCHIVE_PATH,
     AUTONOMY_REVIEW_PATH,
 }
+DASHBOARD_WRITE_ACTIONS = {
+    RELATIONS_PATH: "relations.save",
+    SHADOW_TRAITS_PATH: "shadow_traits.save",
+    SETTINGS_BROWSER_PATH: "settings.browser",
+    SETTINGS_WHATSAPP_PATH: "settings.whatsapp",
+    SETTINGS_BEHAVIOR_PATH: "settings.behavior",
+    LIFE_PATH: "life.toggle",
+    PROFILE_ARCHIVE_PATH: "profile.archive",
+    AUTONOMY_REVIEW_PATH: "autonomy.review",
+    VISUAL_REFERENCE_PATH: "visual.reference.save",
+    VISUAL_PROFILE_PATH: "visual.profile",
+    VISUAL_REFERENCE_REMOVE_PATH: "visual.reference.remove",
+    VISUAL_GENERATE_PATH: "visual.generate",
+    VISUAL_IMAGE_DELETE_PATH: "visual.image.delete",
+    VISUAL_TOKEN_CHECK_PATH: "visual.token.check",
+}
 FORM_TOKEN_TTL = 30 * 60
 FINALIZE_ACTIONS = ("biography", "index")
 FINALIZE_LABELS = {
@@ -132,6 +150,46 @@ FINALIZE_RUNNING_TEXT = {
         "richiedere qualche minuto per caricare il modello locale."
     ),
 }
+
+
+def _audited_write(action: str) -> Any:
+    """Avvolge una scrittura della dashboard con un evento di audit."""
+
+    def decorate(method: Any) -> Any:
+        @functools.wraps(method)
+        def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
+            try:
+                result = method(self, *args, **kwargs)
+            except Exception as exc:
+                self.server.audit_write(
+                    action, "error", error_type=type(exc).__name__
+                )
+                raise
+            self.server.audit_write(action, "ok")
+            return result
+
+        return wrapper
+
+    return decorate
+
+
+def _audited_settings_write(method: Any) -> Any:
+    """Sceglie l'azione dal percorso POST, senza leggere il payload."""
+
+    @functools.wraps(method)
+    def wrapper(self: Any, path: str, *args: Any, **kwargs: Any) -> Any:
+        action = DASHBOARD_WRITE_ACTIONS.get(path, "dashboard.write")
+        try:
+            result = method(self, path, *args, **kwargs)
+        except Exception as exc:
+            self.server.audit_write(
+                action, "error", error_type=type(exc).__name__
+            )
+            raise
+        self.server.audit_write(action, "ok")
+        return result
+
+    return wrapper
 
 
 class _FinalizeJob:
@@ -1285,6 +1343,7 @@ class DashboardHTTPServer(ThreadingHTTPServer):
         allow_null_origin: bool = False,
     ):
         self.data = data
+        self.audit = AuditLog(data.root)
         self.assets_dir = assets_dir.resolve()
         self.quiet = quiet
         self.auth = auth
@@ -1331,6 +1390,22 @@ class DashboardHTTPServer(ThreadingHTTPServer):
             job = self._finalize_job
         return job.snapshot() if job is not None else None
 
+    def audit_write(
+        self,
+        action: str,
+        outcome: str,
+        *,
+        error_type: str | None = None,
+    ) -> None:
+        """Registra una scrittura amministrativa senza corpo o valori."""
+
+        self.audit.record(
+            "dashboard_write",
+            action=action,
+            outcome=outcome,
+            error_type=error_type,
+        )
+
     def _run_finalize_job(self, job: _FinalizeJob) -> None:
         try:
             for action in job.actions:
@@ -1340,9 +1415,18 @@ class DashboardHTTPServer(ThreadingHTTPServer):
                 except Exception as exc:  # noqa: BLE001 - il job non deve morire in silenzio
                     traceback.print_exc(file=sys.stderr)
                     job.fail(action, f"Errore imprevisto: {exc}")
+                    self.audit_write(
+                        f"profile.{action}",
+                        "error",
+                        error_type=type(exc).__name__,
+                    )
                 else:
                     job.mark_finished(action, result)
                     self._log_finalize_result(action, result)
+                    self.audit_write(
+                        f"profile.{action}",
+                        "ok" if result.get("ok") else "error",
+                    )
                 finally:
                     self.data.reload()
         finally:
@@ -1725,6 +1809,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         token = auth.issue_session()
         self._redirect(next_path, cookie=self._session_cookie(token))
 
+    @_audited_settings_write
     def _handle_settings_post(self, path: str) -> None:
         payload = self._read_json()
         token = payload.get("csrf")
@@ -1795,6 +1880,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         data, content_type = service.image_bytes(image_id, reference=reference)
         self._send_bytes(data, content_type)
 
+    @_audited_write("visual.reference.save")
     def _handle_visual_reference_upload(self) -> None:
         token = self.headers.get("X-CSRF-Token")
         if not token or not self.server.form_tokens.consume(token):
@@ -1962,6 +2048,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._redirect("/")
             return
         if status != PROFILE_STATE_MISSING:
+            self.server.audit_write("profile.setup", "blocked")
             self._render_setup_page(
                 values=form,
                 error=(
@@ -1973,6 +2060,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             )
             return
         if not self.server.form_tokens.consume(form.get("csrf", "")):
+            self.server.audit_write("profile.setup", "blocked")
             self._render_setup_page(
                 values=form,
                 error="Modulo scaduto o non valido. Riprova.",
@@ -1983,6 +2071,9 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             args = build_profile_args(form)
             create_profile(self.server.data.root, args, force=False)
         except (ConfigError, ValidationError) as exc:
+            self.server.audit_write(
+                "profile.setup", "error", error_type=type(exc).__name__
+            )
             self._render_setup_page(
                 values=form,
                 error=str(exc),
@@ -1990,6 +2081,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             )
             return
 
+        self.server.audit_write("profile.setup", "ok")
         self.server.data.reload()
         if not self.server.quiet:
             sys.stderr.write(
@@ -2037,6 +2129,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._redirect(SETUP_PATH)
             return
         if not self.server.form_tokens.consume(form.get("csrf", "")):
+            self.server.audit_write("profile.finalize", "blocked")
             self._render_finalize_page(
                 error="Modulo scaduto o non valido. Riprova.",
                 status=HTTPStatus.BAD_REQUEST,
@@ -2045,12 +2138,14 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
         action = form.get("action")
         if action not in FINALIZE_ACTIONS:
+            self.server.audit_write("profile.finalize", "blocked")
             self._render_finalize_page(
                 error="Azione di completamento non riconosciuta.",
                 status=HTTPStatus.BAD_REQUEST,
             )
             return
         self.server.start_finalize_job((action,))
+        self.server.audit_write("profile.finalize", "started")
         self._redirect(FINALIZE_PATH)
 
     def _biography_view(self) -> tuple[str, str]:

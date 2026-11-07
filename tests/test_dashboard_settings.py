@@ -507,6 +507,65 @@ class SettingsHTTPTests(unittest.TestCase):
         self.assertEqual(response.status, 200)
         self.assertTrue(json.loads(response.read())["browser"]["enabled"])
 
+    def test_admin_write_is_audited_without_payload(self) -> None:
+        cookie = self._login()
+        response = self._post_json(
+            "/api/settings/whatsapp",
+            {
+                "csrf": self._csrf(cookie),
+                "enabled": True,
+                "allowed_contacts": [
+                    {
+                        "user_id": "user_marco",
+                        "display_name": "Marco",
+                        "phone": "+39 333 1234567",
+                    }
+                ],
+                "quiet_hours": {"start": "00:00", "end": "07:00"},
+                "max_per_day": 1,
+            },
+            cookie,
+        )
+        self.assertEqual(response.status, 200, response.read().decode("utf-8"))
+        path = self.root / "data" / "logs" / "audit.jsonl"
+        raw = path.read_text(encoding="utf-8")
+        self.assertNotIn("333", raw)
+        self.assertNotIn("Marco", raw)
+        events = [json.loads(line) for line in raw.splitlines() if line.strip()]
+        event = next(
+            item
+            for item in events
+            if item.get("event") == "dashboard_write"
+            and item.get("action") == "settings.whatsapp"
+        )
+        self.assertEqual(event["outcome"], "ok")
+
+    def test_failed_admin_write_is_audited_without_payload(self) -> None:
+        cookie = self._login()
+        response = self._post_json(
+            "/api/settings/behavior",
+            {
+                "csrf": self._csrf(cookie),
+                "flags": {"whatsapp_sending_enabled": True},
+                "confirmation": "no",
+                "heartbeat": {},
+            },
+            cookie,
+        )
+        self.assertEqual(response.status, 400)
+        path = self.root / "data" / "logs" / "audit.jsonl"
+        raw = path.read_text(encoding="utf-8")
+        self.assertNotIn("whatsapp_sending_enabled", raw)
+        events = [json.loads(line) for line in raw.splitlines() if line.strip()]
+        event = next(
+            item
+            for item in events
+            if item.get("event") == "dashboard_write"
+            and item.get("action") == "settings.behavior"
+        )
+        self.assertEqual(event["outcome"], "error")
+        self.assertEqual(event["error_type"], "ValidationError")
+
     def test_contact_api_requires_auth_csrf_and_same_origin(self) -> None:
         payload = {"action": "create", "user_id": "api_contact", "display_name": "API", "trust": 50, "intimacy": 20}
         self.assertEqual(self._post_json("/api/relations", payload, "").status, 401)
