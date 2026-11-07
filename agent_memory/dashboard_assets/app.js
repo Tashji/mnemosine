@@ -5,6 +5,10 @@ const VIEW_META = {
     title: "Panoramica",
     subtitle: "Stato, memoria e identità in un'unica vista.",
   },
+  life: {
+    title: "Vita",
+    subtitle: "Bisogni, attività, loop e ultimo episodio deliberativo.",
+  },
   relations: {
     title: "Relazioni",
     subtitle: "Contatti, fiducia e storico completo delle interazioni.",
@@ -1722,6 +1726,163 @@ async function loadEvolution(force = false) {
   }
 }
 
+/* -- vita ---------------------------------------------------------------- */
+
+function needCard(name, value) {
+  const number = Math.max(0, Math.min(100, Number(value) || 0));
+  return h(
+    "div",
+    { class: "metric-card" },
+    h("div", { class: "metric-label", text: name }),
+    h("div", { class: "metric-value", text: `${number}/100` }),
+    h("div", { class: "load-track" }, h("div", { class: "load-fill", style: `width:${number}%` }))
+  );
+}
+
+function renderLife(data) {
+  const report = data.report || {};
+  const status = data.status || {};
+  const body = report.body || {};
+  const activity = report.activity || {};
+  const emotion = report.emotion || {};
+  const loops = report.open_loops || [];
+  const stream = report.stream || [];
+  const enabled = Boolean(data.enabled);
+  const active = status.active;
+  const last = status.last;
+
+  const toggleForm = settingsForm(
+    enabled ? "Disattiva motore" : "Abilita motore",
+    [
+      h("p", {
+        class: "settings-hint",
+        text: enabled
+          ? "Il battito chiama il motore deliberativo a ogni ciclo. Disattivandolo torna il vecchio percorso degli impulsi."
+          : "Il motore è spento. Per attivarlo serve una conferma esplicita; il battito inizierà a valutare la salienza.",
+      }),
+      settingsField(
+        "Conferma",
+        settingsInput("confirmation", "", "text", {
+          placeholder: enabled ? "DISATTIVA" : "ABILITO",
+          autocomplete: "off",
+        }),
+        enabled ? "Scrivi DISATTIVA per fermare il motore." : "Scrivi ABILITO per accendere il motore."
+      ),
+    ],
+    async (formData) => {
+      await postJson("/api/life", {
+        enabled: !enabled,
+        confirmation: String(formData.get("confirmation") || ""),
+      });
+      state.loaded.life = null;
+      await loadLife(true);
+      setNotice(enabled ? "Motore vita disattivato." : "Motore vita attivato.", "success");
+    }
+  );
+
+  const statusCard = settingsCard(
+    "Motore vita",
+    enabled ? "Attivo: il battito usa la deliberazione situata." : "Spento: resta disponibile il percorso degli impulsi.",
+    h(
+      "div",
+      { class: "settings-form" },
+      h("p", { class: "settings-meta", text: `Episodi oggi: ${status.today || 0}. ${active ? `Attivo: ${active.reason || "—"}.` : "Nessun episodio attivo."}` }),
+      h("p", { class: "settings-meta", text: last ? `Ultimo: ${last.state || "—"} · ${last.reason || "—"} · ${fmtDate(last.opened_at, { time: true })}` : "Nessun episodio registrato." }),
+      status.next_eligible_at ? h("p", { class: "settings-meta", text: `Prossimo istante utile: ${fmtDate(status.next_eligible_at, { time: true })}.` }) : null,
+      toggleForm
+    )
+  );
+
+  const activityCard = settingsCard(
+    "Situazione",
+    "Dove sono, cosa sto facendo e con quale attenzione.",
+    h(
+      "div",
+      { class: "settings-form" },
+      h("p", { class: "state-activity", text: text(activity.label, "Nessuna attività") }),
+      h("p", { class: "settings-meta", text: `Modalità ${text(activity.mode)} · luogo ${text(activity.location)}` }),
+      h("p", { class: "settings-meta", text: `Emozione: ${text(emotion.label)}.` }),
+      h("p", { class: "settings-hint", text: "Il rapporto è in sola lettura e non espone ombra o contenuti riservati." })
+    )
+  );
+
+  const needsPanel = h(
+    "section",
+    { class: "panel" },
+    h("div", { class: "panel-header" }, h("h3", { text: "Bisogni" })),
+    h("div", { class: "metric-grid" }, Object.entries(body).map(([name, value]) => needCard(name, value)))
+  );
+
+  const loopsPanel = h(
+    "section",
+    { class: "panel" },
+    h("div", { class: "panel-header" }, h("h3", { text: "Loop aperti" }), h("span", { class: "count-chip", text: `${loops.length}` })),
+    h(
+      "div",
+      { class: "panel-body" },
+      loops.length
+        ? loops.map((loop) =>
+            h(
+              "div",
+              { class: "recent-item" },
+              h("div", { class: "recent-title", text: text(loop.title) }),
+              h("div", { class: "recent-desc", text: `Priorità ${loop.priority}/100${loop.due_at ? ` · scadenza ${fmtDate(loop.due_at, { time: true })}` : ""}` })
+            )
+          )
+        : emptyState("Nessun loop aperto", "Non ci sono impegni aperti.")
+    )
+  );
+
+  const streamPanel = h(
+    "section",
+    { class: "panel" },
+    h("div", { class: "panel-header" }, h("h3", { text: "Stream recente" }), h("span", { class: "count-chip", text: `${stream.length}` })),
+    h(
+      "div",
+      { class: "panel-body" },
+      stream.length
+        ? stream.map((entry) =>
+            h(
+              "div",
+              { class: "recent-item" },
+              h("div", { class: "recent-date", text: fmtDate(entry.at, { time: true }) }),
+              h("div", { class: "recent-title", text: text(entry.text) }),
+              h("div", { class: "recent-desc", text: text(entry.kind, "") })
+            )
+          )
+        : emptyState("Nessuna voce", "Lo stream è ancora vuoto.")
+    )
+  );
+
+  clear(
+    $("#life-content"),
+    h(
+      "div",
+      { class: "settings-grid" },
+      statusCard,
+      activityCard,
+      needsPanel,
+      loopsPanel,
+      h("div", { class: "stack" }, streamPanel)
+    )
+  );
+}
+
+async function loadLife(force = false) {
+  if (state.loaded.life && !force) return;
+  const content = $("#life-content");
+  setLoading(content, "Caricamento della vita dell'agente…");
+  try {
+    const data = await api("/api/life");
+    state.loaded.life = data;
+    renderLife(data);
+    setNotice("");
+  } catch (error) {
+    setNotice(`Impossibile caricare la vita: ${error.message}`);
+    clear(content, emptyState("Vita non disponibile", error.message));
+  }
+}
+
 /* -- impostazioni -------------------------------------------------------- */
 
 function settingsCard(title, description, content) {
@@ -2437,6 +2598,7 @@ async function loadSettings(force = false) {
 
 const LOADERS = {
   overview: loadOverview,
+  life: loadLife,
   relations: loadRelations,
   timeline: loadTimeline,
   traits: loadTraits,

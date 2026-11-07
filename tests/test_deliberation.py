@@ -225,7 +225,7 @@ class DeliberationTests(unittest.TestCase):
         self.assertEqual(state["life"]["stream"][-1]["kind"], "intent")
         self.assertIn("simulato", state["life"]["stream"][-1]["text"])
 
-    def test_internal_intent_validation_rejects_external_tools(self) -> None:
+    def test_intent_validation_accepts_external_tools_with_requirements(self) -> None:
         base = {
             "title": "Controllare la posta",
             "goal": "Leggere i messaggi importanti",
@@ -235,6 +235,23 @@ class DeliberationTests(unittest.TestCase):
             {"decision": "intent", "intent": {**base, "tool": "none"}}
         )
         self.assertEqual(normalized["intent"]["tool"], "none")
+        self.assertFalse(normalized["intent"]["requires_confirmation"])
+
+        valid = {
+            "browser": {"target": "https://example.org"},
+            "files": {"target": "nota.txt", "arguments": {"content": "ciao"}},
+            "whatsapp": {
+                "target": "user_marco",
+                "arguments": {"text": "ciao"},
+            },
+        }
+        for tool, extra in valid.items():
+            normalized = validate_decision(
+                {"decision": "intent", "intent": {**base, "tool": tool, **extra}}
+            )
+            self.assertEqual(normalized["intent"]["tool"], tool)
+            self.assertTrue(normalized["intent"]["requires_confirmation"])
+
         for tool in ("browser", "files", "whatsapp"):
             with self.assertRaises(ValidationError):
                 validate_decision(

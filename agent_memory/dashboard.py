@@ -93,6 +93,7 @@ SETTINGS_PATH = "/api/settings"
 SETTINGS_BROWSER_PATH = "/api/settings/browser"
 SETTINGS_WHATSAPP_PATH = "/api/settings/whatsapp"
 SETTINGS_BEHAVIOR_PATH = "/api/settings/behavior"
+LIFE_PATH = "/api/life"
 PROFILE_ARCHIVE_PATH = "/api/profile/archive"
 AUTONOMY_REVIEW_PATH = "/api/autonomy/review"
 VISUAL_PROFILE_PATH = "/api/visual/profile"
@@ -114,6 +115,7 @@ SETTINGS_POST_PATHS = {
     SETTINGS_BROWSER_PATH,
     SETTINGS_WHATSAPP_PATH,
     SETTINGS_BEHAVIOR_PATH,
+    LIFE_PATH,
     PROFILE_ARCHIVE_PATH,
     AUTONOMY_REVIEW_PATH,
 }
@@ -760,6 +762,22 @@ class DashboardData:
             "count": total,
             "truncated": total > len(listing["entries"]),
             "entries": listing["entries"],
+        }
+
+    def life(self) -> dict[str, Any]:
+        """Vista Vita: rapporto bounded e stato degli episodi, senza shadow."""
+
+        from .deliberation import DeliberationService
+        from .situation import SituationBuilder
+
+        builder = SituationBuilder(self.root)
+        report = builder.build()
+        status = DeliberationService(self.root, at=builder.now).status()
+        return {
+            "generated_at": builder.stamp,
+            "enabled": status["enabled"],
+            "status": status,
+            "report": report,
         }
 
     def relations(self, *, offset: int = 0, limit: int = 50, user_id: str | None = None) -> dict[str, Any]:
@@ -1471,6 +1489,8 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 self._send_json(self.server.data.relations(offset=offset, limit=limit, user_id=self._first(params, "user_id") or None))
             elif path == SETTINGS_PATH:
                 self._send_json(DashboardSettings(self.server.data.root).snapshot())
+            elif path == LIFE_PATH:
+                self._send_json(self.server.data.life())
             elif path == "/api/timeline":
                 self._send_json(
                     self.server.data.timeline(
@@ -1740,6 +1760,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             result = settings.save_whatsapp(payload)
         elif path == SETTINGS_BEHAVIOR_PATH:
             result = settings.save_behavior(payload)
+        elif path == LIFE_PATH:
+            result = settings.set_life_engine(
+                payload.get("enabled"), payload.get("confirmation", "")
+            )
         elif path == AUTONOMY_REVIEW_PATH:
             result = AutonomyService(self.server.data.root, None).review_uncertain(
                 payload.get("run_id"), payload.get("confirmation"), payload.get("note")

@@ -371,6 +371,12 @@ class DashboardHTTPTests(DashboardFixture):
         self.assertIn("seeds", evolution)
         self.assertIn("cascades", evolution)
 
+        status, _headers, body = self._get("/api/life")
+        self.assertEqual(status, 200)
+        life = json.loads(body)
+        self.assertFalse(life["enabled"])
+        self.assertEqual(life["report"]["activity"]["label"], "Programmazione al PC")
+
     def test_bad_requests_are_reported(self) -> None:
         status, _headers, body = self._get("/api/memory/missing")
         self.assertEqual(status, 404)

@@ -257,8 +257,14 @@ class MessageExecutor:
                 return person
         return None
 
-    def authorize(self, text: Any) -> dict[str, Any]:
-        """Verifica ogni condizione e restituisce il motivo di un eventuale blocco."""
+    def authorize(
+        self, text: Any, *, target_user_id: str | None = None
+    ) -> dict[str, Any]:
+        """Verifica ogni condizione e restituisce il motivo di un eventuale blocco.
+
+        Con ``target_user_id`` valuta un intento diretto, senza consumare un
+        impulso del battito: restano whitelist, flag, orari e limite giornaliero.
+        """
 
         checks: list[dict[str, Any]] = []
 
@@ -269,6 +275,13 @@ class MessageExecutor:
         check("testo", text_error is None, text_error)
 
         impulse = self.pending_impulse()
+        if target_user_id is not None:
+            impulse = {
+                "trigger": "life_intent",
+                "target": {"user_id": target_user_id},
+                "delivery": {"channel": CHANNEL},
+                "created_at": self.now.isoformat(),
+            }
         check("impulso", impulse is not None, "nessun impulso in attesa")
 
         channel = None
@@ -455,6 +468,37 @@ class MessageExecutor:
                 }
             }
         )
+        return {"delivered": True, **record}
+
+    def deliver_intent(
+        self, text: Any, user_id: str, *, intent_id: str
+    ) -> dict[str, Any]:
+        """Consegna esplicita di un intento, senza consumare un impulso."""
+
+        if not isinstance(user_id, str) or not user_id.strip():
+            raise ValidationError("user_id: attesa una stringa non vuota.")
+        report = self.authorize(text, target_user_id=user_id.strip())
+        if not report["allowed"]:
+            raise AccessDeniedError(
+                "Consegna bloccata: " + "; ".join(report["reasons"])
+            )
+        person = self._person(user_id.strip()) or {}
+        stamp = self.now.replace(microsecond=0).isoformat()
+        record = {
+            "message_id": f"msg_{uuid.uuid4().hex[:12]}",
+            "delivered_at": stamp,
+            "channel": CHANNEL,
+            "transport": TRANSPORT,
+            "target": {
+                "user_id": user_id.strip(),
+                "display_name": person.get("display_name"),
+            },
+            "trigger": "life_intent",
+            "intent_id": intent_id,
+            "impulse": None,
+            "text": report["text"],
+        }
+        self._append_outbox(record)
         return {"delivered": True, **record}
 
 

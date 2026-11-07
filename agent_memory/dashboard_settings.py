@@ -45,6 +45,8 @@ from .profile import (
 
 ARCHIVE_CONFIRMATION = "ELIMINA"
 SENDING_CONFIRMATION = "ABILITA"
+LIFE_ENABLE_CONFIRMATION = "ABILITO"
+LIFE_DISABLE_CONFIRMATION = "DISATTIVA"
 PROFILE_ENTRIES = ("config", "data", "files")
 # Cache condivisa e certificato non sono dati personali: restano nel profilo
 # nuovo, come fa già ``profile init --force``.
@@ -560,6 +562,28 @@ class DashboardSettings:
             allow_visual_generation=False,
         )
         return self.snapshot()
+
+    def set_life_engine(self, enabled: Any, confirmation: Any) -> dict[str, Any]:
+        """Abilita o spegne il motore vita solo con conferma amministrativa."""
+
+        if not isinstance(enabled, bool):
+            raise ValidationError("enabled: atteso true o false.")
+        expected = (
+            LIFE_ENABLE_CONFIRMATION if enabled else LIFE_DISABLE_CONFIRMATION
+        )
+        if not isinstance(confirmation, str) or confirmation.strip() != expected:
+            raise ValidationError(
+                f"Per {'attivare' if enabled else 'disattivare'} il motore vita "
+                f"scrivi {expected}."
+            )
+        state = self.config.get("current_state")
+        flags = state.get("flags")
+        flags = flags if isinstance(flags, dict) else {}
+        if bool(flags.get("life_engine_enabled", False)) != enabled:
+            self.config.update_current_state(
+                {"flags": {"life_engine_enabled": enabled}}
+            )
+        return {"enabled": enabled}
 
     # -- ciclo di vita del profilo -----------------------------------------
 

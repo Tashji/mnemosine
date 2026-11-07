@@ -1205,7 +1205,40 @@ Gli effetti sono limitati a variazioni di ±25 per bisogno e il valore resta tra
 }
 ```
 
-Browser, file e WhatsApp restano fuori: gli intenti con tool esterni vengono rifiutati. Anche il collegamento automatico al battito e il comando amministrativo per accendere il motore restano alla Fase 4. Le scritture passano da `ConfigStore.transaction()` e non espongono ombra, memorie latenti o represse, segreti o numeri di telefono.
+Le scritture passano da `ConfigStore.transaction()` e non espongono ombra, memorie latenti o represse, segreti o numeri di telefono. La Fase 3 esegue solo intenti interni; la Fase 4 aggiunge browser, file e WhatsApp, il collegamento al battito e il comando amministrativo per accendere il motore.
+
+### 14.12. Battito, dashboard Vita e intenti esterni (Fase 4)
+
+Con `life_engine_enabled` attivo, il battito non crea più impulsi di messaggio: la decisione diventa `deliberazione` e, dopo il commit dello stato, esegue un tick del `DeliberationService`. L'esito è riportato in `life` nella risposta del battito; gli impulsi già in attesa non vengono cancellati. A flag spento resta attivo il percorso precedente, con trigger, consegna e outbox invariati. Il battito non chiama un LLM e non decide al posto del modello.
+
+La dashboard espone la vista **Vita** in sola lettura: stato del motore, episodio attivo, ultimo episodio, prossimo istante utile, conteggio giornaliero e riepilogo dell'esito. L'accensione e lo spegnimento sono un comando amministrativo separato, non un flag tra quelli modificabili in **Comportamento**: per abilitare bisogna digitare `ABILITO`, per disabilitare `DISATTIVA`. Il toggle scrive `current_state.flags.life_engine_enabled` tramite `ConfigStore.transaction()`.
+
+Gli intenti esterni usano gli strumenti già esistenti e restano spenti finché la decisione non li autorizza:
+
+- `files` scrive nella sandbox `files/` con `FileSandbox.write_file`: percorsi relativi, niente `..` o symlink, `overwrite` esplicito.
+- `whatsapp` chiama `MessageExecutor.deliver_intent`, che riusa gli stessi controlli di `authorize` (relazione, whitelist, integrazione e flag, manutenzione, disponibilità, fascia di silenzio, limite giornaliero) ma non consuma un impulso. Il messaggio finisce nell'outbox; il trasporto verso WhatsApp Web resta separato.
+- `browser` valida la `BrowserPolicy` e accoda un impulso `life_intent` in `current_state.heartbeat.pending_impulse`. L'esecuzione resta ai tool autonomi (`autonomous_claim`, `autonomous_act`, `autonomous_verify`), che riapplicano whitelist e conferma dell'interazione. Non c'è retry automatico dopo un esito incerto.
+
+`requires_confirmation` vale `true` per impostazione predefinita su ogni tool esterno: in quel caso l'esito è `blocked: true`, `applied: false`, nessun effetto su bisogni, loop o attività, e nessun tool viene eseguito. Un errore durante l'esecuzione chiude l'episodio come bloccato e registra il motivo, senza ripetere l'azione. Gli effetti di bisogni e loop si applicano solo dopo un successo; `tool: "none"` resta simulato. L'esito esterno espone `tool`, `execution` e `simulated: false`, senza telefoni, token o percorsi assoluti.
+
+```json
+{
+  "decision": "intent",
+  "intent": {
+    "title": "Annotare l'idea",
+    "goal": "Salvare un appunto nella sandbox",
+    "why_now": "Ho appena pensato a qualcosa.",
+    "tool": "files",
+    "target": "appunti/idea.txt",
+    "arguments": {"content": "Idea per la cena."},
+    "expected_effects": {"hunger": -5},
+    "risk": "low",
+    "requires_confirmation": false
+  }
+}
+```
+
+La conferma dichiarata nella decisione è l'unica autorizzazione: il server non chiede conferme interattive e non inventa un consenso. Un client che non può raccogliere l'autorizzazione dell'amministratore deve lasciare `requires_confirmation: true`.
 
 <p align="center">
   <img src="assets/mnemosine-divider.svg" alt="" width="100%">
@@ -1636,9 +1669,11 @@ Impostazioni dalla dashboard:
 
 - Ogni scrittura passa dalla sessione autenticata e da un token CSRF monouso; i valori vengono riletti con le classi del runtime prima di sostituire il file. Un archivio non cancella i dati: resta nella cartella di backup e può essere ripristinato a mano.
 
-La dashboard espone sette viste:
+La dashboard espone nove viste:
 
 - **Panoramica**: identità, stato corrente, conteggi, ultimi ricordi, riepilogo cliccabile delle relazioni, stato del ciclo autonomo con l'outbox e contenuto della sandbox `files/`.
+
+- **Vita**: stato del motore deliberativo, episodio attivo, ultimo episodio, prossimo istante utile e riepilogo dell'esito. La vista è in sola lettura; l'accensione e lo spegnimento richiedono `ABILITO` o `DISATTIVA` e restano separati dai flag generici di **Comportamento**.
 
 - **Relazioni**: elenco dei contatti ordinato per ultima interazione e scheda completa con fiducia, intimità, preferenze, fatti confermati, confini relazionali e storico delle interazioni (con apertura diretta dei ricordi collegati). Si possono aggiungere e modificare i contatti senza alterare storico e contatori. La rimozione richiede di scrivere `RIMUOVI` ed elimina il contatto e il suo storico relazionale, non i ricordi episodici. La whitelist WhatsApp resta separata e non viene modificata automaticamente.
 
@@ -1652,7 +1687,9 @@ La dashboard espone sette viste:
 
 - **Impostazioni**: browser e whitelist, WhatsApp, flag e battito, archiviazione del profilo.
 
-Le API di consultazione sono in sola lettura; i POST gestiscono accesso, logout, prima configurazione, completamento del profilo (biografia e indice), la gestione dei contatti in **Relazioni** e le scritture di **Impostazioni** (integrazioni, comportamento e archiviazione del profilo). Ogni POST autenticato richiede un token CSRF monouso. Il server ascolta su `127.0.0.1` per impostazione predefinita: contiene dati amministrativi e tratti dell'ombra, quindi non va pubblicato su Internet. L'opzione `--host` permette di cambiare l'indirizzo; su un host non loopback l'autenticazione è obbligatoria. Usa `--https` per cifrare il traffico quando la dashboard è raggiungibile da altri dispositivi.
+- **Aspetto**: caratteristiche fisiche, seed visivo e generazione manuale delle immagini, con conferma esplicita prima di ogni invio al provider.
+
+Le API di consultazione sono in sola lettura; i POST gestiscono accesso, logout, prima configurazione, completamento del profilo (biografia e indice), la gestione dei contatti in **Relazioni**, il toggle amministrativo di **Vita** (`/api/life`) e le scritture di **Impostazioni** (integrazioni, comportamento e archiviazione del profilo). Ogni POST autenticato richiede un token CSRF monouso. Il server ascolta su `127.0.0.1` per impostazione predefinita: contiene dati amministrativi e tratti dell'ombra, quindi non va pubblicato su Internet. L'opzione `--host` permette di cambiare l'indirizzo; su un host non loopback l'autenticazione è obbligatoria. Usa `--https` per cifrare il traffico quando la dashboard è raggiungibile da altri dispositivi.
 
 ### 17.4. Routine giornaliera e stato corrente
 

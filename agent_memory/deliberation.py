@@ -7,8 +7,10 @@ di stream, bisogni, emozione e loop, e riflessione deterministica.
 
 Gli intenti con ``tool: none`` restano simulati: aggiornano lo stato interno e
 vengono etichettati come tali, senza essere presentati come fatti fisici. Gli
-tool esterni, l'esecuzione browser/files/WhatsApp e il collegamento al battito
-arrivano nella Fase 4.
+intenti esterni (``files``, ``whatsapp``, ``browser``) passano dai controlli
+esistenti: conferma esplicita, sandbox dei file, whitelist e flag WhatsApp,
+policy del browser. Un intento bloccato non applica effetti; uno eseguito
+registra l'esito senza esporre telefoni o credenziali.
 
 Il rapporto di situazione resta la fonte della fotografia iniziale; il modulo
 scrive il riepilogo in ``current_state.deliberation`` e le righe di audit nel
@@ -25,6 +27,7 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from .browser import BrowserPolicy
 from .config import ConfigStore
 from .db import Database
 from .errors import (
@@ -33,6 +36,8 @@ from .errors import (
     NotFoundError,
     ValidationError,
 )
+from .executor import MessageExecutor
+from .files import FileSandbox
 from .life import NEED_NAMES, normalize_life
 from .operational import canonical
 from .situation import SituationBuilder
@@ -47,10 +52,12 @@ EPISODE_STATES = (
 )
 ACTIVE_STATES = ("open", "decided", "executing")
 DECISIONS = ("continue", "unstructured", "intent")
+INTENT_TOOLS = ("none", "browser", "files", "whatsapp")
 INTENT_RISKS = ("low", "medium", "high")
 MAX_TEXT = 500
 MAX_STREAM = 8
 MAX_INTENT_STEPS = 10
+MAX_INTENT_ARGUMENTS = 20
 MAX_REASON = 200
 DEFAULT_EPISODE_MINUTES = 15
 DEFAULT_NEXT_REVIEW_MINUTES = 45
@@ -153,13 +160,12 @@ def _validate_intent(block: Any) -> dict[str, Any]:
     title = _clean_text(block.get("title"), "decision.intent.title")
     goal = _clean_text(block.get("goal"), "decision.intent.goal")
     why_now = _clean_text(block.get("why_now"), "decision.intent.why_now")
-    tool = block.get("tool", "none")
+    tool = block.get("tool")
     if tool is None:
         tool = "none"
-    if tool != "none":
+    if tool not in INTENT_TOOLS:
         raise ValidationError(
-            "decision.intent.tool: nella Fase 3 è disponibile solo 'none'; "
-            "gli strumenti esterni arrivano con la Fase 4."
+            "decision.intent.tool: ammessi none, browser, files e whatsapp."
         )
     target = _clean_text(
         block.get("target"), "decision.intent.target", required=False
@@ -167,6 +173,59 @@ def _validate_intent(block: Any) -> dict[str, Any]:
     intent_id = _clean_text(
         block.get("intent_id"), "decision.intent.intent_id", required=False
     )
+    raw_arguments = block.get("arguments", {})
+    if raw_arguments is None:
+        raw_arguments = {}
+    if not isinstance(raw_arguments, dict):
+        raise ValidationError("decision.intent.arguments: atteso un oggetto.")
+    if len(raw_arguments) > MAX_INTENT_ARGUMENTS:
+        raise ValidationError(
+            f"decision.intent.arguments: massimo {MAX_INTENT_ARGUMENTS} chiavi."
+        )
+    arguments: dict[str, Any] = {}
+    for key, value in raw_arguments.items():
+        if not isinstance(key, str) or not key.strip():
+            raise ValidationError(
+                "decision.intent.arguments: le chiavi devono essere stringhe non vuote."
+            )
+        if isinstance(value, (str, bool, int, float)) or value is None:
+            arguments[key] = value
+        elif isinstance(value, list) and all(
+            isinstance(item, str) for item in value
+        ):
+            arguments[key] = value
+        else:
+            raise ValidationError(
+                f"decision.intent.arguments.{key}: valore non ammesso."
+            )
+    if tool == "files":
+        path = target or arguments.get("path")
+        content = arguments.get("content")
+        if not isinstance(path, str) or not isinstance(content, str):
+            raise ValidationError(
+                "Un intento files richiede target/path e arguments.content."
+            )
+        if len(content) > 262_144:
+            raise ValidationError(
+                "decision.intent.arguments.content: massimo 262144 caratteri."
+            )
+    if tool == "whatsapp":
+        recipient = target or arguments.get("user_id")
+        text = arguments.get("text")
+        if not isinstance(recipient, str) or not isinstance(text, str):
+            raise ValidationError(
+                "Un intento whatsapp richiede target/user_id e arguments.text."
+            )
+        if len(text) > 2000:
+            raise ValidationError(
+                "decision.intent.arguments.text: massimo 2000 caratteri."
+            )
+    if tool == "browser":
+        url = target or arguments.get("url")
+        if not isinstance(url, str) or not url.strip():
+            raise ValidationError(
+                "Un intento browser richiede target o arguments.url."
+            )
     raw_steps = block.get("steps")
     if raw_steps is None:
         steps: list[str] = []
@@ -186,7 +245,9 @@ def _validate_intent(block: Any) -> dict[str, Any]:
         raise ValidationError(
             "decision.intent.risk: ammessi low, medium e high."
         )
-    requires_confirmation = block.get("requires_confirmation", False)
+    requires_confirmation = block.get(
+        "requires_confirmation", tool != "none"
+    )
     if not isinstance(requires_confirmation, bool):
         raise ValidationError(
             "decision.intent.requires_confirmation: atteso un booleano."
@@ -196,9 +257,10 @@ def _validate_intent(block: Any) -> dict[str, Any]:
         "title": title,
         "goal": goal,
         "why_now": why_now,
-        "tool": "none",
+        "tool": tool,
         "target": target,
         "steps": steps,
+        "arguments": arguments,
         "expected_effects": _expected_effects(
             block.get("expected_effects"), "decision.intent.expected_effects"
         ),
@@ -708,6 +770,82 @@ class DeliberationService:
         result["arousal"] = round(max(0.0, min(1.0, arousal)), 3)
         return {"emotion": result}
 
+    def _execute_intent(self, intent: dict[str, Any]) -> dict[str, Any]:
+        """Esegue un intento esterno e restituisce solo dati non sensibili.
+
+        Gli effetti remoti non sono transazionali: se la scrittura successiva
+        fallisce, il file o la riga di outbox restano. Gli errori vengono
+        intercettati dal chiamante e registrati come intento bloccato.
+        """
+
+        tool = intent["tool"]
+        arguments = intent["arguments"]
+        if tool == "files":
+            path = intent.get("target") or arguments.get("path")
+            result = FileSandbox(self.root).write_file(
+                path,
+                arguments["content"],
+                overwrite=arguments.get("overwrite") is True,
+            )
+            return {
+                "path": result["path"],
+                "size": result["size"],
+                "created": result["created"],
+                "overwritten": result["overwritten"],
+            }
+        if tool == "whatsapp":
+            user_id = intent.get("target") or arguments.get("user_id")
+            result = MessageExecutor(self.root, at=self.now).deliver_intent(
+                arguments["text"], user_id, intent_id=intent["intent_id"]
+            )
+            target = result.get("target") or {}
+            return {
+                "message_id": result.get("message_id"),
+                "delivered_at": result.get("delivered_at"),
+                "channel": result.get("channel"),
+                "recipient": target.get("display_name") or target.get("user_id"),
+            }
+
+        url = intent.get("target") or arguments.get("url")
+        policy = BrowserPolicy.from_root(self.root)
+        policy.require_enabled()
+        policy.assert_allowed(url)
+        state = self._state()
+        heartbeat = state.get("heartbeat")
+        heartbeat = heartbeat if isinstance(heartbeat, dict) else {}
+        if isinstance(heartbeat.get("pending_impulse"), dict):
+            raise ValidationError(
+                "C'è già un impulso in attesa: va gestito prima di accodarne "
+                "un altro."
+            )
+        stamp = self.now.replace(microsecond=0).isoformat()
+        impulse = {
+            "trigger": "life_intent",
+            "target": None,
+            "context": {
+                "intent_id": intent["intent_id"],
+                "title": intent["title"],
+                "goal": intent["goal"],
+            },
+            "created_at": stamp,
+            "delivery": {
+                "channel": "browser",
+                "authorized": True,
+                "url": url,
+                "note": "Navigazione solo verso le origini in whitelist.",
+            },
+            "requires_message": False,
+        }
+        self.config.update_current_state(
+            {
+                "heartbeat": {
+                    "pending_impulse": impulse,
+                    "spontaneous_message_pending": True,
+                }
+            }
+        )
+        return {"queued": True, "trigger": "life_intent", "created_at": stamp}
+
     def _apply_decision_locked(
         self, decision: dict[str, Any], *, episode_id: str
     ) -> dict[str, Any]:
@@ -759,17 +897,75 @@ class DeliberationService:
             intent = decision["intent"]
             if not intent.get("intent_id"):
                 intent["intent_id"] = f"int_{episode_id}"
+            tool = intent["tool"]
+            title = intent["title"]
+            if tool != "none" and intent["requires_confirmation"]:
+                self._append_stream(
+                    life,
+                    "intent_blocked",
+                    f"Intento {tool} in attesa di conferma: {title}.",
+                )
+                patch["life"] = life
+                self.config.update_current_state(patch)
+                return {
+                    "applied": False,
+                    "simulated": False,
+                    "blocked": True,
+                    "reason": kind,
+                    "tool": tool,
+                    "confirmation_required": True,
+                    "effects": {},
+                    "reflection": (
+                        f"Intento {tool} non eseguito: richiede una conferma "
+                        "amministrativa esplicita."
+                    ),
+                    "note": (
+                        "Nessun effetto applicato e nessun tool eseguito: "
+                        "l'intento esterno richiede conferma."
+                    ),
+                }
+            execution: dict[str, Any] | None = None
+            if tool != "none":
+                try:
+                    execution = self._execute_intent(intent)
+                except AgentMemoryError as exc:
+                    message = str(exc)[:MAX_TEXT]
+                    self._append_stream(
+                        life,
+                        "intent_blocked",
+                        f"Intento {tool} non eseguito: {message}",
+                    )
+                    patch["life"] = life
+                    self.config.update_current_state(patch)
+                    return {
+                        "applied": False,
+                        "simulated": False,
+                        "blocked": True,
+                        "reason": kind,
+                        "tool": tool,
+                        "confirmation_required": False,
+                        "effects": {},
+                        "error": message,
+                        "reflection": f"Intento {tool} non eseguito: {message}",
+                        "note": (
+                            "Nessun effetto applicato; l'errore è registrato "
+                            "senza ripetere l'azione."
+                        ),
+                    }
             effects = intent.get("expected_effects") or {}
             applied = self._apply_effects(life, effects)
             loop_id = self._touch_loop(life, intent.get("target"))
-            title = intent["title"]
             life["mode"] = "intent"
             life["attention"] = title
             life["mental_content"] = intent["goal"]
+            if tool == "none":
+                stream_text = f"Intento simulato: {title}; {intent['goal']}"
+            else:
+                stream_text = f"Intento {tool} eseguito: {title}; {intent['goal']}"
             self._append_stream(
                 life,
-                "intent",
-                f"Intento simulato: {title}; {intent['goal']}",
+                "intent" if tool == "none" else f"intent_{tool}",
+                stream_text,
             )
             patch["activity"] = self._activity_patch(
                 state,
@@ -779,11 +975,25 @@ class DeliberationService:
                 attention=title,
                 duration_minutes=decision["next_review_minutes"],
             )
-            reflection = f"Intento interno simulato: {title}. {intent['goal']}"
-            note = (
-                "Intento con tool none: stato e loop aggiornati; "
-                "l'azione resta simulata e non verificata fisicamente."
-            )
+            if tool == "none":
+                reflection = f"Intento interno simulato: {title}. {intent['goal']}"
+                note = (
+                    "Intento con tool none: stato e loop aggiornati; "
+                    "l'azione resta simulata e non verificata fisicamente."
+                )
+            else:
+                reflection = f"Intento {tool} eseguito: {title}. {intent['goal']}"
+                note = {
+                    "files": "File scritto nella sandbox files/ dell'agente.",
+                    "whatsapp": (
+                        "Messaggio accodato nell'outbox dopo i controlli di "
+                        "whitelist, flag e limiti."
+                    ),
+                    "browser": (
+                        "Navigazione accodata come impulso: l'esecuzione spetta "
+                        "ai tool autonomi, con la policy del browser."
+                    ),
+                }[tool]
 
         patch["life"] = life
         patch.update(self._reflection_patch(state, applied))
@@ -797,8 +1007,12 @@ class DeliberationService:
             "note": note,
         }
         if kind == "intent":
-            outcome["tool"] = "none"
+            intent = decision["intent"]
+            outcome["tool"] = intent["tool"]
             outcome["loop_id"] = loop_id
+            if intent["tool"] != "none":
+                outcome["simulated"] = False
+                outcome["execution"] = execution
         return outcome
 
     def _expire_locked(self, conn: Any) -> list[dict[str, Any]]:
@@ -940,10 +1154,12 @@ class DeliberationService:
             return {"expired": expired, "count": len(expired)}
 
     def decide(self, decision: Any) -> dict[str, Any]:
-        """Registra una decisione e applica gli effetti interni.
+        """Registra una decisione e applica gli effetti.
 
-        Sono ammessi ``continue``, ``unstructured`` e ``intent`` con
-        ``tool: none``. Gli intenti esterni vengono rifiutati in questa fase.
+        Gli intenti esterni vengono eseguiti solo con ``requires_confirmation``
+        falso; in caso contrario l'esito è bloccato e nessun effetto viene
+        applicato. Un errore dell'esecuzione chiude l'episodio come bloccato,
+        senza ritentare l'azione.
         """
 
         normalized = validate_decision(decision)

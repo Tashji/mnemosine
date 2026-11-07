@@ -126,6 +126,11 @@ class HeartbeatTestCase(unittest.TestCase):
     def engine(self, at: str = NOW) -> HeartbeatEngine:
         return HeartbeatEngine(self.root, at=datetime.fromisoformat(at))
 
+    def enable_life_engine(self) -> None:
+        state = self.read_json("current_state")
+        state.setdefault("flags", {})["life_engine_enabled"] = True
+        self.write_json("current_state", state)
+
 
 class LoadDynamicsTests(unittest.TestCase):
     def test_each_complexity_has_its_weight(self) -> None:
@@ -258,6 +263,37 @@ class HeartbeatTickTests(HeartbeatTestCase):
         result = self.engine().preview()
 
         self.assertEqual(result["decision"], "manutenzione")
+
+    def test_life_engine_suppresses_message_impulses(self) -> None:
+        self.set_people([])
+        self.plan_day(start="14:30")
+        self.enable_life_engine()
+
+        result = self.engine().preview()
+
+        self.assertEqual(result["decision"], "deliberazione")
+        self.assertTrue(result["life_engine_enabled"])
+        self.assertIsNone(result["impulse"])
+        self.assertIsNone(result["state"]["heartbeat"]["pending_impulse"])
+
+    def test_life_engine_apply_opens_an_episode_without_an_impulse(self) -> None:
+        self.set_people([])
+        self.plan_day(start="14:30")
+        self.enable_life_engine()
+        state = self.read_json("current_state")
+        state["life"] = {"needs": {"hunger": {"value": 82}}}
+        self.write_json("current_state", state)
+
+        result = self.engine().apply()
+
+        self.assertTrue(result["applied"])
+        self.assertEqual(result["decision"], "deliberazione")
+        self.assertIsNone(result["heartbeat"]["pending_impulse"])
+        self.assertTrue(result["life"]["opened"])
+        self.assertEqual(result["life"]["reason"], "opened")
+        self.assertEqual(
+            self.read_json("current_state")["deliberation"]["state"], "open"
+        )
         self.assertIsNone(result["impulse"])
 
     def test_pending_impulse_is_not_lost_by_a_quiet_tick(self) -> None:

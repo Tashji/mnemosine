@@ -595,14 +595,19 @@ class HeartbeatEngine:
         pending = pending if isinstance(pending, dict) else None
         flags = self.state.get("flags")
         flags = flags if isinstance(flags, dict) else {}
+        life_engine = flags.get("life_engine_enabled") is True
 
         trigger: dict[str, Any] | None = None
         if self.sleeping:
             decision = "consolidamento"
-        elif pending is not None:
-            decision = "impulso_in_attesa"
         elif flags.get("maintenance_mode"):
             decision = "manutenzione"
+        elif life_engine:
+            # Il motore vita valuta la salienza e apre l'episodio nel tick;
+            # l'heartbeat non deve creare un secondo canale di impulsi.
+            decision = "deliberazione"
+        elif pending is not None:
+            decision = "impulso_in_attesa"
         elif load_after >= float(thresholds.get("overload", 80)):
             decision = "riposo_cognitivo"
         elif (
@@ -683,6 +688,7 @@ class HeartbeatEngine:
             "now": self.now.isoformat(),
             "timezone": self.routine.timezone_name,
             "sleeping": self.sleeping,
+            "life_engine_enabled": life_engine,
             "minutes_since_last_run": round(minutes, 1),
             "mental_load_before": load_before,
             "mental_load_after": load_after,
@@ -720,6 +726,19 @@ class HeartbeatEngine:
             if not report["would_change"] and consolidation is None:
                 return {**report, "applied": False}
             state = self.config.update_current_state(copy.deepcopy(self._patch))
+        life = None
+        if state.get("flags", {}).get("life_engine_enabled") is True:
+            from .deliberation import DeliberationService
+
+            try:
+                life = DeliberationService(self.root, at=self.now).tick()
+                life.pop("situation", None)
+            except AgentMemoryError as exc:
+                life = {
+                    "opened": False,
+                    "reason": "life_engine_error",
+                    "warning": str(exc),
+                }
         return {
             **report,
             "applied": True,
@@ -727,6 +746,7 @@ class HeartbeatEngine:
             "mental_load_after": state["mental_load"],
             "heartbeat": state["heartbeat"],
             "consolidation": consolidation,
+            "life": life,
         }
 
     def _consolidate(self, conn: Any) -> dict[str, Any] | None:
