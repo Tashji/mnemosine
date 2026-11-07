@@ -1121,6 +1121,9 @@ def _config_documents(
                 "shadow_direct_read_enabled": False,
                 "shadow_engine_enabled": False,
                 "maintenance_mode": False,
+                # La Fase 2 è pronta, ma il motore resta spento finché
+                # l'amministratore non lo abilita esplicitamente.
+                "life_engine_enabled": False,
             },
             # Il profilo nuovo nasce con uno stato di vita esplicito. I profili
             # precedenti non lo hanno: il rapporto usa i default senza scrivere.

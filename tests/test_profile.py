@@ -97,6 +97,7 @@ class ProfileInitTests(unittest.TestCase):
         )
         self.assertEqual(life["open_loops"], [])
         self.assertEqual(life["stream"], [])
+        self.assertFalse(configs["current_state"]["flags"]["life_engine_enabled"])
 
         self.assertEqual(self._count("timeline_episodic.db", "episodic_memories"), 0)
         self.assertEqual(self._count("shadow_diary.db", "shadow_entries"), 0)

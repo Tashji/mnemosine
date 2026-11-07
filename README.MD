@@ -47,6 +47,7 @@ Il progetto ruota attorno al Model Context Protocol: il server espone all'LLM la
 | **Biografia procedurale** | Un passato coerente, generato da età, epoche ed eventi reali. |
 | **Ciclo di vita** | Routine, carico cognitivo, consolidamento e iniziativa autonoma. |
 | **Stato di vita (Fase 1)** | Bisogni, loop aperti, stream, ambiente e rapporto di situazione in sola lettura, senza deliberazione. |
+| **Deliberazione (Fase 2)** | Salienza, episodi, scadenza e default conservativo; il motore resta spento finché non viene abilitato. |
 | **Relazioni** | Fiducia, intimità e storia sintetica delle persone importanti. |
 | **Browser controllato** | Navigazione con Playwright confinata a origini HTTPS in whitelist, con indice numerato dei link per i modelli piccoli. |
 | **File locali** | Sandbox `files/` del profilo per leggere e scrivere testo, senza uscire dalla cartella e senza symlink. |
@@ -1155,6 +1156,26 @@ PY
 ```
 
 La specifica completa è in [`docs/superpowers/specs/2026-11-06-situated-deliberation-design.md`](docs/superpowers/specs/2026-11-06-situated-deliberation-design.md).
+
+### 14.10. Deliberazione: episodi e salienza (Fase 2)
+
+La Fase 2 aggiunge il ciclo minimo dell'episodio deliberativo, senza esporre ancora un tool MCP di decisione. `DeliberationService` valuta la salienza del rapporto, apre al massimo un episodio, lo chiude con una decisione `continue` o `unstructured` e applica un default conservativo alla scadenza. Non applica effetti, non esegue intenti e non chiama un modello: esecuzione e riflessione arrivano nella Fase 3.
+
+Il motore è governato dal flag `current_state.flags.life_engine_enabled`, inizialmente `false` nei profili nuovi e assente (quindi spento) nei profili precedenti. Prima di aprire un episodio controlla sonno, manutenzione, episodio attivo, azioni autonome incerte, intervallo minimo di 90 minuti e budget di 6 episodi al giorno. La salienza può venire da un bisogno oltre soglia, un loop in scadenza o fermo, una transizione di routine o da un'esplorazione esplicita tramite `seed`; la maggior parte dei tick non apre nulla.
+
+`current_state.deliberation` contiene solo il riepilogo dell'ultimo episodio: id, stato, motivo, apertura, scadenza, decisione ed esito. Il rapporto completo e l'audit vivono nelle tabelle `deliberation_episodes` e `deliberation_events` della timeline, alla versione schema `4.0`. Un episodio scaduto chiude come `continue` se l'attività in corso è sicura, altrimenti come `unstructured` con “Riposo” e “pausa”; non esiste un default `do_nothing`.
+
+```bash
+python - <<'PY'
+from agent_memory.deliberation import DeliberationService
+
+service = DeliberationService("percorso/del_profilo")
+print(service.tick())
+print(service.status())
+PY
+```
+
+Le decisioni `intent` e `do_nothing` sono rifiutate in questa fase. Le scritture passano da `ConfigStore.transaction()`; il rapporto non include ombra, memorie latenti o represse, segreti o numeri di telefono.
 
 <p align="center">
   <img src="assets/mnemosine-divider.svg" alt="" width="100%">

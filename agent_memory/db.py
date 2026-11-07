@@ -28,6 +28,8 @@ TIMELINE_TABLES = {
     "memory_revisions",
     "schema_meta",
     "conscious_episodic_memories",
+    "deliberation_episodes",
+    "deliberation_events",
 }
 SHADOW_TABLES = {
     "shadow_entries",
@@ -63,6 +65,8 @@ TIMELINE_COUNTS = {
     "conscious_memories": "conscious_episodic_memories",
     "memory_links": "memory_links",
     "memory_revisions": "memory_revisions",
+    "deliberation_episodes": "deliberation_episodes",
+    "deliberation_events": "deliberation_events",
 }
 SHADOW_COUNTS = {
     "shadow_entries": "shadow_entries",

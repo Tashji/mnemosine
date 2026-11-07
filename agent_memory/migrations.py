@@ -43,7 +43,7 @@ BASELINE_VERSION = 1
 # Per ogni database: nome del file di schema dentro il pacchetto e versione
 # supportata dal codice corrente.
 DATABASE_SCHEMAS: dict[str, tuple[str, int]] = {
-    "timeline_episodic": ("timeline_episodic.sql", 3),
+    "timeline_episodic": ("timeline_episodic.sql", 4),
     "shadow_diary": ("shadow_diary.sql", 1),
     "semantic_memory": ("semantic_memory.sql", 1),
     "vector_index": ("vector_index.sql", 1),
@@ -75,7 +75,47 @@ def _timeline_v3(conn: sqlite3.Connection) -> None:
     )
 
 
-SQLITE_MIGRATIONS["timeline_episodic"] = {2: _timeline_v2, 3: _timeline_v3}
+def _timeline_v4(conn: sqlite3.Connection) -> None:
+    """Aggiunge gli episodi deliberativi e il loro audit."""
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS deliberation_episodes ("
+        "id TEXT PRIMARY KEY, "
+        "state TEXT NOT NULL CHECK (state IN ('open', 'decided', 'executing', "
+        "'closed', 'expired', 'cancelled')), "
+        "reason TEXT, "
+        "situation_json TEXT NOT NULL, "
+        "opened_at TEXT NOT NULL, "
+        "expires_at TEXT NOT NULL, "
+        "decided_at TEXT, "
+        "closed_at TEXT, "
+        "decision_json TEXT, "
+        "outcome_json TEXT)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS deliberation_episodes_by_state "
+        "ON deliberation_episodes(state, opened_at DESC)"
+    )
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS deliberation_events ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "episode_id TEXT NOT NULL REFERENCES deliberation_episodes(id) "
+        "ON DELETE CASCADE, "
+        "at TEXT NOT NULL, "
+        "type TEXT NOT NULL, "
+        "payload_json TEXT NOT NULL)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS deliberation_events_by_episode "
+        "ON deliberation_events(episode_id, at, id)"
+    )
+
+
+SQLITE_MIGRATIONS["timeline_episodic"] = {
+    2: _timeline_v2,
+    3: _timeline_v3,
+    4: _timeline_v4,
+}
 
 # Documenti JSON della configurazione e versione supportata dal codice.
 JSON_DOCUMENTS: dict[str, int] = {

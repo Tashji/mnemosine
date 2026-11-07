@@ -5,7 +5,7 @@
 
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
-PRAGMA user_version = 1;
+PRAGMA user_version = 4;
 
 CREATE TABLE IF NOT EXISTS schema_meta (
     key TEXT PRIMARY KEY,
@@ -139,3 +139,35 @@ CREATE VIEW IF NOT EXISTS conscious_episodic_memories AS
 SELECT *
 FROM episodic_memories
 WHERE access_level = 'conscious';
+
+-- Episodi deliberativi della Fase 2 e audit associato. Il rapporto completo
+-- resta nel database; current_state.deliberation contiene solo il riepilogo.
+CREATE TABLE IF NOT EXISTS deliberation_episodes (
+    id TEXT PRIMARY KEY,
+    state TEXT NOT NULL CHECK (state IN (
+        'open', 'decided', 'executing', 'closed', 'expired', 'cancelled'
+    )),
+    reason TEXT,
+    situation_json TEXT NOT NULL,
+    opened_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    decided_at TEXT,
+    closed_at TEXT,
+    decision_json TEXT,
+    outcome_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS deliberation_episodes_by_state
+    ON deliberation_episodes(state, opened_at DESC);
+
+CREATE TABLE IF NOT EXISTS deliberation_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    episode_id TEXT NOT NULL REFERENCES deliberation_episodes(id)
+        ON DELETE CASCADE,
+    at TEXT NOT NULL,
+    type TEXT NOT NULL,
+    payload_json TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS deliberation_events_by_episode
+    ON deliberation_events(episode_id, at, id);
