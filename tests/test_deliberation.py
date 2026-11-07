@@ -99,6 +99,7 @@ class DeliberationTests(unittest.TestCase):
         state = self.store.get("current_state")
         self.assertEqual(state["deliberation"]["decision"], "continue")
         self.assertTrue(result["episode"]["outcome"]["applied"])
+        self.assertTrue(state["deliberation"]["outcome"]["applied"])
         self.assertEqual(state["life"]["stream"][-1]["kind"], "continue")
         self.assertIn("Programmazione al PC", state["life"]["stream"][-1]["text"])
         with Database(self.root).timeline() as conn:

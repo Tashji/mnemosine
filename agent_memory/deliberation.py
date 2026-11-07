@@ -456,6 +456,7 @@ class DeliberationService:
             "decided_at": view.get("decided_at"),
             "closed_at": view.get("closed_at"),
             "decision": decision_kind,
+            "outcome": view.get("outcome"),
         }
 
     def _event(
