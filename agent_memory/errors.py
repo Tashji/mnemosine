@@ -57,3 +57,19 @@ class BrowserBlockedError(BrowserError):
 
 class BrowserUnavailableError(BrowserError):
     """Browser disabilitato o backend non installato."""
+
+
+class OutboxError(AgentMemoryError):
+    """Errore del trasporto dell'outbox verso WhatsApp Web."""
+
+
+class OutboxBusyError(OutboxError):
+    """Un'altra esecuzione del trasporto è già attiva sul profilo."""
+
+
+class OutboxBlockedError(OutboxError):
+    """Il trasporto non può agire: nessun effetto esterno è stato prodotto."""
+
+
+class OutboxUncertainError(OutboxError):
+    """L'azione può aver avuto effetto, ma l'esito non è verificabile."""

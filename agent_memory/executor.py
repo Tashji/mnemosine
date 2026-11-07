@@ -17,9 +17,9 @@ La consegna passa da una serie di controlli che falliscono chiusi:
   limite giornaliero o se le risposte non sono accettate.
 
 Quando tutto è a posto il messaggio viene scritto in ``data/outbox/messages.jsonl``
-e l'impulso viene chiuso. Il trasporto verso WhatsApp Web resta un passo
-separato e non implementato: qui si produce una consegna durevole e verificabile,
-non si apre una sessione esterna.
+e l'impulso viene chiuso. Il trasporto verso WhatsApp Web è un passo separato
+(``mnemosine-outbox``): qui si produce una consegna durevole e verificabile,
+senza aprire una sessione esterna.
 """
 
 from __future__ import annotations
@@ -86,6 +86,15 @@ class WhatsAppPolicy:
             if contact.user_id == user_id:
                 return contact
         return None
+
+    def is_quiet(self, moment: time) -> bool:
+        """Vero dentro la fascia di silenzio configurata."""
+
+        return _in_window(
+            moment,
+            time.fromisoformat(self.quiet_start),
+            time.fromisoformat(self.quiet_end),
+        )
 
     @classmethod
     def load(cls, root: str | Path) -> WhatsAppPolicy:
@@ -349,11 +358,7 @@ class MessageExecutor:
                 "l'agente non accetta messaggi in questo momento",
             )
 
-            quiet = _in_window(
-                self.now.time(),
-                time.fromisoformat(self.policy.quiet_start),
-                time.fromisoformat(self.policy.quiet_end),
-            )
+            quiet = self.policy.is_quiet(self.now.time())
             check(
                 "orario",
                 not quiet,

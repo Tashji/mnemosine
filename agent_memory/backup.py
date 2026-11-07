@@ -208,6 +208,17 @@ class BackupService:
                         f"salvare: {candidate.relative_to(source_root)}."
                     )
             for filename in sorted(filenames):
+                # Il lock e i file temporanei del trasporto outbox sono stato
+                # operativo del processo, non dati da ripristinare; su Windows
+                # copiare un file bloccato fallirebbe l'intero backup.
+                if prefix == "data/outbox" and (
+                    filename == ".transport.lock"
+                    or (
+                        filename.startswith(".status.json.")
+                        and filename.endswith(".tmp")
+                    )
+                ):
+                    continue
                 candidate = current_path / filename
                 if candidate.is_symlink():
                     raise ConfigError(

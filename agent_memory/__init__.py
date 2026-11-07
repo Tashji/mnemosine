@@ -19,6 +19,10 @@ from .errors import (
     DatabaseUnavailable,
     EmbeddingUnavailable,
     NotFoundError,
+    OutboxBlockedError,
+    OutboxBusyError,
+    OutboxError,
+    OutboxUncertainError,
     ValidationError,
     VectorIndexError,
 )
@@ -27,7 +31,7 @@ from .semantic import SemanticService
 from .service import MemoryService, ShadowService
 from .vector_index import VectorIndexManager
 
-__version__ = "0.9.1"
+__version__ = "0.10.0"
 
 __all__ = [
     "DEFAULT_MODEL",
@@ -45,6 +49,10 @@ __all__ = [
     "FastEmbedder",
     "MemoryService",
     "NotFoundError",
+    "OutboxBlockedError",
+    "OutboxBusyError",
+    "OutboxError",
+    "OutboxUncertainError",
     "RetrievalService",
     "SemanticService",
     "ShadowService",

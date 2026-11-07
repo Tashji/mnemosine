@@ -2157,7 +2157,7 @@ function whatsappSettings(whatsapp, behavior) {
         "p",
         { class: "settings-hint" },
         sending
-          ? "Il flag di invio è attivo: l'executor può scrivere nell'outbox, ma il trasporto verso WhatsApp Web non è implementato."
+          ? "Il flag di invio è attivo: l'executor può scrivere nell'outbox. L'invio da WhatsApp Web richiede il comando separato mnemosine-outbox, con una sessione visibile."
           : "Il flag di invio è spento: i messaggi restano bloccati anche con l'integrazione attiva. Si abilita dalla sezione Comportamento, con conferma esplicita."
       ),
     ],
@@ -2230,7 +2230,7 @@ function behaviorSettings(behavior) {
       h(
         "p",
         { class: "settings-warning" },
-        "Attivando l'invio, l'executor potrà depositare messaggi per i contatti autorizzati nell'outbox del profilo. Il trasporto verso WhatsApp Web non è ancora implementato, ma il permesso resta scritto in current_state.json. Attivalo solo con la whitelist dei contatti e la sessione browser sotto controllo."
+        "Attivando l'invio, l'executor potrà depositare messaggi per i contatti autorizzati nell'outbox del profilo. Il trasporto è un comando separato (mnemosine-outbox) con sessione visibile; il permesso resta scritto in current_state.json. Attivalo solo con la whitelist dei contatti e la sessione browser sotto controllo."
       ),
       settingsField(
         "Conferma per attivare l'invio",

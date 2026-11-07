@@ -942,7 +942,7 @@ Per WhatsApp Web valgono regole analoghe a quelle della navigazione:
 
 - le credenziali della sessione non entrano mai nel prompt né nella memoria.
 
-L'esecutore implementato applica già le regole che non richiedono una sessione esterna: contatti in `whatsapp.allowed_contacts`, flag `whatsapp_sending_enabled`, fasce di silenzio, limite giornaliero e registro durevole in `data/outbox/messages.jsonl` (sezione 17.5). Aprire la sessione web ufficiale e compiere i passaggi della chat resta il passo mancante del trasporto.
+L'esecutore applica le regole che non richiedono una sessione esterna: contatti in `whatsapp.allowed_contacts`, flag `whatsapp_sending_enabled`, fasce di silenzio, limite giornaliero e registro durevole in `data/outbox/messages.jsonl` (sezione 17.5). Il passaggio successivo, l'invio dalla sessione web ufficiale, è un comando separato (`mnemosine-outbox`, sezione 17.7): richiede una finestra visibile e una sessione autenticata.
 
 In questo modo l'autonomia resta reale ma circoscritta: l'agente può cercare, leggere, partecipare a un forum e conversare con i suoi amici senza vagare per il web.
 
@@ -1442,7 +1442,7 @@ Aggiungere i seed esterni, le modifiche caratteriali e il riconsolidamento a cas
 
 Realizzare lo stato corrente, il generatore di routine, il carico cognitivo, il sonno simulato e l'Heartbeat Loop.
 
-La fase è implementata in tre moduli: `agent_memory/routine.py` genera il piano giornaliero, sceglie l'attività in corso e gestisce la finestra di sonno; `agent_memory/heartbeat.py` gestisce il carico cognitivo dinamico, i trigger interni e la coda degli impulsi spontanei (sezione 17.5). `agent_memory/executor.py` consuma gli impulsi e consegna i messaggi nella coda del profilo, con whitelist e flag (sezione 17.5). Il consolidamento notturno estrattivo è implementato senza modello linguistico (sezione 17.5). Il trasporto automatico dall’outbox a WhatsApp Web non è implementato: il browser generico è invece utilizzabile dall’agente MCP collegato, con consenso per origine e senza adattatori specifici.
+La fase è implementata in tre moduli: `agent_memory/routine.py` genera il piano giornaliero, sceglie l'attività in corso e gestisce la finestra di sonno; `agent_memory/heartbeat.py` gestisce il carico cognitivo dinamico, i trigger interni e la coda degli impulsi spontanei (sezione 17.5). `agent_memory/executor.py` consuma gli impulsi e consegna i messaggi nella coda del profilo, con whitelist e flag (sezione 17.5). Il consolidamento notturno estrattivo è implementato senza modello linguistico (sezione 17.5). Il trasporto dall’outbox a WhatsApp Web è un comando separato (`mnemosine-outbox`, sezione 17.7), con finestra visibile, lock e stop sull'esito incerto; il browser generico resta utilizzabile dall’agente MCP collegato, con consenso per origine e senza adattatori specifici.
 
 ### Fase 7 — Relazioni e autonomia web
 
@@ -1663,7 +1663,7 @@ Impostazioni dalla dashboard:
 
 - **Browser controllato**: whitelist delle origini (una per riga), attivazione del browser e dell'interazione, service worker, user agent e timeout. I valori vengono validati con la stessa policy del runtime e scritti in modo atomico in `config/integrations.json`: non serve modificare il JSON a mano. Il server MCP carica la policy all'avvio, quindi la nuova whitelist si applica al suo riavvio; WhatsApp e comportamento vengono riletti a ogni operazione.
 
-- **WhatsApp**: integrazione, contatti autorizzati (id della relazione, nome e telefono), finestra di silenzio e limite giornaliero. Il flag `whatsapp_sending_enabled` si attiva da **Comportamento** solo digitando `ABILITA`: è un interruttore di sicurezza, non un semplice toggle. Il trasporto verso WhatsApp Web non è ancora implementato; l'outbox resta il confine attuale.
+- **WhatsApp**: integrazione, contatti autorizzati (id della relazione, nome e telefono), finestra di silenzio e limite giornaliero. Il flag `whatsapp_sending_enabled` si attiva da **Comportamento** solo digitando `ABILITA`: è un interruttore di sicurezza, non un semplice toggle. Il trasporto verso WhatsApp Web è un comando separato (`mnemosine-outbox`) e richiede una sessione browser visibile; l'outbox resta il registro durevole delle consegne.
 
 - **Comportamento**: generazione visiva, motore dell'ombra, modalità manutenzione e parametri del battito (`interval_minutes`, `cooldown_minutes`, `max_impulses_per_day`). La lettura diretta dell'ombra resta bloccata per progetto.
 
@@ -1768,7 +1768,7 @@ Il blocco corrispondente in `config/integrations.json`, che in un profilo nuovo 
 
 Il limite giornaliero si conta sulle consegne già registrate oggi, non sugli impulsi: due esecuzioni nello stesso giorno non possono superare il tetto. Quando tutto è a posto il messaggio viene scritto in `data/outbox/messages.jsonl`, una riga JSON per consegna con id, destinatario, telefono, trigger, testo e istante. Solo dopo l'impulso viene chiuso con `last_decision: impulso_consegnato`. L'ordine è voluto: se la scrittura fallisce, l'impulso resta in coda invece di sparire. L'outbox è escluso dal repository perché contiene testi privati.
 
-Il trasporto verso WhatsApp Web resta fuori da questo modulo: qui si produce una consegna durevole e verificabile, non si apre una sessione esterna.
+Il trasporto verso WhatsApp Web resta fuori da questo modulo: qui si produce una consegna durevole e verificabile, mentre `mnemosine-outbox` (sezione 17.7) apre la sessione visibile e osserva l'esito.
 
 I messaggi aumentano il carico: `record_interaction` via MCP, oppure `mnemosine-heartbeat --interaction`, aggiunge 2 punti per un messaggio leggero, 4 normale e 7 complesso. Oltre la soglia morbida `availability.response_style` diventa `ridotta`, oltre quella dura `breve`.
 
@@ -1796,7 +1796,7 @@ python -m agent_memory.heartbeat --deliver "Ciao Marco, come stai?"
 
 Ritmo e freni vivono in `current_state.heartbeat` come `interval_minutes`, `cooldown_minutes` e `max_impulses_per_day`; i valori predefiniti sono 30 minuti, 180 minuti e 3 impulsi al giorno. Tre strumenti MCP completano il quadro: `record_interaction` aggiorna il carico, `acknowledge_impulse` chiude l'impulso senza inviare nulla, `deliver_impulse` consegna il messaggio all'impulso in attesa rispettando whitelist e flag. Anche la CLI espone la consegna con `--deliver`. I profili creati prima di questa versione ricevono i campi mancanti dalla migrazione 1→2 di `current_state.json`.
 
-L’esecutore si ferma all’outbox: non è un trasporto verso WhatsApp Web. Il consolidamento notturno estrattivo è già disponibile, come descritto sopra; non richiede un LLM e non inventa eventi. La navigazione da impulso è affidata al client MCP collegato, non a uno scheduler incorporato.
+L’esecutore si ferma all’outbox; il trasporto è il comando separato `mnemosine-outbox` (sezione 17.7). Il consolidamento notturno estrattivo è già disponibile, come descritto sopra; non richiede un LLM e non inventa eventi. La navigazione da impulso è affidata al client MCP collegato, non a uno scheduler incorporato.
 
 ### 17.6. Backup, audit e coerenza (Fase 8)
 
@@ -1817,7 +1817,7 @@ mnemosine-backup --root <profilo> restore backup-20261107-120000 --confirm RIPRI
 mnemosine-backup --root <profilo> prune --keep 3
 ```
 
-`agent_memory/audit.py` scrive `data/logs/audit.jsonl` per ogni chiamata ai tool MCP, le operazioni di backup, le scritture amministrative della dashboard (`dashboard_write`) e le consegne dell'executor (`external_action`). Registra nome del tool, azione, esito, durata, chiavi degli argomenti e tipo di errore; non registra i valori degli argomenti, i messaggi, i destinatari, i numeri di telefono, i token, i payload delle POST o i contenuti dell'ombra. Le consegne registrano id del messaggio, canale, trasporto ed esito, mai il testo. I campi sensibili e i token riconoscibili vengono comunque redatti, il file viene ruotato a 2 MB e la scrittura è best-effort: un filesystem pieno non deve far fallire un tool. L'audit locale non sostituisce i permessi del sistema operativo e non viene incluso nei backup, perché descrive il profilo corrente e non uno stato da ripristinare.
+`agent_memory/audit.py` scrive `data/logs/audit.jsonl` per ogni chiamata ai tool MCP, le operazioni di backup, le scritture amministrative della dashboard (`dashboard_write`), le consegne dell'executor e gli invii del trasporto outbox (`external_action`). Registra nome del tool, azione, esito, durata, chiavi degli argomenti e tipo di errore; non registra i valori degli argomenti, i messaggi, i destinatari, i numeri di telefono, i token, i payload delle POST o i contenuti dell'ombra. Le consegne registrano id del messaggio, canale, trasporto ed esito, mai il testo. I campi sensibili e i token riconoscibili vengono comunque redatti, il file viene ruotato a 2 MB e la scrittura è best-effort: un filesystem pieno non deve far fallire un tool. L'audit locale non sostituisce i permessi del sistema operativo e non viene incluso nei backup, perché descrive il profilo corrente e non uno stato da ripristinare.
 
 `agent_memory/consistency.py` è in sola lettura e non applica migrazioni. Controlla integrità SQLite, foreign key, versioni di schema, documenti JSON e `identity_id`, timestamp episodici e deliberativi, revisioni e collegamenti semantici, riferimenti tra memoria semantica e timeline, mapping dell'indice vettoriale e file operativi. Un profilo non ancora migrato produce un avviso, non un errore; un indice FAISS assente è un avviso se la cartella `data/indexes` non esiste, perché è ricostruibile. Il comando esce con codice 1 solo in presenza di errori:
 
@@ -1827,6 +1827,34 @@ mnemosine-consistency --root <profilo> --json
 ```
 
 Nessuno di questi moduli chiama un modello linguistico né servizi esterni.
+
+### 17.7. Trasporto dell'outbox verso WhatsApp Web
+
+`agent_memory/outbox.py` è il passo successivo all'executor: legge le consegne in `data/outbox/messages.jsonl`, apre WhatsApp Web in una finestra **visibile** e invia i messaggi ancora in sospeso. È un comando separato, non un demone e non un tool MCP: richiede uno schermo, una sessione salvata e una decisione umana su quando partire.
+
+```bash
+# Stato: cosa è in attesa, cosa è stato inviato, quale condizione ferma il trasporto
+mnemosine-outbox --root <profilo> --check
+
+# Invia al massimo un messaggio (default), fermandosi al primo esito incerto
+mnemosine-outbox --root <profilo> --send
+
+# Più messaggi nello stesso giro, sempre in ordine di accodamento
+mnemosine-outbox --root <profilo> --send --limit 3
+```
+
+Prima serve la sessione: `mnemosine-browser-login --root <profilo> --origin https://web.whatsapp.com` apre Chromium con lo schermo e salva cookie e storage in `data/browser/session.json`. WhatsApp Web rifiuta lo user agent `HeadlessChrome`, quindi il trasporto usa sempre una finestra visibile: su un server senza display non parte. La whitelist `browser.allowed_origins` deve contenere `https://web.whatsapp.com`; il trasporto non aggira questa regola.
+
+Il registro `data/outbox/status.json` contiene solo identificativi, stato, tentativi e codici, mai testo, telefono o nome. Gli stati sono:
+
+- `sending`: scritto **prima** dell'azione; se il processo muore, al giro successivo diventa `uncertain`;
+- `delivered_ui`: l'interfaccia mostra un messaggio uscente in più; `remote_delivery_verified` resta `false`, perché è un'osservazione della pagina, non una ricevuta di WhatsApp;
+- `uncertain`: il click può essere avvenuto ma la conferma manca. Non viene ritentato automaticamente: serve controllare WhatsApp e, se il messaggio non è partito, intervenire a mano;
+- `blocked`: nessun effetto è stato prodotto (flag spento, manutenzione, fascia di silenzio, contatto rimosso, telefono assente, messaggio troppo vecchio). Viene rivalutato al giro successivo.
+
+Un lock del sistema operativo su `data/outbox/.transport.lock` impedisce due trasporti contemporanei sullo stesso profilo e si rilascia anche se il processo termina. L'ordine è: lock, recupero dei `sending` interrotti, gate globali (integrazione, flag, manutenzione, disponibilità, fascia di silenzio, limite giornaliero contato sugli invii UI di oggi), poi un messaggio alla volta. Al primo `uncertain` il giro si ferma. Un messaggio più vecchio di 24 ore non viene inviato: va rigenerato.
+
+WhatsApp Web non è un'API: la pagina cambia e il riconoscimento si basa su selettori dell'interfaccia. Se il campo di scrittura o il pulsante non vengono trovati, il messaggio resta `blocked`; se il click avviene ma la conferma non arriva, diventa `uncertain`. Non c'è retry automatico, non c'è invio in background e non viene marcato come consegnato ciò che è solo stato scritto nella pagina. I messaggi restano nel file JSONL; il registro di stato non li duplica e non contiene dati personali.
 
 ---
 
