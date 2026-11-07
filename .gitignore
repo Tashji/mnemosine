@@ -49,8 +49,10 @@ models/
 # Snapshot di restauro locali.
 backups/
 
-# Log di esecuzione.
+# Log di esecuzione e registro di audit locale.
 *.log
+data/logs/
+profiles/*/data/logs/
 
 # WAL e shared-memory SQLite: transitori e rigenerati all'apertura.
 *.db-wal

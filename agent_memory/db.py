@@ -75,6 +75,25 @@ SHADOW_COUNTS = {
 }
 
 
+def _schema_needs_backup(conn: sqlite3.Connection, database: str) -> bool:
+    """Dice se l'apertura applicherà una migrazione o creerà lo schema."""
+
+    supported = DATABASE_SCHEMAS[database][1]
+    try:
+        row = conn.execute(
+            "SELECT value FROM schema_meta WHERE key = 'schema_version'"
+        ).fetchone()
+    except sqlite3.Error:
+        return True
+    if row is None:
+        return True
+    try:
+        stored = int(str(row[0]).split(".", 1)[0])
+    except (TypeError, ValueError):
+        return True
+    return stored < supported
+
+
 def json_text(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
@@ -141,6 +160,19 @@ class Database:
         except sqlite3.Error as exc:
             raise DatabaseUnavailable(
                 f"{database}: impossibile aprire {path}: {exc}"
+            ) from exc
+        try:
+            if _schema_needs_backup(conn, database):
+                # Un backup prima della migrazione protegge i dati se il passo
+                # fallisce o se il processo viene interrotto. Il servizio crea
+                # al massimo uno snapshot ogni cinque minuti per più database.
+                from .backup import BackupService
+
+                BackupService(self.root).ensure_pre_migration(database)
+        except Exception as exc:
+            conn.close()
+            raise DatabaseUnavailable(
+                f"{database}: backup pre-migrazione non riuscito: {exc}"
             ) from exc
         try:
             ensure_database_schema(conn, database, path, required_tables)

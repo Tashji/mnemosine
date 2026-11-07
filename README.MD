@@ -1454,6 +1454,8 @@ La parte web è implementata: `agent_memory/browser.py` applica la whitelist, la
 
 Implementare backup, logging, protezione dei dati, controlli di sicurezza e test di coerenza temporale e semantica.
 
+La fase è implementata in `agent_memory/backup.py`, `agent_memory/audit.py` e `agent_memory/consistency.py`; i comandi `mnemosine-backup` e `mnemosine-consistency` sono descritti nella sezione 17.6.
+
 ### 17.1. Biografia procedurale: implementazione e comandi
 
 La Fase 4 è implementata in `agent_memory/biography.py`. Il generatore è deterministico e non utilizza un modello linguistico: legge identità, tratti, famiglia, percorso scolastico, `world_history.json` e la timeline esistente, quindi costruisce i ricordi mancanti per macro-ere. Per creare prima un profilo nuovo da zero, usa `profile init` descritto nella sezione 2.4; `scripts/init_db.py --reset` ricrea invece il dataset demo.
@@ -1795,6 +1797,36 @@ python -m agent_memory.heartbeat --deliver "Ciao Marco, come stai?"
 Ritmo e freni vivono in `current_state.heartbeat` come `interval_minutes`, `cooldown_minutes` e `max_impulses_per_day`; i valori predefiniti sono 30 minuti, 180 minuti e 3 impulsi al giorno. Tre strumenti MCP completano il quadro: `record_interaction` aggiorna il carico, `acknowledge_impulse` chiude l'impulso senza inviare nulla, `deliver_impulse` consegna il messaggio all'impulso in attesa rispettando whitelist e flag. Anche la CLI espone la consegna con `--deliver`. I profili creati prima di questa versione ricevono i campi mancanti dalla migrazione 1→2 di `current_state.json`.
 
 L’esecutore si ferma all’outbox: non è un trasporto verso WhatsApp Web. Il consolidamento notturno estrattivo è già disponibile, come descritto sopra; non richiede un LLM e non inventa eventi. La navigazione da impulso è affidata al client MCP collegato, non a uno scheduler incorporato.
+
+### 17.6. Backup, audit e coerenza (Fase 8)
+
+`agent_memory/backup.py` crea snapshot locali in `backups/backup-AAAAMMGG-HHMMSS`. I quattro database vengono copiati con l'API di backup di SQLite, quindi anche con il server aperto; `config/`, `files/` e `data/outbox/` sono inclusi per impostazione predefinita. Restano esclusi `data/secrets`, `data/models`, `data/dashboard_tls`, `data/browser`, `data/indexes` e `data/logs`: sono credenziali, cache o artefatti rigenerabili. Un backup contiene comunque dati personali, inclusi eventuali contatti in `config/integrations.json`: va conservato localmente e non condiviso.
+
+Ogni snapshot ha un `manifest.json` con checksum, dimensioni, versioni di schema e motivo delle esclusioni. `verify` ricontrolla i checksum e l'integrità SQLite. Il ripristino richiede la conferma letterale `RIPRISTINA`, crea prima un backup `pre-restore` e non cancella i backup precedenti. Il ripristino va eseguito con il server e la dashboard fermi, perché sostituisce configurazione, database e, se inclusi, `files/` e outbox. La retention predefinita conserva gli ultimi sette backup; un backup automatico viene creato prima di una migrazione SQLite, al massimo uno ogni cinque minuti per profilo.
+
+```bash
+# Backup completo e verifica
+mnemosine-backup --root <profilo> create --reason manuale
+mnemosine-backup --root <profilo> list
+mnemosine-backup --root <profilo> verify backup-20261107-120000
+
+# Ripristino: richiede la conferma esplicita
+mnemosine-backup --root <profilo> restore backup-20261107-120000 --confirm RIPRISTINA
+
+# Conserva solo i tre backup più recenti
+mnemosine-backup --root <profilo> prune --keep 3
+```
+
+`agent_memory/audit.py` scrive `data/logs/audit.jsonl` per ogni chiamata ai tool MCP e per le operazioni di backup. Registra nome del tool, esito, durata, chiavi degli argomenti e tipo di errore; non registra i valori degli argomenti, i messaggi, i numeri di telefono, i token o i contenuti dell'ombra. I campi sensibili e i token riconoscibili vengono comunque redatti, il file viene ruotato a 2 MB e la scrittura è best-effort: un filesystem pieno non deve far fallire un tool. L'audit locale non sostituisce i permessi del sistema operativo e non viene incluso nei backup, perché descrive il profilo corrente e non uno stato da ripristinare.
+
+`agent_memory/consistency.py` è in sola lettura e non applica migrazioni. Controlla integrità SQLite, foreign key, versioni di schema, documenti JSON e `identity_id`, timestamp episodici e deliberativi, revisioni e collegamenti semantici, riferimenti tra memoria semantica e timeline, mapping dell'indice vettoriale e file operativi. Un profilo non ancora migrato produce un avviso, non un errore; un indice FAISS assente è un avviso se la cartella `data/indexes` non esiste, perché è ricostruibile. Il comando esce con codice 1 solo in presenza di errori:
+
+```bash
+mnemosine-consistency --root <profilo>
+mnemosine-consistency --root <profilo> --json
+```
+
+Nessuno di questi moduli chiama un modello linguistico né servizi esterni.
 
 ---
 

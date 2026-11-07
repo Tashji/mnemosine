@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mnemosine"
-version = "0.8.1"
+version = "0.9.0"
 description = "Architettura cognitiva locale su MCP: identità, memoria, biografia e autonomia controllata per agenti AI."
 readme = "README.MD"
 requires-python = ">=3.12"
@@ -45,6 +45,8 @@ mnemosine-heartbeat = "agent_memory.heartbeat:main"
 mnemosine-browser = "agent_memory.browser:main"
 mnemosine-browser-login = "agent_memory.browser_login:main"
 mnemosine-visual-token = "agent_memory.visual_token:main"
+mnemosine-backup = "agent_memory.backup:main"
+mnemosine-consistency = "agent_memory.consistency:main"
 
 [tool.setuptools]
 packages = ["agent_memory"]

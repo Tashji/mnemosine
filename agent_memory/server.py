@@ -15,12 +15,17 @@ Avvio:
 from __future__ import annotations
 
 import argparse
+import functools
+import inspect
 import json
 import sys
+import time
 from pathlib import Path
+from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from .audit import AuditLog
 from .autonomy import AutonomyService
 from .browser import BrowserController
 from .config import project_root
@@ -43,6 +48,86 @@ from .tools_status import register_status_tools
 from .visual import VisualService
 
 SERVER_NAME = "agent-memory"
+
+
+def _instrument_tools(mcp: FastMCP, audit: AuditLog) -> None:
+    """Registra i tool avvolgendoli con l'audit, senza toccarne la firma.
+
+    FastMCP conserva il riferimento alla funzione al momento della
+    registrazione: sostituire ``mcp.call_tool`` dopo la costruzione non
+    basterebbe per il trasporto reale. Il decoratore lavora quindi prima che i
+    moduli registrino i loro tool.
+    """
+
+    original_tool = mcp.tool
+
+    def audited_tool(*args: Any, **kwargs: Any) -> Any:
+        register = original_tool(*args, **kwargs)
+
+        def decorate(function: Any) -> Any:
+            signature = inspect.signature(function)
+
+            def arguments(call_args: tuple[Any, ...], call_kwargs: dict[str, Any]) -> Any:
+                try:
+                    bound = signature.bind(*call_args, **call_kwargs)
+                    bound.apply_defaults()
+                    return dict(bound.arguments)
+                except (TypeError, ValueError):
+                    return dict(call_kwargs)
+
+            def successful(started: float, call_args: tuple[Any, ...], call_kwargs: dict[str, Any]) -> None:
+                audit.record_tool_call(
+                    function.__name__,
+                    arguments(call_args, call_kwargs),
+                    outcome="ok",
+                    duration_ms=(time.perf_counter() - started) * 1000,
+                )
+
+            def failed(
+                started: float,
+                call_args: tuple[Any, ...],
+                call_kwargs: dict[str, Any],
+                exc: Exception,
+            ) -> None:
+                audit.record_tool_call(
+                    function.__name__,
+                    arguments(call_args, call_kwargs),
+                    outcome="error",
+                    duration_ms=(time.perf_counter() - started) * 1000,
+                    error_type=type(exc).__name__,
+                )
+
+            if inspect.iscoroutinefunction(function):
+
+                @functools.wraps(function)
+                async def async_wrapper(*call_args: Any, **call_kwargs: Any) -> Any:
+                    started = time.perf_counter()
+                    try:
+                        result = await function(*call_args, **call_kwargs)
+                    except Exception as exc:
+                        failed(started, call_args, call_kwargs, exc)
+                        raise
+                    successful(started, call_args, call_kwargs)
+                    return result
+
+                return register(async_wrapper)
+
+            @functools.wraps(function)
+            def wrapper(*call_args: Any, **call_kwargs: Any) -> Any:
+                started = time.perf_counter()
+                try:
+                    result = function(*call_args, **call_kwargs)
+                except Exception as exc:
+                    failed(started, call_args, call_kwargs, exc)
+                    raise
+                successful(started, call_args, call_kwargs)
+                return result
+
+            return register(wrapper)
+
+        return decorate
+
+    mcp.tool = audited_tool
 
 
 def create_server(
@@ -71,6 +156,7 @@ def create_server(
         host=host,
         port=port,
     )
+    audit = AuditLog(root or project_root())
 
     @mcp.resource(
         PERSONA_URI,
@@ -83,6 +169,7 @@ def create_server(
 
         return persona
 
+    _instrument_tools(mcp, audit)
     register_identity_tools(mcp, root=root, service=service)
     register_state_tools(mcp, root=root, service=service)
     register_life_tools(mcp, root=root)
