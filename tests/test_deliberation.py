@@ -1,4 +1,4 @@
-"""Test della Fase 2: salienza, episodi, scadenza e storage."""
+"""Test delle Fasi 2-3: salienza, episodi, effetti e riflessione."""
 
 from __future__ import annotations
 
@@ -96,9 +96,11 @@ class DeliberationTests(unittest.TestCase):
         self.assertTrue(result["accepted"])
         self.assertEqual(result["episode"]["state"], "closed")
         self.assertEqual(result["episode"]["decision"]["decision"], "continue")
-        self.assertEqual(
-            self.store.get("current_state")["deliberation"]["decision"], "continue"
-        )
+        state = self.store.get("current_state")
+        self.assertEqual(state["deliberation"]["decision"], "continue")
+        self.assertTrue(result["episode"]["outcome"]["applied"])
+        self.assertEqual(state["life"]["stream"][-1]["kind"], "continue")
+        self.assertIn("Programmazione al PC", state["life"]["stream"][-1]["text"])
         with Database(self.root).timeline() as conn:
             events = [
                 row[0]
@@ -140,6 +142,7 @@ class DeliberationTests(unittest.TestCase):
 
         self._hungry()
         self._service().tick()
+        before = self.store.get("current_state")
         result = self._service().decide(
             {
                 "decision": "unstructured",
@@ -148,6 +151,7 @@ class DeliberationTests(unittest.TestCase):
                     "attention": "video",
                     "mental_content": "Pensa a Giulia.",
                     "duration_minutes": 30,
+                    "expected_effects": {"stress": -8, "energy": 3},
                 },
             }
         )
@@ -155,6 +159,88 @@ class DeliberationTests(unittest.TestCase):
         decision = result["episode"]["decision"]
         self.assertEqual(decision["unstructured"]["activity"], "Sdraiato sul divano")
         self.assertEqual(decision["unstructured"]["duration_minutes"], 30)
+        state = self.store.get("current_state")
+        self.assertEqual(state["activity"]["label"], "Sdraiato sul divano")
+        self.assertEqual(state["life"]["mode"], "unstructured")
+        self.assertEqual(state["life"]["attention"], "video")
+        self.assertEqual(state["life"]["mental_content"], "Pensa a Giulia.")
+        self.assertEqual(state["life"]["stream"][-1]["kind"], "unstructured")
+        effects = result["episode"]["outcome"]["effects"]
+        self.assertEqual(effects["stress"]["delta"], -8)
+        self.assertEqual(
+            state["life"]["needs"]["stress"]["value"],
+            effects["stress"]["after"],
+        )
+        self.assertGreater(state["emotion"]["valence"], before["emotion"]["valence"])
+
+    def test_internal_intent_updates_state_loop_and_stream(self) -> None:
+        self.store.update_current_state(
+            {
+                "life": {
+                    "open_loops": [
+                        {
+                            "id": "loop_1",
+                            "title": "Preparare la cena",
+                            "status": "active",
+                            "priority": 70,
+                            "last_touched_at": (NOW - timedelta(days=4)).isoformat(),
+                        }
+                    ]
+                }
+            }
+        )
+        self._hungry()
+        self._service().tick()
+        result = self._service().decide(
+            {
+                "decision": "intent",
+                "intent": {
+                    "title": "Preparare uno spuntino",
+                    "goal": "Mangiare qualcosa per far scendere la fame",
+                    "why_now": "La fame è alta e c'è una pausa.",
+                    "tool": "none",
+                    "target": "loop_1",
+                    "steps": ["Andare in cucina", "Preparare qualcosa"],
+                    "expected_effects": {"hunger": -25, "energy": 4},
+                    "risk": "low",
+                    "requires_confirmation": False,
+                },
+            }
+        )
+        self.assertTrue(result["accepted"])
+        intent = result["episode"]["decision"]["intent"]
+        self.assertTrue(intent["intent_id"].startswith("int_del_"))
+        self.assertEqual(intent["tool"], "none")
+        self.assertEqual(result["episode"]["outcome"]["tool"], "none")
+        self.assertTrue(result["episode"]["outcome"]["simulated"])
+        self.assertEqual(result["episode"]["outcome"]["loop_id"], "loop_1")
+        state = self.store.get("current_state")
+        self.assertEqual(state["activity"]["label"], "Preparare uno spuntino")
+        self.assertEqual(state["life"]["mode"], "intent")
+        self.assertEqual(state["life"]["attention"], "Preparare uno spuntino")
+        self.assertEqual(
+            state["life"]["open_loops"][0]["last_touched_at"], NOW.isoformat()
+        )
+        self.assertEqual(state["life"]["stream"][-1]["kind"], "intent")
+        self.assertIn("simulato", state["life"]["stream"][-1]["text"])
+
+    def test_internal_intent_validation_rejects_external_tools(self) -> None:
+        base = {
+            "title": "Controllare la posta",
+            "goal": "Leggere i messaggi importanti",
+            "why_now": "È passato tempo.",
+        }
+        normalized = validate_decision(
+            {"decision": "intent", "intent": {**base, "tool": "none"}}
+        )
+        self.assertEqual(normalized["intent"]["tool"], "none")
+        for tool in ("browser", "files", "whatsapp"):
+            with self.assertRaises(ValidationError):
+                validate_decision(
+                    {"decision": "intent", "intent": {**base, "tool": tool}}
+                )
+        with self.assertRaises(ValidationError):
+            validate_decision({"decision": "intent", "intent": {"title": "Solo"}})
 
     def test_expired_episode_uses_continue_without_a_decision(self) -> None:
         self._hungry()
@@ -172,10 +258,13 @@ class DeliberationTests(unittest.TestCase):
         self.assertEqual(row["state"], "expired")
         decision = json.loads(row["decision_json"])
         self.assertEqual(decision["decision"], "continue")
-        self.assertFalse(json.loads(row["outcome_json"])["applied"])
-        self.assertEqual(
-            self.store.get("current_state")["deliberation"]["state"], "expired"
-        )
+        outcome = json.loads(row["outcome_json"])
+        self.assertTrue(outcome["applied"])
+        self.assertTrue(outcome["simulated"])
+        self.assertTrue(outcome["expired"])
+        state = self.store.get("current_state")
+        self.assertEqual(state["deliberation"]["state"], "expired")
+        self.assertEqual(state["life"]["stream"][-1]["kind"], "continue")
 
     def test_expired_without_safe_activity_uses_rest(self) -> None:
         self._hungry()
@@ -187,6 +276,10 @@ class DeliberationTests(unittest.TestCase):
         decision = result["expired"][0]["decision"]
         self.assertEqual(decision["decision"], "unstructured")
         self.assertEqual(decision["unstructured"]["activity"], "Riposo")
+        state = self.store.get("current_state")
+        self.assertEqual(state["activity"]["label"], "Riposo")
+        self.assertEqual(state["life"]["mode"], "unstructured")
+        self.assertEqual(state["life"]["stream"][-1]["kind"], "unstructured")
 
     def test_gate_blocks_sleep_maintenance_and_uncertain_actions(self) -> None:
         self._hungry()

@@ -17,6 +17,7 @@ from mcp.server.fastmcp.exceptions import ToolError
 
 from agent_memory.browser import BrowserController, BrowserPolicy
 from agent_memory.config import ConfigStore
+from agent_memory.deliberation import DeliberationService
 from agent_memory.identity import IDENTITY_REPLY
 from agent_memory.server import create_server
 from tests.support import copy_profile
@@ -60,6 +61,8 @@ class McpServerTests(unittest.TestCase):
         self.assertIn("get_identity", names)
         self.assertIn("identity_disclosure", names)
         self.assertIn("life_situation", names)
+        self.assertIn("life_status", names)
+        self.assertIn("life_decide", names)
         self.assertIn("create_memory", names)
         self.assertIn("browser_status", names)
         self.assertIn("browser_open", names)
@@ -92,6 +95,32 @@ class McpServerTests(unittest.TestCase):
         self.assertIn("Sono le 16:05 di sabato.", result["text"])
         self.assertEqual(before, ConfigStore(self.root).get("current_state"))
         self.assertNotIn("life", ConfigStore(self.root).get("current_state"))
+
+    def test_life_status_tool_is_read_only(self) -> None:
+        before = ConfigStore(self.root).get("current_state")
+        result = call_tool(self.mcp, "life_status", {})
+        self.assertIn("enabled", result)
+        self.assertIn("storage", result)
+        self.assertEqual(before, ConfigStore(self.root).get("current_state"))
+
+    def test_life_decide_tool_closes_an_open_episode(self) -> None:
+        ConfigStore(self.root).update_current_state(
+            {
+                "flags": {"life_engine_enabled": True},
+                "life": {"needs": {"hunger": {"value": 82}}},
+            }
+        )
+        opened = DeliberationService(self.root).tick()
+        self.assertTrue(opened["opened"])
+
+        result = call_tool(
+            self.mcp,
+            "life_decide",
+            {"decision": {"decision": "continue"}},
+        )
+        self.assertTrue(result["accepted"])
+        self.assertEqual(result["episode"]["state"], "closed")
+        self.assertTrue(result["episode"]["outcome"]["applied"])
 
     def test_visual_tool_requires_manual_dashboard_consent(self) -> None:
         ConfigStore(self.root).update_current_state(

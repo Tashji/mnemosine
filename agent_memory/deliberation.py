@@ -1,15 +1,19 @@
-"""Episodi deliberativi e salienza (Fase 2).
+"""Episodi deliberativi, effetti interni e riflessione (Fase 3).
 
-La Fase 2 registra il ciclo minimo di un episodio: valutazione della
-salienza, apertura, scadenza con default conservativo e chiusura dopo una
-decisione ``continue`` o ``unstructured``. Non espone ancora ``life_decide``,
-non applica effetti ai bisogni e non esegue intenti esterni: quelle parti
-arrivano nelle fasi successive.
+La Fase 3 completa il ciclo di un episodio: valutazione della salienza,
+apertura, scadenza con default conservativo, decisione ``continue``,
+``unstructured`` o ``intent``, applicazione di effetti limitati, aggiornamento
+di stream, bisogni, emozione e loop, e riflessione deterministica.
+
+Gli intenti con ``tool: none`` restano simulati: aggiornano lo stato interno e
+vengono etichettati come tali, senza essere presentati come fatti fisici. Gli
+tool esterni, l'esecuzione browser/files/WhatsApp e il collegamento al battito
+arrivano nella Fase 4.
 
 Il rapporto di situazione resta la fonte della fotografia iniziale; il modulo
-scrive solo il riepilogo in ``current_state.deliberation`` e le righe di audit
-nel database della timeline. Nessuna riga dell'ombra o memoria riservata entra
-in questi dati.
+scrive il riepilogo in ``current_state.deliberation`` e le righe di audit nel
+database della timeline. Nessuna riga dell'ombra o memoria riservata entra in
+questi dati.
 """
 
 from __future__ import annotations
@@ -29,7 +33,7 @@ from .errors import (
     NotFoundError,
     ValidationError,
 )
-from .life import NEED_NAMES
+from .life import NEED_NAMES, normalize_life
 from .operational import canonical
 from .situation import SituationBuilder
 
@@ -42,15 +46,18 @@ EPISODE_STATES = (
     "cancelled",
 )
 ACTIVE_STATES = ("open", "decided", "executing")
-DECISIONS = ("continue", "unstructured")
+DECISIONS = ("continue", "unstructured", "intent")
+INTENT_RISKS = ("low", "medium", "high")
 MAX_TEXT = 500
+MAX_STREAM = 8
+MAX_INTENT_STEPS = 10
 MAX_REASON = 200
 DEFAULT_EPISODE_MINUTES = 15
 DEFAULT_NEXT_REVIEW_MINUTES = 45
 MIN_INTERVAL_MINUTES = 90
 MAX_PER_DAY = 6
 MAX_UNSTRUCTURED_MINUTES = 240
-MAX_EFFECT = 20
+MAX_EFFECT = 25
 
 NEED_URGENCY = {
     "energy": ("low", 30),
@@ -114,33 +121,94 @@ def _optional_minutes(value: Any, field: str) -> int | None:
     return value
 
 
-def _expected_effects(value: Any) -> dict[str, int] | None:
+def _expected_effects(
+    value: Any, field: str = "decision.expected_effects"
+) -> dict[str, int] | None:
     if value is None:
         return None
     if not isinstance(value, dict):
-        raise ValidationError("decision.expected_effects: atteso un oggetto.")
+        raise ValidationError(f"{field}: atteso un oggetto.")
     effects: dict[str, int] = {}
     for name, raw in value.items():
         if name not in NEED_NAMES:
             raise ValidationError(
-                "decision.expected_effects: bisogno sconosciuto "
-                f"'{name}'."
+                f"{field}: bisogno sconosciuto '{name}'."
             )
         if isinstance(raw, bool) or not isinstance(raw, int):
             raise ValidationError(
-                f"decision.expected_effects.{name}: attesa una variazione intera."
+                f"{field}.{name}: attesa una variazione intera."
             )
         if not -MAX_EFFECT <= raw <= MAX_EFFECT:
             raise ValidationError(
-                f"decision.expected_effects.{name}: variazione fuori limite "
+                f"{field}.{name}: variazione fuori limite "
                 f"[-{MAX_EFFECT}, {MAX_EFFECT}]."
             )
         effects[name] = raw
     return effects
 
 
+def _validate_intent(block: Any) -> dict[str, Any]:
+    if not isinstance(block, dict):
+        raise ValidationError("decision.intent: atteso un oggetto.")
+    title = _clean_text(block.get("title"), "decision.intent.title")
+    goal = _clean_text(block.get("goal"), "decision.intent.goal")
+    why_now = _clean_text(block.get("why_now"), "decision.intent.why_now")
+    tool = block.get("tool", "none")
+    if tool is None:
+        tool = "none"
+    if tool != "none":
+        raise ValidationError(
+            "decision.intent.tool: nella Fase 3 è disponibile solo 'none'; "
+            "gli strumenti esterni arrivano con la Fase 4."
+        )
+    target = _clean_text(
+        block.get("target"), "decision.intent.target", required=False
+    )
+    intent_id = _clean_text(
+        block.get("intent_id"), "decision.intent.intent_id", required=False
+    )
+    raw_steps = block.get("steps")
+    if raw_steps is None:
+        steps: list[str] = []
+    else:
+        if not isinstance(raw_steps, list):
+            raise ValidationError("decision.intent.steps: attesa una lista.")
+        if len(raw_steps) > MAX_INTENT_STEPS:
+            raise ValidationError(
+                f"decision.intent.steps: massimo {MAX_INTENT_STEPS} passi."
+            )
+        steps = [
+            _clean_text(item, f"decision.intent.steps[{index}]")
+            for index, item in enumerate(raw_steps)
+        ]
+    risk = block.get("risk", "low")
+    if risk not in INTENT_RISKS:
+        raise ValidationError(
+            "decision.intent.risk: ammessi low, medium e high."
+        )
+    requires_confirmation = block.get("requires_confirmation", False)
+    if not isinstance(requires_confirmation, bool):
+        raise ValidationError(
+            "decision.intent.requires_confirmation: atteso un booleano."
+        )
+    return {
+        "intent_id": intent_id,
+        "title": title,
+        "goal": goal,
+        "why_now": why_now,
+        "tool": "none",
+        "target": target,
+        "steps": steps,
+        "expected_effects": _expected_effects(
+            block.get("expected_effects"), "decision.intent.expected_effects"
+        ),
+        "risk": risk,
+        "requires_confirmation": requires_confirmation,
+    }
+
+
 def validate_decision(decision: Any) -> dict[str, Any]:
-    """Valida una decisione della Fase 2, senza applicarne gli effetti."""
+    """Valida una decisione senza applicarne gli effetti."""
 
     if not isinstance(decision, dict):
         raise ValidationError("decision: atteso un oggetto JSON.")
@@ -148,12 +216,8 @@ def validate_decision(decision: Any) -> dict[str, Any]:
     if kind == "do_nothing":
         raise ValidationError("do_nothing non è una decisione valida.")
     if kind not in DECISIONS:
-        if kind == "intent":
-            raise ValidationError(
-                "intent non è disponibile nella Fase 2: arriva con la Fase 3."
-            )
         raise ValidationError(
-            "decision: ammessi continue e unstructured nella Fase 2."
+            "decision: ammessi continue, unstructured e intent."
         )
 
     normalized: dict[str, Any] = {"decision": kind}
@@ -199,9 +263,12 @@ def validate_decision(decision: Any) -> dict[str, Any]:
                 "decision.unstructured.duration_minutes",
             ),
             "expected_effects": _expected_effects(
-                block.get("expected_effects")
+                block.get("expected_effects"),
+                "decision.unstructured.expected_effects",
             ),
         }
+    if kind == "intent":
+        normalized["intent"] = _validate_intent(decision.get("intent"))
     return normalized
 
 
@@ -526,8 +593,214 @@ class DeliberationService:
             "next_review_minutes": DEFAULT_NEXT_REVIEW_MINUTES,
         }
 
-    def _expire_locked(self, conn: Any) -> list[dict[str, Any]]:
+    def _life_block(self, state: dict[str, Any]) -> dict[str, Any]:
+        return normalize_life(
+            state.get("life"),
+            now=self.now.isoformat(),
+            mental_load=_number(state.get("mental_load")),
+        )
+
+    def _apply_effects(
+        self, life: dict[str, Any], effects: dict[str, int]
+    ) -> dict[str, dict[str, Any]]:
+        applied: dict[str, dict[str, Any]] = {}
+        for name, delta in effects.items():
+            item = life["needs"][name]
+            before = float(item["value"])
+            after = max(0.0, min(100.0, before + float(delta)))
+            item["value"] = round(after, 2)
+            item["trend"] = (
+                "up" if delta > 0 else "down" if delta < 0 else "stable"
+            )
+            item["updated_at"] = self.now.isoformat()
+            item["source"] = "decision"
+            applied[name] = {
+                "before": round(before, 2),
+                "delta": delta,
+                "after": round(after, 2),
+                "clamped": round(before + float(delta), 2) != round(after, 2),
+            }
+        return applied
+
+    def _append_stream(
+        self, life: dict[str, Any], kind: str, text: str
+    ) -> None:
+        cleaned = text.strip()[:MAX_TEXT]
+        if not cleaned:
+            cleaned = "Attività registrata."
+        stream = life.get("stream")
+        if not isinstance(stream, list):
+            stream = []
+        stream.append(
+            {"at": self.now.isoformat(), "kind": kind, "text": cleaned}
+        )
+        life["stream"] = stream[-MAX_STREAM:]
+        life["updated_at"] = self.now.isoformat()
+
+    def _touch_loop(
+        self, life: dict[str, Any], target: str | None
+    ) -> str | None:
+        if not target:
+            return None
+        wanted = target.casefold()
+        for loop in life["open_loops"]:
+            if not isinstance(loop, dict):
+                continue
+            if loop.get("status") not in (None, "active"):
+                continue
+            loop_id = loop.get("id")
+            title = loop.get("title")
+            if not isinstance(loop_id, str) or not isinstance(title, str):
+                continue
+            if wanted in {loop_id.casefold(), title.casefold()} or wanted in title.casefold():
+                loop["last_touched_at"] = self.now.isoformat()
+                loop["status"] = "active"
+                return loop_id
+        return None
+
+    def _activity_patch(
+        self,
+        state: dict[str, Any],
+        *,
+        episode_id: str,
+        label: str,
+        category: str,
+        attention: str,
+        duration_minutes: int,
+    ) -> dict[str, Any]:
+        current = state.get("activity")
+        current = current if isinstance(current, dict) else {}
+        location = current.get("location")
+        if not isinstance(location, str) or not location.strip():
+            environment = self._life_block(state)["environment"]
+            location = environment.get("location")
+        return {
+            "id": f"act_{episode_id}",
+            "label": label,
+            "category": category,
+            "location": location,
+            "started_at": self.now.isoformat(),
+            "expected_end_at": (
+                self.now + timedelta(minutes=duration_minutes)
+            ).isoformat(),
+            "details": attention,
+        }
+
+    def _reflection_patch(
+        self, state: dict[str, Any], applied: dict[str, dict[str, Any]]
+    ) -> dict[str, Any]:
+        if not applied:
+            return {}
+        emotion = state.get("emotion")
+        if not isinstance(emotion, dict):
+            return {}
+        stress = applied.get("stress")
+        if not stress:
+            return {}
+        delta = stress.get("delta", 0)
+        if not isinstance(delta, (int, float)) or isinstance(delta, bool):
+            return {}
+        result = copy.deepcopy(emotion)
+        valence = _number(result.get("valence"), default=0.0) - delta * 0.01
+        arousal = _number(result.get("arousal"), default=0.3) + delta * 0.005
+        result["valence"] = round(max(-1.0, min(1.0, valence)), 3)
+        result["arousal"] = round(max(0.0, min(1.0, arousal)), 3)
+        return {"emotion": result}
+
+    def _apply_decision_locked(
+        self, decision: dict[str, Any], *, episode_id: str
+    ) -> dict[str, Any]:
+        """Applica gli effetti interni e restituisce l'esito leggibile."""
+
         state = self._state()
+        life = self._life_block(state)
+        kind = decision["decision"]
+        effects: dict[str, int] = {}
+        applied: dict[str, dict[str, Any]] = {}
+        patch: dict[str, Any] = {}
+        loop_id: str | None = None
+
+        if kind == "continue":
+            activity = state.get("activity")
+            activity = activity if isinstance(activity, dict) else {}
+            label = activity.get("label")
+            label = label.strip() if isinstance(label, str) and label.strip() else "attività in corso"
+            self._append_stream(life, "continue", f"Continua: {label}.")
+            reflection = "L'attività in corso continua senza cambiamenti."
+            note = "Nessuna esecuzione: l'attività in corso continua."
+        elif kind == "unstructured":
+            block = decision["unstructured"]
+            effects = block.get("expected_effects") or {}
+            applied = self._apply_effects(life, effects)
+            activity = block["activity"]
+            attention = block["attention"]
+            mental_content = block.get("mental_content")
+            life["mode"] = "unstructured"
+            life["attention"] = attention
+            life["mental_content"] = mental_content
+            stream_text = f"{activity}; attenzione: {attention}"
+            if mental_content:
+                stream_text += f"; mente: {mental_content}"
+            self._append_stream(life, "unstructured", stream_text + ".")
+            patch["activity"] = self._activity_patch(
+                state,
+                episode_id=episode_id,
+                label=activity,
+                category="unstructured",
+                attention=attention,
+                duration_minutes=block["duration_minutes"],
+            )
+            reflection = (
+                f"Tempo non strutturato: {activity}; attenzione su {attention}."
+            )
+            note = "Attività non strutturata registrata; nessun tool esterno eseguito."
+        else:
+            intent = decision["intent"]
+            if not intent.get("intent_id"):
+                intent["intent_id"] = f"int_{episode_id}"
+            effects = intent.get("expected_effects") or {}
+            applied = self._apply_effects(life, effects)
+            loop_id = self._touch_loop(life, intent.get("target"))
+            title = intent["title"]
+            life["mode"] = "intent"
+            life["attention"] = title
+            life["mental_content"] = intent["goal"]
+            self._append_stream(
+                life,
+                "intent",
+                f"Intento simulato: {title}; {intent['goal']}",
+            )
+            patch["activity"] = self._activity_patch(
+                state,
+                episode_id=episode_id,
+                label=title,
+                category="intent",
+                attention=title,
+                duration_minutes=decision["next_review_minutes"],
+            )
+            reflection = f"Intento interno simulato: {title}. {intent['goal']}"
+            note = (
+                "Intento con tool none: stato e loop aggiornati; "
+                "l'azione resta simulata e non verificata fisicamente."
+            )
+
+        patch["life"] = life
+        patch.update(self._reflection_patch(state, applied))
+        self.config.update_current_state(patch)
+        outcome: dict[str, Any] = {
+            "applied": True,
+            "simulated": True,
+            "reason": kind,
+            "effects": applied,
+            "reflection": reflection,
+            "note": note,
+        }
+        if kind == "intent":
+            outcome["tool"] = "none"
+            outcome["loop_id"] = loop_id
+        return outcome
+
+    def _expire_locked(self, conn: Any) -> list[dict[str, Any]]:
         expired: list[dict[str, Any]] = []
         for row in conn.execute(
             "SELECT * FROM deliberation_episodes WHERE state = 'open' "
@@ -536,13 +809,11 @@ class DeliberationService:
             expires = _parse(row["expires_at"], self.timezone)
             if expires is None or expires > self.now:
                 continue
-            decision = self._default_decision(row["id"], state)
-            outcome = {
-                "applied": False,
-                "simulated": True,
-                "reason": "expired",
-                "note": "Fase 2: decisione registrata senza esecuzione.",
-            }
+            decision = self._default_decision(row["id"], self._state())
+            outcome = self._apply_decision_locked(
+                decision, episode_id=row["id"]
+            )
+            outcome["expired"] = True
             conn.execute(
                 "UPDATE deliberation_episodes SET state = 'expired', "
                 "decided_at = ?, closed_at = ?, decision_json = ?, outcome_json = ? "
@@ -668,9 +939,10 @@ class DeliberationService:
             return {"expired": expired, "count": len(expired)}
 
     def decide(self, decision: Any) -> dict[str, Any]:
-        """Registra una decisione ``continue`` o ``unstructured``.
+        """Registra una decisione e applica gli effetti interni.
 
-        Non applica effetti: la Fase 3 aggiungerà esecuzione e riflessione.
+        Sono ammessi ``continue``, ``unstructured`` e ``intent`` con
+        ``tool: none``. Gli intenti esterni vengono rifiutati in questa fase.
         """
 
         normalized = validate_decision(decision)
@@ -688,12 +960,9 @@ class DeliberationService:
                     "L'episodio non è aperto: non può accettare una decisione."
                 )
             normalized["episode_id"] = row["id"]
-            outcome = {
-                "applied": False,
-                "simulated": True,
-                "reason": "phase_2",
-                "note": "Fase 2: decisione registrata senza esecuzione.",
-            }
+            outcome = self._apply_decision_locked(
+                normalized, episode_id=row["id"]
+            )
             conn.execute(
                 "UPDATE deliberation_episodes SET state = 'closed', "
                 "decided_at = ?, closed_at = ?, decision_json = ?, outcome_json = ? "

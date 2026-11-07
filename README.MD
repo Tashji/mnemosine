@@ -48,6 +48,7 @@ Il progetto ruota attorno al Model Context Protocol: il server espone all'LLM la
 | **Ciclo di vita** | Routine, carico cognitivo, consolidamento e iniziativa autonoma. |
 | **Stato di vita (Fase 1)** | Bisogni, loop aperti, stream, ambiente e rapporto di situazione in sola lettura, senza deliberazione. |
 | **Deliberazione (Fase 2)** | Salienza, episodi, scadenza e default conservativo; il motore resta spento finché non viene abilitato. |
+| **Esecuzione interna (Fase 3)** | Decisioni continue, unstructured e intenti simulati con effetti limitati, riflessione e stream. |
 | **Relazioni** | Fiducia, intimità e storia sintetica delle persone importanti. |
 | **Browser controllato** | Navigazione con Playwright confinata a origini HTTPS in whitelist, con indice numerato dei link per i modelli piccoli. |
 | **File locali** | Sandbox `files/` del profilo per leggere e scrivere testo, senza uscire dalla cartella e senza symlink. |
@@ -1078,7 +1079,7 @@ Al primo accesso il profilo importa `current_state` e `social_graph` nel databas
 
 **Cambio operativo:** `config/current_state.json` e `config/social_graph.json` diventano esportazioni di compatibilità, non la fonte autorevole. Modificarli manualmente dopo l’importazione non cambia il profilo. Usare dashboard e API ConfigStore. Gli altri documenti restano JSON. Gli errori di esportazione vengono segnalati con un warning, ma non trasformano un commit SQLite riuscito in una richiesta fallita. Per rigenerare le esportazioni: `ConfigStore(root).operational.export(ConfigStore(root).load_all())`. Il profilo va salvato integralmente, database incluso.
 
-I tool MCP sono ora **46**. `interaction_history(user_id, offset=0, limit=50)` legge una pagina SQL dello storico. Il grafo restituisce i metadati, non tutte le interazioni.
+I tool MCP sono ora **48**. `interaction_history(user_id, offset=0, limit=50)` legge una pagina SQL dello storico. Il grafo restituisce i metadati, non tutte le interazioni.
 
 Il client che ospita l’agente può pianificare questo flusso, senza integrazioni per sito:
 
@@ -1144,7 +1145,7 @@ Nessun ramo del codice dipende dal modello usato: sono i client MCP a variare (a
 
 `current_state.life` contiene `needs` (energia, fame, socialità, curiosità, stress), `open_loops` (massimo 20), `environment`, `attention`, `mental_content` e `stream` (massimo 8 voci). Le modalità sono `routine`, `unstructured`, `intent` e `sleep`; un'attività è sempre presente, anche quando è riposo o tempo non strutturato. I profili creati prima della Fase 1 non hanno `life`: il rapporto usa default in memoria e non riscrive il profilo. I nuovi profili nascono con il blocco già inizializzato.
 
-Il rapporto limita a 8 loop, 5 relazioni, 8 eventi recenti e 8 voci di stream. Le relazioni espongono solo etichette qualitative e giorni dall'ultimo contatto, mai fiducia o intimità grezze. Non legge l'ombra, i ricordi latenti o repressi, token, segreti o numeri di telefono; se il database timeline non esiste, restituisce eventi recenti vuoti senza creare file. La Fase 1 non espone `life_decide`: la deliberazione arriva nelle fasi successive. «Non sto facendo niente» resta una frase conversazionale, non uno stato valido; nel protocollo l'attività e l'attenzione sono sempre descritte.
+Il rapporto limita a 8 loop, 5 relazioni, 8 eventi recenti e 8 voci di stream. Le relazioni espongono solo etichette qualitative e giorni dall'ultimo contatto, mai fiducia o intimità grezze. Non legge l'ombra, i ricordi latenti o repressi, token, segreti o numeri di telefono; se il database timeline non esiste, restituisce eventi recenti vuoti senza creare file. La Fase 1 non esponeva `life_decide`: la Fase 3 aggiunge il tool e gli effetti interni. «Non sto facendo niente» resta una frase conversazionale, non uno stato valido; nel protocollo l'attività e l'attenzione sono sempre descritte.
 
 ```bash
 python - <<'PY'
@@ -1176,6 +1177,35 @@ PY
 ```
 
 Le decisioni `intent` e `do_nothing` sono rifiutate in questa fase. Le scritture passano da `ConfigStore.transaction()`; il rapporto non include ombra, memorie latenti o represse, segreti o numeri di telefono.
+
+### 14.11. Decisione ed effetti interni (Fase 3)
+
+La Fase 3 aggiunge `life_decide`, `life_status` e l'esecuzione interna. `life_decide` chiude l'episodio attivo con `continue`, `unstructured` o `intent`; `life_status` legge l'episodio attivo, l'ultimo episodio e il prossimo istante utile senza aprire nulla. Il motore deve essere abilitato e deve esistere un episodio aperto: non si può decidere direttamente dal nulla.
+
+- `continue` non cambia l'attività; aggiunge una voce allo stream e chiude l'episodio.
+- `unstructured` aggiorna attività, attenzione, contenuto mentale, bisogni, emozione e stream. L'attività resta una descrizione, non un fatto verificato.
+- `intent` con `tool: "none"` è un'azione interna simulata: aggiorna attività, bisogni, emozione, stream e l'eventuale loop indicato da `target`. Non esegue browser, file o WhatsApp.
+
+Gli effetti sono limitati a variazioni di ±25 per bisogno e il valore resta tra 0 e 100. La riflessione è deterministica: aggiorna lo stream (massimo 8 voci), registra un esito leggibile e, per lo stress, modula leggermente valenza e attivazione. L'esito espone `applied`, `simulated`, `effects`, `reflection` e `note`; un intento interno ha anche `tool: "none"` e l'eventuale `loop_id`. La scadenza applica lo stesso percorso con `expired: true`.
+
+```json
+{
+  "decision": "intent",
+  "intent": {
+    "title": "Preparare uno spuntino",
+    "goal": "Mangiare qualcosa per far scendere la fame",
+    "why_now": "La fame è alta e c'è una pausa.",
+    "tool": "none",
+    "target": "loop_cena",
+    "steps": ["Andare in cucina", "Preparare qualcosa"],
+    "expected_effects": {"hunger": -25, "energy": 4},
+    "risk": "low",
+    "requires_confirmation": false
+  }
+}
+```
+
+Browser, file e WhatsApp restano fuori: gli intenti con tool esterni vengono rifiutati. Anche il collegamento automatico al battito e il comando amministrativo per accendere il motore restano alla Fase 4. Le scritture passano da `ConfigStore.transaction()` e non espongono ombra, memorie latenti o represse, segreti o numeri di telefono.
 
 <p align="center">
   <img src="assets/mnemosine-divider.svg" alt="" width="100%">
