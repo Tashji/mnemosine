@@ -1,18 +1,18 @@
 :root {
-  --bg: #0b0d11;
-  --bg-raised: #10141a;
-  --panel: #141920;
-  --panel-strong: #181f28;
-  --panel-soft: #11161d;
-  --line: #26303c;
-  --line-soft: #1d2530;
-  --text: #e8edf4;
-  --muted: #94a1b2;
-  --faint: #647183;
-  --gold: #d9ab5c;
-  --gold-soft: rgba(217, 171, 92, 0.14);
-  --teal: #64b6a6;
-  --teal-soft: rgba(100, 182, 166, 0.13);
+  --bg: #060a12;
+  --bg-raised: #08111d;
+  --panel: #0b1422;
+  --panel-strong: #0f1a29;
+  --panel-soft: #08111d;
+  --line: #294157;
+  --line-soft: #172536;
+  --text: #f6f1e7;
+  --muted: #93a7bb;
+  --faint: #6d8196;
+  --gold: #d8b36a;
+  --gold-soft: rgba(216, 179, 106, 0.14);
+  --teal: #6ee7d8;
+  --teal-soft: rgba(110, 231, 216, 0.13);
   --rose: #d98282;
   --rose-soft: rgba(217, 130, 130, 0.13);
   --blue: #8faadc;
@@ -21,9 +21,9 @@
   --violet-soft: rgba(185, 161, 216, 0.13);
   --radius: 14px;
   --radius-sm: 9px;
-  --shadow: 0 22px 60px rgba(0, 0, 0, 0.28);
+  --shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
   --sans: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-  --serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  --serif: Georgia, "Times New Roman", serif;
 }
 
 * {
@@ -43,8 +43,9 @@ body {
   min-width: 320px;
   color: var(--text);
   background:
-    radial-gradient(circle at 78% -8%, rgba(217, 171, 92, 0.1), transparent 34rem),
-    radial-gradient(circle at 8% 104%, rgba(100, 182, 166, 0.07), transparent 32rem),
+    radial-gradient(circle at 78% -8%, rgba(110, 231, 216, 0.1), transparent 34rem),
+    radial-gradient(circle at 8% 104%, rgba(216, 179, 106, 0.07), transparent 32rem),
+    radial-gradient(rgba(147, 167, 187, 0.1) 0.7px, transparent 0.8px) 0 0 / 26px 26px,
     var(--bg);
   font-family: var(--sans);
   font-size: 15px;
@@ -100,16 +101,16 @@ a {
 
 .brand-mark {
   display: grid;
-  width: 38px;
-  height: 38px;
+  width: 42px;
+  height: 42px;
+  flex: none;
   place-items: center;
-  border: 1px solid rgba(217, 171, 92, 0.44);
+  border: 0;
   border-radius: 50%;
-  color: var(--gold);
-  background: var(--gold-soft);
-  font-family: var(--serif);
-  font-size: 22px;
-  font-style: italic;
+  color: transparent;
+  background: url("/static/mnemosine-seal.svg") center / contain no-repeat;
+  box-shadow: 0 0 0 5px rgba(216, 179, 106, 0.045);
+  font-size: 0;
 }
 
 .brand strong,
@@ -126,9 +127,10 @@ a {
 
 .brand span {
   margin-top: 1px;
-  color: var(--faint);
+  color: var(--teal);
   font-size: 11px;
   letter-spacing: 0.08em;
+  opacity: 0.72;
   text-transform: uppercase;
 }
 
@@ -170,7 +172,7 @@ select:focus-visible,
 }
 
 .nav-item.is-active {
-  border-color: rgba(217, 171, 92, 0.22);
+  border-color: rgba(216, 179, 106, 0.22);
   color: var(--text);
   background: linear-gradient(90deg, var(--gold-soft), transparent 84%);
 }
@@ -240,7 +242,7 @@ select:focus-visible,
 
 .eyebrow {
   margin: 0 0 7px;
-  color: var(--gold);
+  color: var(--teal);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.16em;
@@ -317,7 +319,7 @@ h3 {
 }
 
 .button:hover {
-  border-color: rgba(217, 171, 92, 0.45);
+  border-color: rgba(216, 179, 106, 0.45);
   background: var(--panel-strong);
 }
 
@@ -332,7 +334,7 @@ h3 {
 }
 
 .notice.is-success {
-  border-color: rgba(100, 182, 166, 0.35);
+  border-color: rgba(110, 231, 216, 0.35);
   color: #cfe9e2;
   background: var(--teal-soft);
 }
@@ -468,7 +470,7 @@ h3 {
   right: -70px;
   width: 230px;
   height: 230px;
-  border: 1px solid rgba(217, 171, 92, 0.12);
+  border: 1px solid rgba(216, 179, 106, 0.12);
   border-radius: 50%;
   content: "";
 }
@@ -711,7 +713,7 @@ h3 {
 .pending-impulse-box {
   margin-top: 10px;
   padding: 10px 12px;
-  border: 1px solid rgba(217, 171, 92, 0.36);
+  border: 1px solid rgba(216, 179, 106, 0.36);
   border-radius: 8px;
   background: var(--gold-soft);
   font-size: 11px;
@@ -1126,7 +1128,7 @@ h3 {
 
 .relation-memory-link {
   padding: 2px 8px;
-  border: 1px solid rgba(217, 171, 92, 0.42);
+  border: 1px solid rgba(216, 179, 106, 0.42);
   border-radius: 999px;
   color: var(--gold);
   background: var(--gold-soft);
@@ -1136,7 +1138,7 @@ h3 {
 }
 
 .relation-memory-link:hover {
-  background: rgba(217, 171, 92, 0.24);
+  background: rgba(216, 179, 106, 0.24);
 }
 
 .panel {
@@ -1433,13 +1435,13 @@ select:hover {
 }
 
 .badge-access-conscious {
-  border-color: rgba(100, 182, 166, 0.24);
+  border-color: rgba(110, 231, 216, 0.24);
   color: var(--teal);
   background: var(--teal-soft);
 }
 
 .badge-access-latent {
-  border-color: rgba(217, 171, 92, 0.28);
+  border-color: rgba(216, 179, 106, 0.28);
   color: var(--gold);
   background: var(--gold-soft);
 }
@@ -1457,13 +1459,13 @@ select:hover {
 }
 
 .badge-status-active {
-  border-color: rgba(100, 182, 166, 0.24);
+  border-color: rgba(110, 231, 216, 0.24);
   color: var(--teal);
   background: var(--teal-soft);
 }
 
 .badge-status-superseded {
-  border-color: rgba(217, 171, 92, 0.24);
+  border-color: rgba(216, 179, 106, 0.24);
   color: var(--gold);
   background: var(--gold-soft);
 }
@@ -2205,6 +2207,16 @@ select:hover {
   margin-bottom: 8px;
 }
 
+.setup-wizard h1::after {
+  display: block;
+  width: 72px;
+  height: 1px;
+  margin-top: 14px;
+  background: linear-gradient(90deg, var(--gold), transparent);
+  content: "";
+  opacity: 0.75;
+}
+
 .setup-wizard h2 {
   margin: 4px 0 7px;
   font-size: clamp(23px, 4vw, 30px);
@@ -2233,7 +2245,7 @@ select:hover {
   border: 1px solid var(--line-soft);
   border-radius: 8px;
   color: var(--faint);
-  background: transparent;
+  background: rgba(8, 17, 29, 0.5);
   font: inherit;
   font-size: 10px;
   text-align: left;
@@ -2246,16 +2258,26 @@ select:hover {
 }
 
 .wizard-progress-step.is-active {
-  border-color: rgba(217, 171, 92, 0.55);
+  border-color: rgba(216, 179, 106, 0.55);
   color: var(--text);
-  background: var(--gold-soft);
+  background: linear-gradient(
+    180deg,
+    rgba(110, 231, 216, 0.07),
+    var(--gold-soft)
+  );
+  box-shadow: inset 0 1px 0 rgba(246, 241, 231, 0.05);
 }
 
 .wizard-progress-number {
-  color: var(--gold);
+  color: var(--teal);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 10px;
   letter-spacing: 0.08em;
+  opacity: 0.72;
+}
+
+.wizard-progress-step.is-active .wizard-progress-number {
+  opacity: 1;
 }
 
 .wizard-step {
@@ -2297,7 +2319,7 @@ select:hover {
 .setup-visual-random {
   flex: 0 0 auto;
   padding: 8px 13px;
-  border: 1px solid rgba(217, 171, 92, 0.45);
+  border: 1px solid rgba(216, 179, 106, 0.45);
   border-radius: 999px;
   color: var(--gold);
   background: var(--gold-soft);
@@ -2346,7 +2368,7 @@ select:hover {
   border: 1px solid var(--line-soft);
   border-radius: 999px;
   color: var(--muted);
-  background: rgba(17, 20, 27, 0.55);
+  background: rgba(8, 17, 29, 0.55);
   font: inherit;
   font-size: 10px;
   line-height: 1.3;
@@ -2397,7 +2419,7 @@ select:hover {
   padding: 13px 14px 3px;
   border: 1px solid var(--line-soft);
   border-radius: 9px;
-  background: rgba(17, 20, 27, 0.55);
+  background: rgba(8, 17, 29, 0.55);
 }
 
 .setup-row-title {
@@ -2473,7 +2495,7 @@ select:hover {
   padding: 13px 14px 2px;
   border: 1px solid var(--line-soft);
   border-radius: 9px;
-  background: rgba(17, 20, 27, 0.55);
+  background: rgba(8, 17, 29, 0.55);
 }
 
 .setup-slider-head {
@@ -2607,7 +2629,7 @@ select:hover {
   padding: 15px 16px 12px;
   border: 1px solid var(--line-soft);
   border-radius: 9px;
-  background: rgba(17, 20, 27, 0.55);
+  background: rgba(8, 17, 29, 0.55);
 }
 
 .setup-review-group h3 {
@@ -2656,7 +2678,7 @@ select:hover {
 .setup-noscript {
   margin: 14px 0 0;
   padding: 10px 12px;
-  border: 1px solid rgba(217, 171, 92, 0.3);
+  border: 1px solid rgba(216, 179, 106, 0.3);
   border-radius: 7px;
   color: var(--muted);
   background: var(--gold-soft);
@@ -2677,7 +2699,7 @@ select:hover {
   padding: 15px 16px;
   border: 1px solid var(--line-soft);
   border-radius: 9px;
-  background: rgba(17, 20, 27, 0.55);
+  background: rgba(8, 17, 29, 0.55);
   cursor: pointer;
 }
 
@@ -2723,7 +2745,7 @@ select:hover {
   padding: 18px 18px 16px;
   border: 1px solid var(--line-soft);
   border-radius: 10px;
-  background: rgba(17, 20, 27, 0.55);
+  background: rgba(8, 17, 29, 0.55);
 }
 
 .setup-complete-item h2 {
@@ -2741,12 +2763,12 @@ select:hover {
 }
 
 .setup-complete-item.is-pending {
-  border-color: rgba(217, 171, 92, 0.3);
+  border-color: rgba(216, 179, 106, 0.3);
 }
 
 .setup-complete-item.is-running {
-  border-color: rgba(217, 171, 92, 0.5);
-  box-shadow: 0 0 0 1px rgba(217, 171, 92, 0.08);
+  border-color: rgba(216, 179, 106, 0.5);
+  box-shadow: 0 0 0 1px rgba(216, 179, 106, 0.08);
 }
 
 .setup-progress {
@@ -2756,11 +2778,11 @@ select:hover {
   padding: 15px 16px 14px;
   border: 1px solid var(--line-soft);
   border-radius: 10px;
-  background: rgba(17, 20, 27, 0.55);
+  background: rgba(8, 17, 29, 0.55);
 }
 
 .setup-progress.is-running {
-  border-color: rgba(217, 171, 92, 0.42);
+  border-color: rgba(216, 179, 106, 0.42);
 }
 
 .setup-progress.is-success {
@@ -2821,7 +2843,7 @@ select:hover {
 .setup-progress.is-running .setup-progress-bar {
   background: linear-gradient(
     90deg,
-    rgba(217, 171, 92, 0.55),
+    rgba(216, 179, 106, 0.55),
     var(--gold),
     rgba(241, 212, 154, 0.55)
   );
@@ -2911,6 +2933,36 @@ select:hover {
   padding: 24px;
 }
 
+.login-page,
+.setup-page {
+  position: relative;
+  isolation: isolate;
+}
+
+.login-page::before,
+.setup-page::before {
+  position: fixed;
+  top: -38vw;
+  right: -24vw;
+  width: 72vw;
+  height: 72vw;
+  border: 1px solid rgba(216, 179, 106, 0.09);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(110, 231, 216, 0.055), transparent 68%);
+  box-shadow:
+    0 0 0 5vw rgba(110, 231, 216, 0.018),
+    0 0 0 10vw rgba(216, 179, 106, 0.012);
+  content: "";
+  pointer-events: none;
+  z-index: 0;
+}
+
+.login-shell,
+.setup-shell {
+  position: relative;
+  z-index: 1;
+}
+
 .login-shell {
   width: min(430px, 100%);
 }
@@ -2929,38 +2981,61 @@ select:hover {
 }
 
 .login-brand strong {
+  color: var(--text);
   font-family: var(--serif);
   font-size: 19px;
   font-weight: 600;
 }
 
 .login-brand span {
-  color: var(--faint);
+  color: var(--teal);
   font-size: 10px;
   letter-spacing: 0.1em;
+  opacity: 0.72;
   text-transform: uppercase;
 }
 
 .login-card {
+  position: relative;
   padding: 30px;
-  border: 1px solid var(--line-soft);
+  border: 1px solid rgba(216, 179, 106, 0.18);
   border-radius: var(--radius);
   background:
+    radial-gradient(circle at 100% 0, rgba(110, 231, 216, 0.06), transparent 17rem),
     linear-gradient(150deg, rgba(255, 255, 255, 0.025), transparent 48%),
     var(--panel);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow), 0 0 0 1px rgba(110, 231, 216, 0.03);
+}
+
+.login-card::before {
+  position: absolute;
+  top: 0;
+  right: 24px;
+  left: 24px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(216, 179, 106, 0.72),
+    transparent
+  );
+  content: "";
+  pointer-events: none;
 }
 
 .login-card h1 {
   margin-bottom: 10px;
+  color: var(--text);
   font-size: clamp(29px, 8vw, 38px);
+  font-weight: 400;
+  letter-spacing: -0.02em;
 }
 
 .login-intro {
   margin-bottom: 22px;
   color: var(--muted);
   font-size: 12px;
-  line-height: 1.6;
+  line-height: 1.65;
 }
 
 .login-error {
@@ -3011,17 +3086,18 @@ select:hover {
   width: 100%;
   height: 42px;
   margin-top: 4px;
-  border: 1px solid rgba(217, 171, 92, 0.5);
+  border: 1px solid rgba(216, 179, 106, 0.7);
   border-radius: 7px;
-  color: #15120c;
-  background: var(--gold);
+  color: #08111d;
+  background: linear-gradient(135deg, #e3c27e, var(--gold));
   font-size: 12px;
   font-weight: 700;
+  letter-spacing: 0.02em;
   cursor: pointer;
 }
 
 .login-submit:hover {
-  background: #e6bc75;
+  background: #e3c27e;
 }
 
 .login-note {
@@ -3036,6 +3112,16 @@ select:hover {
   color: var(--faint);
   font-size: 10px;
   text-align: center;
+}
+
+.login-footer::before {
+  display: block;
+  width: 58px;
+  height: 1px;
+  margin: 0 auto 10px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  content: "";
+  opacity: 0.55;
 }
 
 .logout-form {
@@ -3330,7 +3416,7 @@ select:hover {
   padding: 12px;
   border: 1px solid var(--line-soft);
   border-radius: 9px;
-  background: rgba(17, 20, 27, 0.55);
+  background: rgba(8, 17, 29, 0.55);
 }
 
 .settings-contact .settings-field > span {
@@ -3377,7 +3463,7 @@ select:hover {
 }
 
 .settings-warning {
-  border-color: rgba(217, 171, 92, 0.35);
+  border-color: rgba(216, 179, 106, 0.35);
   color: #e8d6b6;
   background: var(--gold-soft);
 }

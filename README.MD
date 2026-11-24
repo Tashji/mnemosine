@@ -1561,7 +1561,7 @@ Se l'indice vettoriale non era pronto durante l'applicazione, eseguire `python -
 
 ### 17.3. Dashboard amministrativa locale
 
-La dashboard amministrativa è implementata in `agent_memory/dashboard.py`; l'interfaccia è in `agent_memory/dashboard_assets/`. Usa gli stessi servizi e database del progetto, senza dipendenze web aggiuntive. Le viste di consultazione sono in sola lettura; la sezione **Impostazioni** scrive la whitelist e le integrazioni, i flag non bloccati e il ritmo del battito, e può archiviare il profilo per crearne uno nuovo. Restano scritture applicative anche la creazione iniziale del profilo e, su richiesta dal wizard o da `/setup/finalize`, la biografia e l'indice vettoriale.
+La dashboard amministrativa è implementata in `agent_memory/dashboard.py`; l'interfaccia è in `agent_memory/dashboard_assets/`. Usa gli stessi servizi e database del progetto, senza dipendenze web aggiuntive. Le viste di consultazione sono in sola lettura; la sezione **Impostazioni** scrive la whitelist e le integrazioni, i flag non bloccati e il ritmo del battito, e può archiviare il profilo per crearne uno nuovo. Restano scritture applicative anche la creazione iniziale del profilo e, su richiesta dal wizard o da `/setup/finalize`, la biografia e l'indice vettoriale. Il tema visivo riprende il banner del README: fondo notte, accenti oro e teal, titoli serif, emblema circolare e orbite decorative.
 
 Avvio:
 

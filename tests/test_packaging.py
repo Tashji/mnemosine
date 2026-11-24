@@ -123,6 +123,7 @@ class PackagedDataTests(unittest.TestCase):
             "app.js",
             "styles.css",
             "italian-cities.json",
+            "mnemosine-seal.svg",
         ):
             with self.subTest(asset=name):
                 self.assertTrue((assets / name).is_file())
