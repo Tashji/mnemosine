@@ -2704,6 +2704,22 @@ select:hover {
   text-transform: uppercase;
 }
 
+.setup-note-ideas {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+
+.setup-note-ideas .setup-choice {
+  padding: 5px 9px;
+  font-size: 10px;
+}
+
+.setup-note-ideas .setup-life-category-label {
+  font-size: 8px;
+}
+
 @media (max-width: 760px) {
   .setup-visual-creator {
     grid-template-columns: 1fr;

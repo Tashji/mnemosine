@@ -239,6 +239,41 @@
     },
   ];
 
+  const relationNoteIdeas = [
+    {
+      label: "Rapporto",
+      items: [
+        "Rapporto stretto e affettuoso",
+        "Rapporto sereno",
+        "Rapporto formale",
+        "Rapporto conflittuale",
+      ],
+    },
+    {
+      label: "Carattere",
+      items: ["Persona premurosa", "Persona riservata", "Persona ironica"],
+    },
+    {
+      label: "Distanza e presenza",
+      items: ["Vive vicino", "Vive lontano", "Si sentono raramente"],
+    },
+  ];
+
+  const familyNoteIdeas = [
+    {
+      label: "Clima",
+      items: ["Clima sereno", "Clima teso", "Clima formale", "Clima protettivo"],
+    },
+    {
+      label: "Legami",
+      items: ["Legami stretti", "Legami distanti", "Legami conflittuali"],
+    },
+    {
+      label: "Distanza e presenza",
+      items: ["Vivono vicini", "Vivono lontani", "Si sentono raramente"],
+    },
+  ];
+
   let currentStep = 0;
   const rowCounters = {};
 
@@ -758,6 +793,91 @@
     refreshAll();
   }
 
+  function appendNotePhrase(text, phrase) {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      return `${phrase}.`;
+    }
+    if (/[.!?…]$/.test(trimmed) || /[,;]$/.test(trimmed)) {
+      return `${trimmed} ${phrase}.`;
+    }
+    return `${trimmed}. ${phrase}.`;
+  }
+
+  function removeNotePhrase(text, phrase) {
+    const index = text.toLowerCase().indexOf(phrase.toLowerCase());
+    if (index === -1) {
+      return text;
+    }
+    let end = index + phrase.length;
+    if (text.charAt(end) === ".") {
+      end += 1;
+    }
+    while (end < text.length && /\s/.test(text.charAt(end))) {
+      end += 1;
+    }
+    let start = index;
+    while (start > 0 && /\s/.test(text.charAt(start - 1))) {
+      start -= 1;
+    }
+    const before = text.slice(0, start).replace(/\s+$/, "");
+    const after = text.slice(end).replace(/^\s+/, "");
+    if (before && after) {
+      return `${before} ${after}`.replace(/[ \t]{2,}/g, " ");
+    }
+    return (before || after).replace(/[ \t]{2,}/g, " ");
+  }
+
+  function initNoteIdeas(textarea, container, groups) {
+    if (!textarea || !container) {
+      return;
+    }
+    container.textContent = "";
+    const ideas = groups || relationNoteIdeas;
+
+    function refresh() {
+      const text = textarea.value.toLowerCase();
+      container.querySelectorAll("[data-note-phrase]").forEach((button) => {
+        const phrase = button.dataset.notePhrase || "";
+        button.setAttribute(
+          "aria-pressed",
+          text.includes(phrase.toLowerCase()) ? "true" : "false"
+        );
+      });
+    }
+
+    ideas.forEach((group) => {
+      const row = document.createElement("div");
+      row.className = "setup-life-category";
+      const label = document.createElement("span");
+      label.className = "setup-life-category-label";
+      label.textContent = group.label;
+      row.appendChild(label);
+      group.items.forEach((phrase) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "setup-choice";
+        button.dataset.notePhrase = phrase;
+        button.textContent = phrase;
+        button.setAttribute("aria-pressed", "false");
+        button.addEventListener("click", () => {
+          const current = textarea.value;
+          const present = current.toLowerCase().includes(phrase.toLowerCase());
+          textarea.value = present
+            ? removeNotePhrase(current, phrase)
+            : appendNotePhrase(current, phrase);
+          textarea.dispatchEvent(new Event("input", { bubbles: true }));
+          refresh();
+        });
+        row.appendChild(button);
+      });
+      container.appendChild(row);
+    });
+
+    textarea.addEventListener("input", refresh);
+    refresh();
+  }
+
   function applyScalarValues(values, useDefaults) {
     form.querySelectorAll("input[name], select[name], textarea[name]").forEach(
       (element) => {
@@ -855,6 +975,17 @@
           setFieldValue(element, data[key]);
         }
       });
+    }
+
+    if (type === "parent" || type === "sibling" || type === "person") {
+      const notesField = row.querySelector('textarea[name$="_notes"]');
+      const notesLabel = notesField ? notesField.closest("label") : null;
+      if (notesField && notesLabel) {
+        const noteBox = document.createElement("div");
+        noteBox.className = "setup-note-ideas setup-field-wide";
+        notesLabel.insertAdjacentElement("afterend", noteBox);
+        initNoteIdeas(notesField, noteBox);
+      }
     }
 
     container.appendChild(fragment);
@@ -1646,6 +1777,11 @@
   initTraitGuides();
   initVisualSuggestions();
   initLifeSuggestions();
+  initNoteIdeas(
+    form.querySelector('[name="family_notes"]'),
+    form.querySelector('[data-note-ideas="family"]'),
+    familyNoteIdeas
+  );
   initGeoMenus();
   initForeignGeoFields("birth");
   initForeignGeoFields("residence");

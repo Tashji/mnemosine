@@ -271,6 +271,8 @@ class DashboardSetupTests(SetupFixture):
         self.assertIn('data-life-ideas="habits"', page)
         self.assertIn("data-reset-life", page)
         self.assertIn('id="life-preset-status"', page)
+        self.assertIn('data-note-ideas="family"', page)
+        self.assertIn("frasi pronte", page)
         self.assertIn('name="generate_biography"', page)
         self.assertIn('name="build_index"', page)
         self.assertIn('/static/setup.js', page)
@@ -1036,7 +1038,10 @@ class DashboardSetupTests(SetupFixture):
 
         response = self._request("/static/setup.js")
         self.assertEqual(response.status, 200)
-        self.assertIn(b"setup-form", response.read())
+        body = response.read()
+        self.assertIn(b"setup-form", body)
+        self.assertIn(b"relationNoteIdeas", body)
+        self.assertIn(b"familyNoteIdeas", body)
 
         response = self._request("/static/setup_complete.js")
         self.assertEqual(response.status, 200)
