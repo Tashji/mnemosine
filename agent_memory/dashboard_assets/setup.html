@@ -349,19 +349,34 @@
 
             <fieldset class="setup-section">
               <legend>Interessi, valori, abitudini</legend>
-              <div class="setup-grid">
-                <label class="login-field setup-field-wide">
-                  <span>Interessi</span>
-                  <textarea name="interests" rows="4" maxlength="2000" placeholder="Una voce per riga, oppure separate da virgola. Es. fotografia, programmazione, cinema"></textarea>
-                </label>
-                <label class="login-field setup-field-wide">
-                  <span>Valori</span>
-                  <textarea name="values" rows="4" maxlength="2000" placeholder="Es. onestà, lealtà, autonomia, curiosità"></textarea>
-                </label>
-                <label class="login-field setup-field-wide">
-                  <span>Abitudini</span>
-                  <textarea name="habits" rows="4" maxlength="2000" placeholder="Es. legge la sera, rimanda le telefonate, tiene un diario"></textarea>
-                </label>
+              <p class="setup-hint">Parti da un modello pronto: riempie i tre campi con un profilo coerente. Poi togli o aggiungi le voci con un clic; il testo resta sempre modificabile a mano.</p>
+              <div class="setup-life-presets" data-life-presets></div>
+              <div class="setup-life-toolbar">
+                <span class="setup-life-status" id="life-preset-status" aria-live="polite">Scegli un modello oppure aggiungi le voci che ti somigliano.</span>
+                <button type="button" class="setup-visual-reset" data-reset-life>Azzera i tre campi</button>
+              </div>
+              <div class="setup-life-fields">
+                <div class="setup-life-field">
+                  <label class="login-field">
+                    <span>Interessi</span>
+                    <textarea name="interests" rows="4" maxlength="2000" placeholder="Una voce per riga, oppure separate da virgola. Es. fotografia, programmazione, cinema"></textarea>
+                  </label>
+                  <div class="setup-life-ideas" data-life-ideas="interests"></div>
+                </div>
+                <div class="setup-life-field">
+                  <label class="login-field">
+                    <span>Valori</span>
+                    <textarea name="values" rows="4" maxlength="2000" placeholder="Es. onestà, lealtà, autonomia, curiosità"></textarea>
+                  </label>
+                  <div class="setup-life-ideas" data-life-ideas="values"></div>
+                </div>
+                <div class="setup-life-field">
+                  <label class="login-field">
+                    <span>Abitudini</span>
+                    <textarea name="habits" rows="4" maxlength="2000" placeholder="Es. legge la sera, rimanda le telefonate, tiene un diario"></textarea>
+                  </label>
+                  <div class="setup-life-ideas" data-life-ideas="habits"></div>
+                </div>
               </div>
             </fieldset>
           </section>

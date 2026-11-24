@@ -177,6 +177,68 @@
     },
   ];
 
+  const lifeFieldNames = ["interests", "values", "habits"];
+
+  const lifeIdeas = {
+    interests: [
+      { label: "Creatività", items: ["fotografia", "disegno", "scrittura", "musica"] },
+      { label: "Cultura", items: ["lettura", "cinema", "storia"] },
+      { label: "Tecnologia", items: ["programmazione", "videogiochi", "elettronica"] },
+      { label: "Tempo libero", items: ["viaggi", "cucina", "escursioni"] },
+    ],
+    values: [
+      { label: "Personali", items: ["onestà", "curiosità", "autonomia"] },
+      { label: "Relazioni", items: ["lealtà", "rispetto", "empatia"] },
+      { label: "Lavoro", items: ["competenza", "responsabilità", "precisione"] },
+      { label: "Società", items: ["giustizia", "libertà", "solidarietà"] },
+    ],
+    habits: [
+      { label: "Quotidiane", items: ["legge la sera", "si sveglia presto", "tiene un diario"] },
+      { label: "Sociali", items: ["sente gli amici", "organizza cene", "telefona ai familiari"] },
+      { label: "Creative", items: ["suona uno strumento", "scrive appunti", "ascolta podcast"] },
+      { label: "Benessere", items: ["corre al mattino", "medita", "fa stretching"] },
+    ],
+  };
+
+  const lifePresets = [
+    {
+      label: "Curioso e riflessivo",
+      description: "Legge, osserva e coltiva interessi tranquilli.",
+      interests: ["lettura", "fotografia", "storia", "podcast"],
+      values: ["curiosità", "onestà", "autonomia", "rispetto"],
+      habits: [
+        "legge la sera",
+        "tiene un diario",
+        "cammina al mattino",
+        "ascolta podcast",
+      ],
+    },
+    {
+      label: "Creativo e sociale",
+      description: "Musica, immagini e serate con gli amici.",
+      interests: ["musica", "cinema", "disegno", "concerti"],
+      values: ["empatia", "lealtà", "libertà", "gentilezza"],
+      habits: [
+        "suona uno strumento",
+        "organizza cene con gli amici",
+        "frequenta mostre",
+        "scrive appunti",
+      ],
+    },
+    {
+      label: "Concreto e metodico",
+      description: "Routine ordinate, obiettivi chiari e mano pratica.",
+      interests: ["programmazione", "giochi da tavolo", "cucina", "ciclismo"],
+      values: ["competenza", "responsabilità", "precisione", "affidabilità"],
+      habits: [
+        "si sveglia presto",
+        "pianifica la settimana",
+        "corre al mattino",
+        "cucina in casa",
+      ],
+    },
+  ];
+
   let currentStep = 0;
   const rowCounters = {};
 
@@ -554,6 +616,146 @@
         }
       });
     }
+  }
+
+  function initLifeSuggestions() {
+    const status = document.getElementById("life-preset-status");
+    const resetButton = form.querySelector("[data-reset-life]");
+    const presetsBox = form.querySelector("[data-life-presets]");
+
+    function lifeField(name) {
+      return form.querySelector(`[name="${name}"]`);
+    }
+
+    function items(name) {
+      const field = lifeField(name);
+      if (!field) {
+        return [];
+      }
+      return field.value
+        .split(/[\n,;]+/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+
+    function same(left, right) {
+      return left.toLowerCase() === right.toLowerCase();
+    }
+
+    function write(name, list) {
+      const field = lifeField(name);
+      if (!field) {
+        return;
+      }
+      field.value = list.join("\n");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+
+    function refresh(name) {
+      const current = items(name);
+      form
+        .querySelectorAll(`[data-life-choice="${name}"]`)
+        .forEach((button) => {
+          const pressed = current.some((item) =>
+            same(item, button.dataset.lifeValue || "")
+          );
+          button.setAttribute("aria-pressed", pressed ? "true" : "false");
+        });
+    }
+
+    function refreshAll() {
+      lifeFieldNames.forEach(refresh);
+    }
+
+    lifeFieldNames.forEach((name) => {
+      const container = form.querySelector(`[data-life-ideas="${name}"]`);
+      if (!container) {
+        return;
+      }
+      container.textContent = "";
+      (lifeIdeas[name] || []).forEach((group) => {
+        const row = document.createElement("div");
+        row.className = "setup-life-category";
+        const label = document.createElement("span");
+        label.className = "setup-life-category-label";
+        label.textContent = group.label;
+        row.appendChild(label);
+        group.items.forEach((item) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "setup-choice";
+          button.dataset.lifeChoice = name;
+          button.dataset.lifeValue = item;
+          button.textContent = item;
+          button.setAttribute("aria-pressed", "false");
+          button.addEventListener("click", () => {
+            const list = items(name);
+            const existing = list.findIndex((entry) => same(entry, item));
+            if (existing === -1) {
+              list.push(item);
+            } else {
+              list.splice(existing, 1);
+            }
+            write(name, list);
+            refresh(name);
+            if (status) {
+              status.textContent = "";
+            }
+          });
+          row.appendChild(button);
+        });
+        container.appendChild(row);
+      });
+    });
+
+    if (presetsBox) {
+      presetsBox.textContent = "";
+      lifePresets.forEach((preset) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "setup-life-preset";
+        const title = document.createElement("strong");
+        title.textContent = preset.label;
+        const description = document.createElement("span");
+        description.textContent = preset.description;
+        button.appendChild(title);
+        button.appendChild(description);
+        button.addEventListener("click", () => {
+          lifeFieldNames.forEach((name) => write(name, preset[name] || []));
+          refreshAll();
+          if (status) {
+            status.textContent = `Modello “${preset.label}” applicato: puoi togliere o aggiungere voci.`;
+          }
+        });
+        presetsBox.appendChild(button);
+      });
+    }
+
+    if (resetButton) {
+      resetButton.addEventListener("click", () => {
+        lifeFieldNames.forEach((name) => write(name, []));
+        refreshAll();
+        if (status) {
+          status.textContent =
+            "Campi azzerati: puoi ricominciare da un modello o scrivere a mano.";
+        }
+      });
+    }
+
+    lifeFieldNames.forEach((name) => {
+      const field = lifeField(name);
+      if (!field) {
+        return;
+      }
+      field.addEventListener("input", () => {
+        refresh(name);
+        if (status) {
+          status.textContent = "";
+        }
+      });
+    });
+
+    refreshAll();
   }
 
   function applyScalarValues(values, useDefaults) {
@@ -1443,6 +1645,7 @@
   initializeRows(initialValues);
   initTraitGuides();
   initVisualSuggestions();
+  initLifeSuggestions();
   initGeoMenus();
   initForeignGeoFields("birth");
   initForeignGeoFields("residence");

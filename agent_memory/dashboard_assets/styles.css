@@ -2621,6 +2621,89 @@ select:hover {
   margin: 0;
 }
 
+.setup-life-presets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.setup-life-preset {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 9px;
+  color: var(--muted);
+  background: rgba(8, 17, 29, 0.55);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.setup-life-preset:hover,
+.setup-life-preset:focus-visible {
+  border-color: var(--gold);
+}
+
+.setup-life-preset strong {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.setup-life-preset span {
+  color: var(--faint);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.setup-life-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.setup-life-status {
+  min-height: 15px;
+  color: var(--faint);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.setup-life-fields {
+  display: grid;
+  gap: 16px;
+}
+
+.setup-life-field .login-field {
+  margin-bottom: 8px;
+}
+
+.setup-life-ideas {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.setup-life-category {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.setup-life-category-label {
+  flex-basis: 100%;
+  color: var(--faint);
+  font-size: 9px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
 @media (max-width: 760px) {
   .setup-visual-creator {
     grid-template-columns: 1fr;
