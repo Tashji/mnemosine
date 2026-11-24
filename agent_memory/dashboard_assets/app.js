@@ -2057,6 +2057,16 @@ function browserSettings(browser) {
   return form;
 }
 
+function contactSlug(value) {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 60);
+}
+
 function contactRow(contact = {}) {
   const row = h(
     "div",
@@ -2164,11 +2174,18 @@ function whatsappSettings(whatsapp, behavior) {
     async (formData, form) => {
       const rows = [...form.querySelectorAll(".settings-contact")];
       const contactsPayload = rows
-        .map((item) => ({
-          user_id: item.querySelector("[name='contact_user_id']").value.trim(),
-          display_name: item.querySelector("[name='contact_display_name']").value.trim(),
-          phone: item.querySelector("[name='contact_phone']").value.trim(),
-        }))
+        .map((item) => {
+          const display_name = item.querySelector("[name='contact_display_name']").value.trim();
+          const phone = item.querySelector("[name='contact_phone']").value.trim();
+          // L'ID è interno: se manca, un nome stabile basta per aggiungere il
+          // contatto. Prima la riga veniva scartata senza spiegazione.
+          const user_id = item.querySelector("[name='contact_user_id']").value.trim()
+            || contactSlug(display_name);
+          if (!user_id && (display_name || phone)) {
+            throw new Error("Inserisci il nome o l'ID relazione per ogni contatto.");
+          }
+          return { user_id, display_name, phone };
+        })
         .filter((item) => item.user_id);
       const max = Number(formData.get("max_per_day"));
       if (!Number.isInteger(max)) {
