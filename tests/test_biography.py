@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 import sqlite3
 import tempfile
 import unittest
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 from agent_memory import profile as profile_module
 from agent_memory.biography import (
+    TEMPLATES,
     BiographyService,
     age_on,
     classify_world_event,
@@ -37,8 +39,8 @@ class BiographyTests(unittest.TestCase):
 
     # -- utilità ------------------------------------------------------------
 
-    def _remove_generated_biography(self) -> None:
-        db_path = self.root / "data" / "timeline_episodic.db"
+    def _remove_generated_biography(self, root: Path | None = None) -> None:
+        db_path = (root or self.root) / "data" / "timeline_episodic.db"
         with contextlib.closing(sqlite3.connect(db_path)) as conn:
             conn.execute("PRAGMA foreign_keys = ON")
             conn.execute(
@@ -119,6 +121,61 @@ class BiographyTests(unittest.TestCase):
             len({event.source_ref for event in plan.generated}),
             len(plan.generated),
         )
+
+    def test_plan_covers_current_age_after_25(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            copy_profile(root)
+            self._remove_generated_biography(root)
+
+            identity_path = root / "config" / "identity.json"
+            identity = json.loads(identity_path.read_text(encoding="utf-8"))
+            identity["personal_data"]["birth_date"] = "1996-08-22"
+            identity_path.write_text(
+                json.dumps(identity, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            world_path = root / "config" / "world_history.json"
+            world = json.loads(world_path.read_text(encoding="utf-8"))
+            world["birth_date"] = "1996-08-22"
+            world_path.write_text(
+                json.dumps(world, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+
+            memory = MemoryService(root)
+            # Una giornata di chat con più righe non deve contare come più
+            # giornate biografiche e bloccare la generazione dell'età corrente.
+            for index in range(3):
+                memory.create_memory(
+                    title=f"Interazione di prova {index}",
+                    description="Messaggio di chat nello stesso giorno.",
+                    source="real_interaction",
+                    event_time="2026-10-20T12:00:00+02:00",
+                    tags=["chat_local"],
+                )
+            service = BiographyService(root, as_of=AS_OF)
+            self.assertEqual(age_on(service.birth_date, AS_OF), 30)
+            self.assertEqual(service.birth_date, date(1996, 8, 22))
+            self.assertTrue({26, 27, 28, 29, 30}.issubset(
+                {template.age for template in TEMPLATES}
+            ))
+
+            plan = service.plan()
+            self.assertGreater(len(plan.generated), 0)
+            service.apply(plan)
+
+            with memory.db.timeline() as conn:
+                rows = conn.execute(
+                    "SELECT event_date FROM episodic_memories "
+                    "WHERE id LIKE 'bio_%' ORDER BY event_date"
+                ).fetchall()
+            dates = [date.fromisoformat(row["event_date"]) for row in rows]
+            self.assertTrue(dates)
+            latest = max(dates)
+            self.assertLessEqual(latest, AS_OF)
+            self.assertGreaterEqual(latest, AS_OF - timedelta(days=120))
+            self.assertEqual(age_on(service.birth_date, latest), 30)
 
     def test_plan_is_deterministic(self) -> None:
         first = self.service.plan()

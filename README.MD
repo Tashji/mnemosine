@@ -1468,7 +1468,9 @@ La densità prevista è:
 
 - adolescenza: 2 ricordi per anno tra i 14 e i 19 anni;
 
-- età adulta: 3 ricordi per anno dai 20 anni in poi.
+- età adulta: 3 ricordi per anno dai 20 anni in poi; i template proseguono oltre i 25 anni fino all'età corrente.
+
+La densità annuale conta i giorni distinti, non le singole righe: più memorie di chat nello stesso giorno non devono saturare da sole l'anno e impedire la generazione dell'età corrente.
 
 Il filtro di anacronismo calcola l'età alla data dell'evento. Gli eventi precedenti alla nascita vengono esclusi; quelli sotto la soglia di comprensione restano soltanto contesto familiare e non vengono scritti nella timeline. Per politica e geopolitica la soglia minima è di 7 anni. Gli eventi mondiali sopra soglia possono diventare ricordi diretti, collegati tramite `world_event_id`; quelli già coperti da un ricordo esistente non vengono duplicati.
 

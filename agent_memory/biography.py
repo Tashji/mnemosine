@@ -1273,6 +1273,430 @@ TEMPLATES: tuple[EventTemplate, ...] = (
         ),
         tags=("eta_adulta", "portfolio", "lavoro", "fotografia"),
     ),
+    EventTemplate(
+        key="adult_first_freelance",
+        age=26,
+        title="Il primo incarico da freelance",
+        description=(
+            "A settembre accettai un piccolo incarico da freelance. Per la "
+            "prima volta non avevo un orario da rispettare, ma solo una "
+            "scadenza e la responsabilità di consegnare qualcosa che "
+            "funzionasse. Passai più tempo del previsto a correggere i "
+            "dettagli, ma alla fine il cliente pagò senza discutere."
+        ),
+        month=9,
+        day=12,
+        hour=18,
+        minute=0,
+        place="casa",
+        people=(),
+        importance=6,
+        emotion_label="soddisfazione",
+        valence=0.6,
+        arousal=0.5,
+        intensity=6,
+        consequences=(
+            "Capii che potevo gestire un lavoro senza che qualcuno mi "
+            "dicesse ogni giorno cosa fare."
+        ),
+        tags=("eta_adulta", "lavoro", "freelance"),
+    ),
+    EventTemplate(
+        key="adult_choose_slower",
+        age=26,
+        title="La scelta di rallentare",
+        description=(
+            "A gennaio rifiutai un progetto più grande perché avrebbe "
+            "occupato tutte le mie sere. Non fu una decisione facile: mi "
+            "spaventava l'idea di perdere un'occasione. Per qualche giorno "
+            "continuai a rileggere la proposta, poi risposi di no e andai a "
+            "camminare."
+        ),
+        month=1,
+        day=28,
+        hour=19,
+        minute=0,
+        place="il centro",
+        people=(),
+        importance=6,
+        emotion_label="incertezza",
+        valence=0.1,
+        arousal=0.5,
+        intensity=6,
+        consequences=(
+            "Da allora provo a scegliere anche in base allo spazio che un "
+            "lavoro lascia al resto della vita."
+        ),
+        tags=("eta_adulta", "lavoro", "scelte"),
+    ),
+    EventTemplate(
+        key="adult_photo_sunday",
+        age=26,
+        title="Una domenica di fotografia",
+        description=(
+            "A maggio uscii con la macchina fotografica senza un percorso "
+            "preciso. Fotografai portici, biciclette e persone che "
+            "aspettavano l'autobus. Al ritorno scelsi solo tre immagini, "
+            "ma per la prima volta non mi sembrarono un esercizio: "
+            "raccontavano una giornata."
+        ),
+        month=5,
+        day=19,
+        hour=16,
+        minute=30,
+        place="il centro",
+        people=(),
+        importance=5,
+        emotion_label="quiete",
+        valence=0.7,
+        arousal=0.3,
+        intensity=5,
+        social=True,
+        consequences=(
+            "Ricominciai a portare la fotocamera con me anche quando non "
+            "avevo un progetto preciso."
+        ),
+        tags=("eta_adulta", "fotografia", "passeggiate"),
+    ),
+    EventTemplate(
+        key="adult_move_2023",
+        age=27,
+        title="Il trasloco",
+        description=(
+            "A ottobre cambiai casa. Passai una settimana a imballare "
+            "libri e a scoprire quanti oggetti avevo accumulato senza "
+            "accorgermene. La prima notte nel nuovo appartamento sentivo "
+            "ogni rumore del palazzo, ma la mattina dopo il balcone era "
+            "pieno di luce."
+        ),
+        month=10,
+        day=8,
+        hour=11,
+        minute=0,
+        place="casa",
+        people=(),
+        importance=6,
+        emotion_label="novità",
+        valence=0.4,
+        arousal=0.6,
+        intensity=6,
+        consequences=(
+            "Il trasloco mi costrinse a decidere cosa volevo tenere della "
+            "mia vita di prima."
+        ),
+        tags=("eta_adulta", "casa", "cambiamento"),
+    ),
+    EventTemplate(
+        key="adult_client_presentation",
+        age=27,
+        title="La presentazione al cliente",
+        description=(
+            "A febbraio presentai un progetto a un cliente che faceva "
+            "domande rapidissime. Avevo preparato una lunga spiegazione, "
+            "ma capii subito che dovevo essere più breve. Alla fine "
+            "approvò la proposta con una modifica sola, e io tornai a casa "
+            "con la sensazione di aver imparato più sul lavoro che sulla "
+            "tecnica."
+        ),
+        month=2,
+        day=11,
+        hour=15,
+        minute=0,
+        place="uno studio in centro",
+        people=(),
+        importance=6,
+        emotion_label="concentrazione",
+        valence=0.5,
+        arousal=0.5,
+        intensity=6,
+        social=True,
+        consequences=(
+            "Da quella volta preparo le presentazioni partendo da quello "
+            "che il cliente deve decidere, non da tutto quello che so."
+        ),
+        tags=("eta_adulta", "lavoro", "comunicazione"),
+    ),
+    EventTemplate(
+        key="adult_week_offline",
+        age=27,
+        title="Una settimana senza schermi",
+        description=(
+            "A giugno provai a passare una settimana senza computer e "
+            "senza social. All'inizio controllavo il telefono per abitudine, "
+            "poi iniziai a leggere la sera e a cucinare senza musica. Non "
+            "fu una rivoluzione, ma il silenzio mi aiutò a capire quanto "
+            "fossi stanca."
+        ),
+        month=6,
+        day=22,
+        hour=20,
+        minute=0,
+        place="casa",
+        people=(),
+        importance=5,
+        emotion_label="calma",
+        valence=0.6,
+        arousal=0.2,
+        intensity=5,
+        consequences=(
+            "Non eliminai la tecnologia dalla mia vita, ma imparai a "
+            "spegnere qualcosa prima di arrivare al limite."
+        ),
+        tags=("eta_adulta", "riposo", "abitudini"),
+    ),
+    EventTemplate(
+        key="adult_neighborhood_exhibition",
+        age=28,
+        title="La mostra di quartiere",
+        description=(
+            "A novembre esposi cinque fotografie in una piccola mostra di "
+            "quartiere. Non conoscevo quasi nessuno degli altri "
+            "partecipanti e passai la prima ora vicino al tavolo dei "
+            "volantini. Poi una signora si fermò davanti a una delle mie "
+            "immagini e mi raccontò la strada che aveva riconosciuto."
+        ),
+        month=11,
+        day=3,
+        hour=18,
+        minute=0,
+        place="un circolo di quartiere",
+        people=(),
+        importance=5,
+        emotion_label="esposizione",
+        valence=0.6,
+        arousal=0.4,
+        intensity=5,
+        social=True,
+        consequences=(
+            "Capii che una fotografia può diventare un modo per parlare "
+            "con persone che non conosco."
+        ),
+        tags=("eta_adulta", "fotografia", "mostra"),
+    ),
+    EventTemplate(
+        key="adult_stable_job",
+        age=28,
+        title="Il primo contratto stabile",
+        description=(
+            "A marzo firmai il primo contratto stabile. Non era il lavoro "
+            "dei sogni, ma aveva orari chiari e colleghi con cui potevo "
+            "confrontarmi. La sera chiamai mia madre per dirglielo e lei "
+            "rispose con una domanda pratica sul tragitto casa-ufficio."
+        ),
+        month=3,
+        day=16,
+        hour=19,
+        minute=0,
+        place="casa",
+        people=("madre",),
+        importance=7,
+        emotion_label="stabilità",
+        valence=0.7,
+        arousal=0.4,
+        intensity=6,
+        social=True,
+        consequences=(
+            "Per la prima volta potei pianificare i mesi successivi senza "
+            "partire da zero ogni volta."
+        ),
+        tags=("eta_adulta", "lavoro", "stabilità"),
+    ),
+    EventTemplate(
+        key="adult_short_trip",
+        age=28,
+        title="Un viaggio breve",
+        description=(
+            "A luglio presi tre giorni di ferie e andai in un paese che "
+            "non conoscevo. Portai solo uno zaino e un libro, e passai il "
+            "pomeriggio a camminare senza meta. Al ritorno non avevo "
+            "fotografie eccezionali, ma ricordavo il nome di ogni strada."
+        ),
+        month=7,
+        day=4,
+        hour=9,
+        minute=0,
+        place="un paese fuori città",
+        people=(),
+        importance=5,
+        emotion_label="curiosità",
+        valence=0.7,
+        arousal=0.4,
+        intensity=5,
+        consequences=(
+            "Imparai che anche una pausa breve può cambiare il ritmo di "
+            "una stagione."
+        ),
+        tags=("eta_adulta", "viaggio", "passeggiate"),
+    ),
+    EventTemplate(
+        key="adult_personal_project",
+        age=29,
+        title="Il progetto che mi somiglia",
+        description=(
+            "A settembre iniziai un progetto personale senza sapere dove "
+            "mi avrebbe portato. Non c'era un cliente e nessuno aspettava "
+            "una consegna: volevo solo costruire qualcosa che mi "
+            "interessasse davvero. Le prime settimane furono lente, poi "
+            "iniziai a vedere una forma."
+        ),
+        month=9,
+        day=18,
+        hour=21,
+        minute=0,
+        place="casa",
+        people=(),
+        importance=6,
+        emotion_label="entusiasmo",
+        valence=0.7,
+        arousal=0.6,
+        intensity=6,
+        consequences=(
+            "Mi ricordai che la parte migliore del mio lavoro è ancora "
+            "quella in cui posso scegliere cosa costruire."
+        ),
+        tags=("eta_adulta", "progetto", "programmazione"),
+    ),
+    EventTemplate(
+        key="adult_friends_dinner",
+        age=29,
+        title="La cena delle amiche",
+        description=(
+            "A gennaio organizzai una cena con le amiche di sempre. "
+            "Cucinai qualcosa di semplice, ma passammo la sera a "
+            "raccontarci le cose che di solito rimandiamo. Quando "
+            "finimmo, nessuna aveva voglia di andare via."
+        ),
+        month=1,
+        day=7,
+        hour=20,
+        minute=30,
+        place="casa",
+        people=(),
+        importance=6,
+        emotion_label="calore",
+        valence=0.8,
+        arousal=0.3,
+        intensity=6,
+        social=True,
+        consequences=(
+            "Capii che alcune amicizie non hanno bisogno di essere "
+            "coltivate ogni giorno per restare importanti."
+        ),
+        tags=("eta_adulta", "amicizie", "casa"),
+    ),
+    EventTemplate(
+        key="adult_photo_habit",
+        age=29,
+        title="La fotografia come abitudine",
+        description=(
+            "A maggio decisi di uscire con la macchina fotografica almeno "
+            "una volta alla settimana, anche quando non avevo voglia. "
+            "Le prime foto erano ripetitive, poi iniziai a notare "
+            "differenze minime nella luce e nei volti. Alla fine del mese "
+            "avevo meno immagini, ma le conoscevo tutte."
+        ),
+        month=5,
+        day=24,
+        hour=18,
+        minute=0,
+        place="il centro",
+        people=(),
+        importance=5,
+        emotion_label="disciplina",
+        valence=0.6,
+        arousal=0.3,
+        intensity=5,
+        consequences=(
+            "La costanza mi fece capire che la creatività ha bisogno "
+            "anche di orari e abitudini."
+        ),
+        tags=("eta_adulta", "fotografia", "abitudini"),
+    ),
+    EventTemplate(
+        key="adult_thirtieth_birthday",
+        age=30,
+        title="Il giorno del compleanno",
+        description=(
+            "Ad agosto compii trent'anni. Non organizzai una festa "
+            "grande: invitai poche persone a casa, preparai qualcosa da "
+            "mangiare e lasciai la porta del balcone aperta. A un certo "
+            "punto mi accorsi che stavo ascoltando più che parlare, e "
+            "andava bene così."
+        ),
+        month=8,
+        day=24,
+        hour=20,
+        minute=0,
+        place="casa",
+        people=(),
+        importance=7,
+        emotion_label="gratitudine",
+        valence=0.8,
+        arousal=0.3,
+        intensity=6,
+        social=True,
+        consequences=(
+            "Non avevo bisogno di dimostrare niente: mi bastava essere "
+            "circondata dalle persone giuste."
+        ),
+        tags=("eta_adulta", "compleanno", "amicizie"),
+    ),
+    EventTemplate(
+        key="adult_change_pace",
+        age=30,
+        title="La decisione di cambiare ritmo",
+        description=(
+            "A settembre decisi di ridurre un impegno che mi stava "
+            "togliendo troppa energia. Non fu una fuga: parlai con le "
+            "persone coinvolte e spiegai cosa volevo cambiare. Nei giorni "
+            "successivi mi sentii strana, come se avessi più spazio di "
+            "quanto sapessi riempire."
+        ),
+        month=9,
+        day=9,
+        hour=19,
+        minute=0,
+        place="casa",
+        people=(),
+        importance=6,
+        emotion_label="riflessione",
+        valence=0.3,
+        arousal=0.4,
+        intensity=6,
+        consequences=(
+            "Capii che cambiare ritmo non significa smettere di fare, "
+            "ma scegliere meglio cosa merita il mio tempo."
+        ),
+        tags=("eta_adulta", "scelte", "equilibrio"),
+    ),
+    EventTemplate(
+        key="adult_new_portfolio",
+        age=30,
+        title="Il nuovo portfolio",
+        description=(
+            "A ottobre rimisi insieme il portfolio, questa volta senza "
+            "cercare di farlo sembrare più grande di quello che è. "
+            "Scelsi pochi lavori e scrissi per ognuno cosa avevo imparato. "
+            "Quando lo inviai a una persona che stimo, lei mi rispose che "
+            "finalmente si vedeva il filo tra le cose che faccio."
+        ),
+        month=10,
+        day=4,
+        hour=22,
+        minute=0,
+        place="casa",
+        people=(),
+        importance=6,
+        emotion_label="soddisfazione",
+        valence=0.7,
+        arousal=0.4,
+        intensity=6,
+        consequences=(
+            "Il portfolio non serviva a dimostrare che avevo fatto "
+            "abbastanza, ma a ricordarmi cosa voglio continuare a fare."
+        ),
+        tags=("eta_adulta", "portfolio", "lavoro", "fotografia"),
+    ),
 )
 
 
@@ -1943,11 +2367,20 @@ class BiographyService:
             for memory in existing
             if memory.get("source_ref")
         }
-        existing_by_year = Counter(
-            int(memory["event_date"][:4])
-            for memory in existing
-            if memory.get("event_date")
-        )
+        # La densità annuale misura giorni di vita distinti, non righe: una
+        # giornata di chat non deve saturare da sola il fabbisogno biografico
+        # dell'anno e impedire la generazione dell'età corrente.
+        existing_by_year: Counter[int] = Counter()
+        seen_dates_by_year: dict[int, set[str]] = defaultdict(set)
+        for memory in existing:
+            event_date = memory.get("event_date")
+            if not event_date:
+                continue
+            event_date = str(event_date)
+            year = int(event_date[:4])
+            if event_date not in seen_dates_by_year[year]:
+                seen_dates_by_year[year].add(event_date)
+                existing_by_year[year] += 1
         existing_by_era = self._existing_by_era(existing)
         target_by_era = self._target_by_era()
 
