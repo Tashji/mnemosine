@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import os
 import re
 import tempfile
 import threading
@@ -22,7 +23,12 @@ from agent_memory.dashboard_auth import DashboardAuth
 from agent_memory.dashboard_settings import DashboardSettings
 from agent_memory.errors import ConfigError, ValidationError
 from agent_memory.executor import delivered_messages
-from agent_memory.profile import PROFILE_STATE_MISSING, PROJECT_ROOT, profile_state
+from agent_memory.profile import (
+    PROFILE_STATE_MISSING,
+    PROFILE_STATE_READY,
+    PROJECT_ROOT,
+    profile_state,
+)
 from tests.support import copy_profile
 
 PASSWORD = "correct horse battery"
@@ -352,6 +358,24 @@ class SettingsUnitTests(unittest.TestCase):
         self.assertEqual((tls / "key.pem").read_text(encoding="utf-8"), "chiave")
         self.assertEqual((models / "cache.bin").read_text(encoding="utf-8"), "cache")
         self.assertEqual(result["redirect"], "/setup")
+
+    @unittest.skipUnless(
+        os.name == "nt", "Il blocco dei file aperti è specifico di Windows"
+    )
+    def test_archive_reports_profile_in_use_and_rolls_back(self) -> None:
+        target = self.root / "data" / "chat.sqlite3"
+        if not target.exists():
+            target.write_text("chat", encoding="utf-8")
+        handle = target.open("rb")
+        try:
+            with self.assertRaisesRegex(ConfigError, "profilo è in uso"):
+                self.settings.archive_profile("ELIMINA")
+        finally:
+            handle.close()
+
+        self.assertEqual(profile_state(self.root), PROFILE_STATE_READY)
+        self.assertTrue((self.root / "config" / "identity.json").is_file())
+        self.assertTrue(target.is_file())
 
     def test_archive_requires_confirmation_and_refuses_project_root(self) -> None:
         with self.assertRaises(ValidationError):

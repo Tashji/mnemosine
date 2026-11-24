@@ -3382,6 +3382,12 @@ select:hover {
   background: var(--gold-soft);
 }
 
+.settings-error {
+  border-color: rgba(217, 130, 130, 0.45);
+  color: #f0c7c7;
+  background: var(--rose-soft);
+}
+
 .settings-blocked {
   color: var(--muted);
   background: var(--panel-soft);

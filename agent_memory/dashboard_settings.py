@@ -16,6 +16,7 @@ wizard di prima configurazione.
 from __future__ import annotations
 
 import copy
+import errno
 import json
 import math
 import os
@@ -636,6 +637,17 @@ class DashboardSettings:
                     os.replace(preserved, data_dir / name)
         except OSError as exc:
             self._rollback_archive(archive, moved)
+            if getattr(exc, "winerror", None) in {5, 32, 33} or exc.errno in {
+                errno.EACCES,
+                errno.EPERM,
+                errno.EBUSY,
+            }:
+                raise ConfigError(
+                    "Archiviazione non riuscita: il profilo è in uso da un "
+                    "altro processo, per esempio la chat locale, autonomy "
+                    "loop o il browser. Chiudi questi processi e riprova. "
+                    "Il profilo è stato ripristinato."
+                ) from exc
             raise ConfigError(
                 f"Archiviazione incompleta: {exc}. Il profilo è stato "
                 "ripristinato; controlla la directory prima di riprovare."

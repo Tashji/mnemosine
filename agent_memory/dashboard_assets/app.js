@@ -1929,14 +1929,22 @@ function settingsForm(buttonText, content, handler, { danger = false } = {}) {
     type: "submit",
     text: buttonText,
   });
+  const formError = h("p", {
+    class: "settings-error",
+    role: "alert",
+    hidden: true,
+  });
   const form = h(
     "form",
     { class: "settings-form" },
     content,
+    formError,
     h("div", { class: "settings-actions" }, button)
   );
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    formError.hidden = true;
+    formError.textContent = "";
     const original = button.textContent;
     button.disabled = true;
     button.textContent = "Salvataggio…";
@@ -1944,6 +1952,8 @@ function settingsForm(buttonText, content, handler, { danger = false } = {}) {
       await handler(new FormData(form), form);
     } catch (error) {
       setNotice(error.message);
+      formError.textContent = error.message;
+      formError.hidden = false;
     } finally {
       button.disabled = false;
       button.textContent = original;
@@ -2349,9 +2359,11 @@ function profileSettings(profile) {
     h("p", {
       class: "settings-warning",
       text:
-        "L'archiviazione sposta configurazione, database e file in una cartella di backup, " +
-        "poi riporta la dashboard al wizard. Il profilo non viene cancellato: il certificato " +
-        "TLS e la cache del modello restano nel profilo.",
+        "Prima di procedere chiudi la chat locale, autonomy loop e il browser del profilo: " +
+        "su Windows i file aperti bloccano lo spostamento. L'archiviazione sposta " +
+        "configurazione, database e file in una cartella di backup, poi riporta la dashboard " +
+        "al wizard. Il profilo non viene cancellato: il certificato TLS e la cache del " +
+        "modello restano nel profilo.",
     }),
     settingsForm(
       "Archivia e crea nuovo",

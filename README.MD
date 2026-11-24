@@ -1673,7 +1673,7 @@ Impostazioni dalla dashboard:
 
 - **Comportamento**: generazione visiva, motore dell'ombra, modalità manutenzione e parametri del battito (`interval_minutes`, `cooldown_minutes`, `max_impulses_per_day`). La lettura diretta dell'ombra resta bloccata per progetto.
 
-- **Profilo**: archiviazione esplicita. Configurazione, database e file vengono spostati in `backups/profile-AAAAmmgg-HHMMSS`; `data/dashboard_tls` e `data/models` vengono conservati, quindi certificato TLS e cache del modello non si perdono; un file della password esterno al profilo resta comunque al suo posto. Dopo l'archiviazione la dashboard torna a `/setup` per creare un nuovo profilo. Il dataset demo del repository non è archiviabile: avvia la dashboard su un profilo separato.
+- **Profilo**: archiviazione esplicita. Configurazione, database e file vengono spostati in `backups/profile-AAAAmmgg-HHMMSS`; `data/dashboard_tls` e `data/models` vengono conservati, quindi certificato TLS e cache del modello non si perdono; un file della password esterno al profilo resta comunque al suo posto. Dopo l'archiviazione la dashboard torna a `/setup` per creare un nuovo profilo. Il dataset demo del repository non è archiviabile: avvia la dashboard su un profilo separato. Prima di archiviare chiudi la chat locale, `autonomy_loop` e il browser del profilo: su Windows i file aperti bloccano lo spostamento di `data` e la dashboard annulla l'operazione con un errore esplicito.
 
 - Ogni scrittura passa dalla sessione autenticata e da un token CSRF monouso; i valori vengono riletti con le classi del runtime prima di sostituire il file. Un archivio non cancella i dati: resta nella cartella di backup e può essere ripristinato a mano.
 
