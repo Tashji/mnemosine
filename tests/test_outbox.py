@@ -31,6 +31,7 @@ from agent_memory.outbox import (
     DeliveryStatusStore,
     OutboxLock,
     OutboxTransport,
+    PlaywrightWhatsAppBackend,
 )
 from agent_memory import outbox as outbox_module
 from tests.support import copy_profile
@@ -555,6 +556,35 @@ class OutboxTestCase(unittest.TestCase):
             code, _out, err = self.run_cli("--send")
         self.assertEqual(code, 1)
         self.assertIn("consegna è già in corso", err)
+
+
+class ConfirmationPage:
+    """Pagina finta: il conteggio cambia oppure il testo compare nel DOM."""
+
+    def __init__(self, count: int, present: bool = False) -> None:
+        self.count = count
+        self.present = present
+
+    def evaluate(self, script: str, argument: Any = None) -> Any:
+        if argument is None:
+            return self.count
+        return self.present
+
+
+class ConfirmationTests(unittest.TestCase):
+    def test_wait_confirmation_accepts_a_new_message_container(self) -> None:
+        backend = object.__new__(PlaywrightWhatsAppBackend)
+        self.assertTrue(
+            backend._wait_confirmation(ConfirmationPage(3), 2, "ciao")
+        )
+
+    def test_wait_confirmation_accepts_visible_text_when_count_is_stale(self) -> None:
+        backend = object.__new__(PlaywrightWhatsAppBackend)
+        self.assertTrue(
+            backend._wait_confirmation(
+                ConfirmationPage(2, present=True), 2, "ciao"
+            )
+        )
 
 
 if __name__ == "__main__":

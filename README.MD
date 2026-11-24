@@ -1858,7 +1858,26 @@ Il registro `data/outbox/status.json` contiene solo identificativi, stato, tenta
 
 Un lock del sistema operativo su `data/outbox/.transport.lock` impedisce due trasporti contemporanei sullo stesso profilo e si rilascia anche se il processo termina. L'ordine è: lock, recupero dei `sending` interrotti, gate globali (integrazione, flag, manutenzione, disponibilità, fascia di silenzio, limite giornaliero contato sugli invii UI di oggi), poi un messaggio alla volta. Al primo `uncertain` il giro si ferma. Un messaggio più vecchio di 24 ore non viene inviato: va rigenerato.
 
-WhatsApp Web non è un'API: la pagina cambia e il riconoscimento si basa su selettori dell'interfaccia. Se il campo di scrittura o il pulsante non vengono trovati, il messaggio resta `blocked`; se il click avviene ma la conferma non arriva, diventa `uncertain`. Non c'è retry automatico, non c'è invio in background e non viene marcato come consegnato ciò che è solo stato scritto nella pagina. I messaggi restano nel file JSONL; il registro di stato non li duplica e non contiene dati personali.
+WhatsApp Web non è un'API: la pagina cambia e il riconoscimento si basa su selettori dell'interfaccia. Se il campo di scrittura o il pulsante non vengono trovati, il messaggio resta `blocked`; se il click avviene ma la conferma non arriva, diventa `uncertain`. Non c'è retry automatico e non viene marcato come consegnato ciò che è solo stato scritto nella pagina. I messaggi restano nel file JSONL; il registro di stato non li duplica e non contiene dati personali.
+
+### 17.8. Ciclo autonomo locale (opzionale)
+
+`agent_memory/autonomy_loop.py` è un client amministrativo separato, non un tool MCP e non un server: esegue il battito, legge la situazione, chiede al modello Ollama locale un messaggio breve e costruisce un intento WhatsApp con `requires_confirmation=False`. L'intento passa dal `DeliberationService` e dal `MessageExecutor` esistenti, quindi restano whitelist, relazione, manutenzione, disponibilità, fascia di silenzio e limiti. Il messaggio finisce nell'outbox; la consegna usa il trasporto visibile di `mnemosine-outbox`.
+
+```bash
+# Un giro con anteprima: apre un episodio di esplorazione e non accoda nulla
+python -m agent_memory.autonomy_loop --root <profilo> --once --dry-run --seed 0
+
+# Un giro reale: decide e accoda il messaggio, poi prova a consegnarlo
+python -m agent_memory.autonomy_loop --root <profilo> --once
+
+# Ciclo continuo, con un solo messaggio autonomo al giorno
+python -m agent_memory.autonomy_loop --root <profilo> --loop --interval 30 --max-per-day 1 --seed 0
+```
+
+Il ciclo usa il primo contatto autorizzato se ce n'è uno solo; con più contatti richiede `--user-id`. `--max-per-day` limita i messaggi autonomi (default 1), conta anche i tentativi `uncertain` e lascia invariato il limite dell'outbox. Se c'è già un messaggio in outbox, il ciclo prova prima a consegnarlo e non ne genera un altro; se l'outbox restituisce `uncertain`, il ciclo si ferma senza ritentare. Le ore di silenzio e gli altri gate dell'outbox vengono controllati prima di generare il testo. `--no-fallback` disabilita il messaggio di riserva usato quando Ollama non risponde. Senza `--seed`, l'apertura dell'episodio dipende dalla salienza del battito; con `--seed 0` si richiede un'esplorazione per la prova iniziale.
+
+Il ciclo non è un servizio di sistema: va avviato e fermato a mano (`Ctrl+C`). Ollama deve essere in esecuzione e il profilo Chrome visibile deve avere la sessione WhatsApp salvata. I log riportano stati, identificativi e motivi, non il testo dei messaggi né i numeri di telefono.
 
 ---
 

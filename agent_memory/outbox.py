@@ -93,12 +93,20 @@ _SEND_SELECTORS = (
 )
 _OUTGOING_COUNT_JS = r"""
 () => {
-  const selectors = ['div.message-out', 'div[class*="message-out"]'];
-  const nodes = new Set();
-  for (const selector of selectors) {
-    document.querySelectorAll(selector).forEach((node) => nodes.add(node));
-  }
-  return nodes.size;
+  const containers = document.querySelectorAll('div[data-testid="msg-container"]');
+  if (containers.length) return containers.length;
+  return document.querySelectorAll('div[data-id]').length;
+}
+"""
+_MESSAGE_PRESENT_JS = r"""
+(text) => {
+  const containers = [...document.querySelectorAll('div[data-testid="msg-container"]')];
+  const nodes = containers.length ? containers : [...document.querySelectorAll('div[data-id]')];
+  const target = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!target) return false;
+  return nodes.some((node) =>
+    (node.innerText || '').replace(/\s+/g, ' ').includes(target)
+  );
 }
 """
 _LOGGED_OUT_MARKERS = (
@@ -460,7 +468,7 @@ class PlaywrightWhatsAppBackend:
             raise OutboxBlockedError(
                 f"Preparazione della chat non riuscita ({type(exc).__name__})."
             ) from exc
-        confirmed = self._wait_confirmation(page, before)
+        confirmed = self._wait_confirmation(page, before, text)
         return {
             "ui_confirmed": confirmed,
             "remote_delivery_verified": False,
@@ -517,11 +525,19 @@ class PlaywrightWhatsAppBackend:
                 continue
         return None
 
-    def _wait_confirmation(self, page: Any, before: int) -> bool:
+    def _message_present(self, page: Any, text: str) -> bool:
+        try:
+            return bool(page.evaluate(_MESSAGE_PRESENT_JS, text))
+        except Exception:
+            return False
+
+    def _wait_confirmation(self, page: Any, before: int, text: str) -> bool:
         deadline = time_module.monotonic() + CONFIRM_TIMEOUT_MS / 1000
         while time_module.monotonic() < deadline:
             try:
                 if self._outgoing_count(page) > before:
+                    return True
+                if self._message_present(page, text):
                     return True
             except Exception:
                 pass
