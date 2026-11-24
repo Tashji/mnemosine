@@ -1597,7 +1597,7 @@ Prima configurazione da browser:
 
 - Il percorso è diviso in sei passaggi: **Identità** (anagrafica, nascita, residenza, lingue), **Carattere** (quattro assi 1–10, interessi, valori, abitudini), **Relazioni** (genitori o tutori, fratelli e sorelle, persone importanti con fiducia e intimità), **Storia** (sintesi, situazione attuale, formazione e lavoro), **Riepilogo** e **Completamento**.
 
-- Nel passaggio **Carattere** ogni asse mostra una descrizione standard per fascia di livello (1–2, 3–4, 5, 6–7, 8–10). La descrizione si aggiorna con lo slider finché non viene modificata; **Ripristina descrizione automatica** riporta il testo alla versione standard.
+- Nel passaggio **Carattere** ogni asse ha dieci livelli e ogni punto da 1 a 10 ha una descrizione distinta di come si manifesta; l’etichetta breve riassume la fascia, mentre il testo cambia a ogni punto dello slider. La descrizione si aggiorna finché non viene modificata; **Ripristina descrizione automatica** riporta il testo alla versione standard del livello.
 
 - Nel passaggio **Aspetto** ogni campo offre suggerimenti cliccabili; **Genera un aspetto** completa solo i campi vuoti con un profilo coerente, senza sovrascrivere quelli già compilati.
 

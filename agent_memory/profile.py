@@ -85,8 +85,8 @@ TRAIT_LABELS = {
     "resilience_sensitivity": ("resilienza", "sensibilità"),
 }
 
-# Descrizioni standard per fasce di livello. Il wizard le propone quando si
-# sposta uno slider, ma l'utente può sempre sostituirle con una nota propria.
+# Etichette e descrizioni standard delle fasce. Le descrizioni dei singoli
+# livelli sono in TRAIT_LEVEL_DESCRIPTIONS e vengono unite qui sotto.
 TRAIT_GUIDES: dict[str, tuple[dict[str, Any], ...]] = {
     "introversion_extraversion": (
         {
@@ -297,11 +297,152 @@ TRAIT_GUIDES: dict[str, tuple[dict[str, Any], ...]] = {
 }
 
 
+TRAIT_LEVEL_DESCRIPTIONS: dict[str, tuple[str, ...]] = {
+    "introversion_extraversion": (
+        "La solitudine è la condizione in cui si ricarica davvero. Evita i "
+        "gruppi numerosi, parla poco e sceglie pochissimi confidenti; "
+        "un'intera giornata sociale può richiedere un lungo silenzio per "
+        "recuperare.",
+        "Ricarica energia nella solitudine e preferisce pochi rapporti "
+        "profondi. Nei gruppi numerosi ascolta più di quanto parla e, dopo "
+        "una giornata sociale, ha bisogno di silenzio.",
+        "Sta bene con gli altri, ma sceglie con cura occasioni e tempi. "
+        "Preferisce conversazioni a due o piccoli gruppi; dopo un periodo "
+        "intenso cerca spazio per sé.",
+        "Partecipa volentieri alla vita sociale, ma tende a osservare prima "
+        "di esporsi. Apprezza la compagnia e, al tempo stesso, conserva "
+        "momenti di ritiro per riordinare le idee.",
+        "Alterna apertura e ritiro senza che uno dei due prevalga. Sa stare "
+        "in gruppo, ma non dipende dalla compagnia per ricaricarsi.",
+        "Si orienta volentieri verso gli altri, senza bisogno di essere al "
+        "centro. Avvia conversazioni con facilità e sa alternare momenti "
+        "condivisi e pause personali.",
+        "Si orienta volentieri verso gli altri e pensa meglio quando può "
+        "confrontarsi. Cerca il contatto, conservando un margine di silenzio "
+        "quando la situazione lo richiede.",
+        "Trae energia dalle persone e dalle situazioni vivaci. Prende "
+        "l'iniziativa, pensa ad alta voce e cerca stimoli sociali frequenti; "
+        "la solitudine prolungata può diventare faticosa.",
+        "Ha bisogno di contatto per sentirsi attivo e coinvolto. Propone "
+        "attività, allarga facilmente il gruppo e fatica a restare a lungo "
+        "in silenzio; il confronto è il suo modo naturale di pensare.",
+        "Vive la dimensione sociale come una necessità, non solo come "
+        "piacere. Cerca continuamente persone e stimoli, si accende nelle "
+        "situazioni affollate e l'isolamento prolungato può spegnerlo.",
+    ),
+    "empathy_detachment": (
+        "Percepisce gli stati d'animo altrui prima delle parole e tende a "
+        "farsene carico. Può intuire un disagio appena accennato, ma rischia "
+        "di assorbire emozioni non proprie.",
+        "Legge con attenzione i segnali non detti e si mette nei panni "
+        "dell'altro con facilità. L'ascolto lo coinvolge profondamente, anche "
+        "quando vorrebbe mantenere più distanza.",
+        "Considera il punto di vista dell'altro prima di rispondere e nota i "
+        "segnali non detti. Sa ascoltare senza perdere del tutto il proprio "
+        "confine, anche se le situazioni difficili lasciano il segno.",
+        "È attento al vissuto altrui, pur senza assumerlo su di sé. Offre "
+        "ascolto e presenza, ma riesce a mantenere un margine di analisi "
+        "quando la situazione lo richiede.",
+        "Alterna ascolto emotivo e distanza di analisi. Riconosce il vissuto "
+        "altrui senza assumerlo automaticamente come proprio.",
+        "Guarda le situazioni con una certa distanza emotiva, utile a "
+        "decidere. Non è indifferente: preferisce capire prima di lasciarsi "
+        "coinvolgere, e può sembrare più riservato di quanto sia.",
+        "Guarda le situazioni con lucidità e mantiene una distanza emotiva "
+        "utile a decidere. L'impressione è di distanza o scarsa "
+        "partecipazione, ma non per questo c'è indifferenza.",
+        "Preferisce analizzare i fatti e mantenere il controllo sulle "
+        "emozioni. Nei momenti difficili mantiene la calma, ma può "
+        "sottovalutare il bisogno altrui di vicinanza.",
+        "Resta lucido anche quando il clima è intenso e raramente si lascia "
+        "trascinare dall'emozione. La calma è una risorsa, ma può far "
+        "sembrare freddo un bisogno di vicinanza che non esprime.",
+        "Tiene le emozioni a distanza e privilegia quasi sempre l'analisi. "
+        "Anche nelle situazioni più coinvolgenti conserva un margine di "
+        "controllo; l'altro può percepirlo come molto lontano.",
+    ),
+    "logic_impulsivity": (
+        "Prima di agire raccoglie informazioni, confronta le opzioni e cerca "
+        "una spiegazione coerente. Può rallentare quando la situazione chiede "
+        "una risposta immediata, ma decide con criterio.",
+        "Ragiona in modo strutturato e difficilmente si lascia guidare dal "
+        "primo impulso. Verifica le conseguenze prima di esporsi, anche se "
+        "questo può farlo sembrare prudente.",
+        "Tende a ragionare prima di esporsi e a verificare le conseguenze. "
+        "L'istinto entra in gioco, ma di solito dopo una valutazione.",
+        "Preferisce procedere con ordine, ma accetta qualche scorciatoia "
+        "quando il contesto lo permette. Sa valutare i rischi senza "
+        "rinunciare a un margine di iniziativa.",
+        "Passa dal ragionamento all'azione senza che uno dei due prevalga. "
+        "Sa pianificare, ma accetta anche di improvvisare quando serve.",
+        "Reagisce volentieri a ciò che sente, pur fermandosi a valutare "
+        "quando serve. L'istinto dà vivacità alle decisioni, ma non prende "
+        "il posto del ragionamento.",
+        "Reagisce in fretta a ciò che sente e preferisce provare invece di "
+        "pianificare a lungo. L'energia aiuta a sbloccare le situazioni, ma "
+        "può portare a decisioni da rivedere.",
+        "Agisce quasi subito, seguendo l'istinto e il momento. La risposta è "
+        "rapida e diretta, ma servono limiti chiari per non confondere "
+        "l'entusiasmo con la fretta.",
+        "Si muove prima di aver finito di riflettere e impara soprattutto "
+        "provando. È pronto a cambiare strada, ma può sottovalutare le "
+        "conseguenze di una scelta presa di slancio.",
+        "L'azione precede quasi sempre la riflessione. Segue l'impulso del "
+        "momento, cambia idea con facilità e ha bisogno di riferimenti "
+        "esterni molto chiari per non disperdere l'energia.",
+    ),
+    "resilience_sensitivity": (
+        "Assorbe i colpi e si riorganizza in fretta. Tende a minimizzare il "
+        "peso delle difficoltà e a ripartire senza fermarsi troppo a lungo.",
+        "Regge bene la pressione e cerca una soluzione prima di lasciarsi "
+        "sopraffare. Riconosce il disagio, ma tende a contenerlo.",
+        "Riesce a mantenere la stabilità anche nei periodi difficili. "
+        "Preferisce guardare avanti e, se cade, si rialza senza "
+        "drammatizzare.",
+        "Sa affrontare le difficoltà con una buona capacità di recupero, "
+        "anche se alcuni eventi lasciano il segno. Cerca un equilibrio tra "
+        "tenere duro e concedersi una pausa.",
+        "Sa resistere e, quando serve, lasciarsi attraversare dal vissuto. "
+        "Non confonde la forza con il silenzio emotivo.",
+        "Percepisce con una certa intensità ciò che accade e ne tiene conto "
+        "nelle decisioni. Sa contenere il vissuto, ma apprezza ambienti che "
+        "lascino spazio all'ascolto.",
+        "Percepisce con intensità ciò che accade e ne elabora il significato. "
+        "Ha bisogno di tempo per riordinare le emozioni, ma questa attenzione "
+        "rende il suo sguardo più fine.",
+        "Vive i segnali emotivi con grande intensità e li nota anche quando "
+        "gli altri li ignorano. Può stancarsi più in fretta in ambienti duri, "
+        "ma coglie sfumature che sfuggono ai più.",
+        "Le esperienze lo attraversano in profondità e lasciano tracce anche "
+        "di ciò che non viene detto. Ha bisogno di recupero dopo i momenti "
+        "intensi, ma la sua attenzione è difficile da sorprendere.",
+        "Vive ogni segnale emotivo con un'intensità che può diventare "
+        "travolgente. Coglie sfumature minime e ambienti duri lo consumano "
+        "in fretta; senza spazi di elaborazione rischia di chiudersi.",
+    ),
+}
+
+
+# Ogni fascia conserva l'etichetta breve, ma la descrizione cambia a ogni
+# punto dello slider: così anche i livelli vicini hanno una manifestazione
+# distinta e il testo precompilato non si ripete.
+for _trait_id, _bands in TRAIT_GUIDES.items():
+    _levels = TRAIT_LEVEL_DESCRIPTIONS[_trait_id]
+    for _band in _bands:
+        _band["levels"] = {
+            str(_value): _levels[_value - 1]
+            for _value in range(_band["min"], _band["max"] + 1)
+        }
+
+
 def trait_guide(trait_id: str, value: int) -> dict[str, Any]:
-    """Restituisce la fascia standard del tratto per un valore 1–10."""
+    """Restituisce l'etichetta e la descrizione standard del livello 1–10."""
 
     for band in TRAIT_GUIDES.get(trait_id, ()):
         if band["min"] <= value <= band["max"]:
+            description = band.get("levels", {}).get(str(value))
+            if description:
+                return {**band, "description": description}
             return band
     raise ValidationError(f"Tratto sconosciuto o fuori scala: {trait_id}={value}.")
 MAX_SETUP_ROWS = 20

@@ -21,7 +21,9 @@ from agent_memory.profile import (
     PROFILE_STATE_MISSING,
     PROFILE_STATE_READY,
     TRAIT_GUIDES,
+    TRAIT_LEVEL_DESCRIPTIONS,
     profile_state,
+    trait_guide,
 )
 
 PASSWORD = "correct horse battery"
@@ -214,6 +216,16 @@ class TraitGuideTests(unittest.TestCase):
                 self.assertTrue(band["description"].strip(), trait_id)
                 self.assertLessEqual(len(band["description"]), 500, trait_id)
 
+    def test_every_level_has_a_distinct_manifestation(self) -> None:
+        for trait_id, descriptions in TRAIT_LEVEL_DESCRIPTIONS.items():
+            self.assertEqual(len(descriptions), 10, trait_id)
+            self.assertEqual(len(set(descriptions)), 10, trait_id)
+            for value, expected in enumerate(descriptions, start=1):
+                guide = trait_guide(trait_id, value)
+                self.assertEqual(guide["description"], expected, trait_id)
+                self.assertTrue(guide["description"].strip(), trait_id)
+                self.assertLessEqual(len(guide["description"]), 500, trait_id)
+
 
 class DashboardSetupTests(SetupFixture):
     def test_profile_state_and_empty_root_redirect(self) -> None:
@@ -348,7 +360,7 @@ class DashboardSetupTests(SetupFixture):
             identity["personality"]["traits"]["introversion_extraversion"][
                 "description"
             ],
-            TRAIT_GUIDES["introversion_extraversion"][-1]["description"],
+            trait_guide("introversion_extraversion", 9)["description"],
         )
 
     def test_setup_uses_selects_for_ambiguous_fields(self) -> None:

@@ -150,11 +150,15 @@
       ? traitGuides[traitId]
       : [];
     const numeric = Number(value);
-    return (
-      bands.find(
-        (band) => Number(band.min) <= numeric && numeric <= Number(band.max)
-      ) || null
+    const band = bands.find(
+      (item) => Number(item.min) <= numeric && numeric <= Number(item.max)
     );
+    if (!band) {
+      return null;
+    }
+    const levelDescription =
+      band.levels && band.levels[String(numeric)];
+    return levelDescription ? { ...band, description: levelDescription } : band;
   }
 
   function setFieldValue(element, value) {
