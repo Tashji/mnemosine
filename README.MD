@@ -1610,6 +1610,8 @@ Prima configurazione da browser:
 
 - La città italiana resta scrivibile a testo libero, ma il campo propone i comuni della provincia selezionata (o tutti quelli italiani se la provincia non è indicata). Il server riconosce il comune canonico, corregge i refusi più probabili e, se il nome è univoco, compila anche provincia e regione; un nome non riconosciuto viene conservato. Catalogo dei comuni: [RP92/comuni-italiani](https://github.com/RP92/comuni-italiani), dati ISTAT, licenza CC BY 4.0.
 
+- Anche per l’estero la città propone i centri del paese selezionato; quando il nome viene riconosciuto, il wizard compila regione o stato e provincia o contea. Cambiare paese azzera regione e provincia e ripropone i suggerimenti del nuovo paese; la città già scritta resta e viene riconosciuta se appartiene al nuovo paese. Dati delle città estere: GeoNames `cities15000`, codici amministrativi e nomi alternativi italiani, CC BY 4.0.
+
 - Se la directory contiene già un profilo pronto, `/setup` reindirizza alla dashboard. Un profilo incompleto non viene sovrascritto: usa `profile init --force` da terminale.
 
 - Ogni POST di configurazione richiede un token CSRF monouso, valido 30 minuti, e il controllo dell'Origin. Quando la dashboard è esposta oltre loopback, `/setup` richiede l'autenticazione come le altre pagine.

@@ -427,6 +427,18 @@ class DashboardSetupTests(SetupFixture):
         self.assertIn("Milano", catalog["provinces"]["MI"])
         self.assertEqual(catalog["_license"], "CC BY 4.0")
 
+    def test_foreign_city_catalog_is_served(self) -> None:
+        response = self._request("/static/foreign-cities.json")
+        self.assertEqual(response.status, 200)
+        self.assertEqual(
+            response.headers["Content-Type"],
+            "application/json; charset=utf-8",
+        )
+        catalog = json.loads(response.read().decode("utf-8"))
+        france = catalog["countries"]["FR"]
+        self.assertEqual(france["cities"]["paris"][0], "Paris")
+        self.assertEqual(france["aliases"]["parigi"], "paris")
+
     def test_foreign_geo_catalog_is_served(self) -> None:
         response = self._request("/static/foreign-geo.json")
         self.assertEqual(response.status, 200)

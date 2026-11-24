@@ -648,6 +648,8 @@
   }
 
   const cityCatalog = { data: null, request: null };
+  const foreignCityCatalog = { data: null, request: null };
+  let italianCityIndex = null;
 
   function loadCityCatalog() {
     if (cityCatalog.data) {
@@ -673,21 +675,162 @@
     return cityCatalog.request;
   }
 
-  function initCitySuggestions(key) {
-    const input = form.querySelector(`[name="${key}_city"]`);
-    const list = document.getElementById(`${key}-city-options`);
-    const country = form.querySelector(`[data-country-select="${key}"]`);
+  function loadForeignCityCatalog() {
+    if (foreignCityCatalog.data) {
+      return Promise.resolve(foreignCityCatalog.data);
+    }
+    if (!foreignCityCatalog.request) {
+      foreignCityCatalog.request = fetch("/static/foreign-cities.json", {
+        cache: "no-store",
+      })
+        .then((response) => (response.ok ? response.json() : {}))
+        .then((data) => {
+          foreignCityCatalog.data =
+            data && typeof data === "object" && data.countries
+              ? data
+              : { countries: {} };
+          return foreignCityCatalog.data;
+        })
+        .catch(() => {
+          foreignCityCatalog.data = { countries: {} };
+          return foreignCityCatalog.data;
+        });
+    }
+    return foreignCityCatalog.request;
+  }
+
+  function cityLookupKey(value) {
+    return String(value || "")
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLocaleLowerCase("it")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  }
+
+  function italianCityLookup(data) {
+    if (italianCityIndex !== null) {
+      return italianCityIndex;
+    }
+    const index = new Map();
+    Object.entries(data.provinces || {}).forEach(([province, names]) => {
+      if (!Array.isArray(names)) {
+        return;
+      }
+      names.forEach((name) => {
+        const key = cityLookupKey(name);
+        if (!key) {
+          return;
+        }
+        const entries = index.get(key) || [];
+        entries.push({ name, province });
+        index.set(key, entries);
+      });
+    });
+    italianCityIndex = index;
+    return index;
+  }
+
+  function fillCityList(list, values) {
+    const unique = [...new Set((Array.isArray(values) ? values : []).map(String))]
+      .filter(Boolean)
+      .sort((left, right) => left.localeCompare(right, "it"));
+    const fragment = document.createDocumentFragment();
+    unique.forEach((name) => {
+      const option = document.createElement("option");
+      option.value = name;
+      fragment.appendChild(option);
+    });
+    list.replaceChildren(fragment);
+  }
+
+  function applyCityMatch(value, countryCode, data, refs) {
+    const key = cityLookupKey(value);
+    if (!key) {
+      return;
+    }
+
+    if (countryCode === "IT") {
+      const entries = italianCityLookup(data).get(key) || [];
+      let match = null;
+      if (refs.province && refs.province.value) {
+        match = entries.find((entry) => entry.province === refs.province.value) || null;
+      } else if (entries.length === 1) {
+        match = entries[0];
+      }
+      if (!match || !refs.province) {
+        return;
+      }
+      const option = Array.from(refs.province.options).find(
+        (candidate) => candidate.value === match.province
+      );
+      if (!option) {
+        return;
+      }
+      const optionRegion = option.dataset.region || "";
+      const needsRegion =
+        refs.region && optionRegion && refs.region.value !== optionRegion;
+      const needsProvince = refs.province.value !== match.province;
+      if (!needsRegion && !needsProvince) {
+        return;
+      }
+      if (needsRegion) {
+        refs.region.value = optionRegion;
+        refs.region.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      refs.province.value = match.province;
+      refs.province.dispatchEvent(new Event("change", { bubbles: true }));
+      return;
+    }
+
+    const country = data.countries ? data.countries[countryCode] : null;
+    if (!country) {
+      return;
+    }
+    const cities = country.cities || {};
+    let canonicalKey = key;
+    if (!Object.prototype.hasOwnProperty.call(cities, canonicalKey)) {
+      canonicalKey = (country.aliases || {})[key] || "";
+    }
+    const record = canonicalKey ? cities[canonicalKey] : null;
+    if (!Array.isArray(record)) {
+      return;
+    }
+    const regions = Array.isArray(country.regions) ? country.regions : [];
+    const provinces = Array.isArray(country.provinces) ? country.provinces : [];
+    const regionValue = record[1] >= 0 ? regions[record[1]] || "" : "";
+    const provinceValue = record[2] >= 0 ? provinces[record[2]] || "" : "";
+    if (refs.foreignRegion) {
+      refs.foreignRegion.value = regionValue;
+    }
+    if (refs.foreignProvince) {
+      refs.foreignProvince.value = provinceValue;
+    }
+  }
+
+  function initCitySuggestions(prefix) {
+    const input = form.querySelector(`[name="${prefix}_city"]`);
+    const list = document.getElementById(`${prefix}-city-options`);
+    const country = form.querySelector(`[data-country-select="${prefix}"]`);
     const birthCountry =
-      key === "residence"
+      prefix === "residence"
         ? form.querySelector('[name="birth_country"]')
         : null;
-    const province = form.querySelector(`[data-province-select="${key}"]`);
-    const region = form.querySelector(`[data-region-select="${key}"]`);
+    const province = form.querySelector(`[data-province-select="${prefix}"]`);
+    const region = form.querySelector(`[data-region-select="${prefix}"]`);
+    const foreignRegion = form.querySelector(
+      `[name="${prefix}_region_foreign"]`
+    );
+    const foreignProvince = form.querySelector(
+      `[name="${prefix}_province_foreign"]`
+    );
     if (!input || !list) {
       return;
     }
 
+    const refs = { province, region, foreignRegion, foreignProvince };
     let requestToken = 0;
+    let inputTimer = null;
 
     function selectedCountryCode() {
       const effectiveCountry =
@@ -702,40 +845,93 @@
       return option ? option.dataset.code || "" : "";
     }
 
+    function loadForCountry(code) {
+      return code === "IT" ? loadCityCatalog() : loadForeignCityCatalog();
+    }
+
     function populate() {
       const token = ++requestToken;
-      if (selectedCountryCode() !== "IT") {
+      const code = selectedCountryCode();
+      if (!code) {
         list.replaceChildren();
         return;
       }
-      const selectedProvince = province ? province.value : "";
-      loadCityCatalog().then((data) => {
-        if (token !== requestToken) {
+      loadForCountry(code).then((data) => {
+        if (token !== requestToken || selectedCountryCode() !== code) {
           return;
         }
-        const provinces = data.provinces || {};
-        let names = selectedProvince
-          ? provinces[selectedProvince]
-          : Object.values(provinces).flat();
-        if (!Array.isArray(names)) {
-          names = [];
+        let names = [];
+        if (code === "IT") {
+          const provinces = data.provinces || {};
+          const selectedProvince = province ? province.value : "";
+          names = selectedProvince
+            ? provinces[selectedProvince]
+            : Object.values(provinces).flat();
+        } else {
+          const countryData = (data.countries || {})[code] || {};
+          names = Object.values(countryData.cities || {}).map((record) =>
+            Array.isArray(record) ? record[0] : ""
+          );
+          if (Array.isArray(countryData.alias_names)) {
+            names = names.concat(countryData.alias_names);
+          }
         }
-        const unique = [...new Set(names)].sort((left, right) =>
-          String(left).localeCompare(String(right), "it")
-        );
-        const fragment = document.createDocumentFragment();
-        unique.forEach((name) => {
-          const option = document.createElement("option");
-          option.value = String(name);
-          fragment.appendChild(option);
-        });
-        list.replaceChildren(fragment);
+        fillCityList(list, names);
       });
     }
 
-    country.addEventListener("change", populate);
+    function applyCurrentCity() {
+      const value = input.value.trim();
+      const code = selectedCountryCode();
+      if (!value || !code) {
+        return;
+      }
+      loadForCountry(code).then((data) => {
+        if (selectedCountryCode() !== code || input.value.trim() !== value) {
+          return;
+        }
+        applyCityMatch(value, code, data, refs);
+      });
+    }
+
+    function handleCityInput() {
+      clearTimeout(inputTimer);
+      inputTimer = setTimeout(applyCurrentCity, 120);
+    }
+
+    function resetGeoFields() {
+      if (province) {
+        province.value = "";
+      }
+      if (region) {
+        region.value = "";
+      }
+      if (foreignRegion) {
+        foreignRegion.value = "";
+      }
+      if (foreignProvince) {
+        foreignProvince.value = "";
+      }
+    }
+
+    function handleCountryChange() {
+      resetGeoFields();
+      populate();
+      applyCurrentCity();
+    }
+
+    function handleBirthCountryChange() {
+      if (prefix === "residence" && country.value) {
+        return;
+      }
+      resetGeoFields();
+      populate();
+      applyCurrentCity();
+    }
+
+    country.addEventListener("change", handleCountryChange);
     if (birthCountry) {
-      birthCountry.addEventListener("change", populate);
+      birthCountry.addEventListener("change", handleBirthCountryChange);
     }
     if (province) {
       province.addEventListener("change", populate);
@@ -743,6 +939,9 @@
     if (region) {
       region.addEventListener("change", populate);
     }
+    input.addEventListener("input", handleCityInput);
+    input.addEventListener("change", applyCurrentCity);
+    input.addEventListener("blur", applyCurrentCity);
     populate();
   }
 
