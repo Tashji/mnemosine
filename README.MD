@@ -102,7 +102,7 @@ Da PowerShell, dopo aver predisposto l'ambiente e il modello `mnemosine-qwen35:9
 .\.venv\Scripts\python.exe scripts\chat_local.py
 ```
 
-La chat usa il profilo separato `profiles/qwen_local` e conserva i turni anche dopo la chiusura; `/esci` termina la sessione. Per scegliere un altro modello Ollama già installato, usare `--model NOME`: deve supportare i tool. L'opzione `--prompt "testo"` esegue un turno singolo. Alla prima creazione del profilo, la sorgente deve essere ferma.
+La chat usa il profilo separato `profiles/qwen_local` e conserva i turni anche dopo la chiusura; `/esci` termina la sessione. Per scegliere un altro modello Ollama già installato, usare `--model NOME`: deve supportare i tool. L'opzione `--prompt "testo"` esegue un turno singolo. Alla prima creazione del profilo, la sorgente deve essere ferma. Il client passa al modello un riassunto datato dei ricordi biografici e tiene separate le dichiarazioni dell'utente; le domande su "ieri" senza un ricordo datato ricevono una risposta breve, senza usare l'attività corrente.
 
 Il modello predefinito è `mnemosine-qwen35:9b-abliterated`: Qwen3.5 9B abliterated in Q4_K_M (5,6 GB), creato dal GGUF con `models/Modelfile.qwen35-9b`. Per installarlo:
 

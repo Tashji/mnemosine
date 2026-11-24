@@ -10,7 +10,8 @@ from unittest.mock import patch
 from agent_memory.embeddings import DeterministicEmbedder
 from agent_memory.retrieval import RetrievalService
 from scripts.chat_local import (Conversation, IDENTITY_REPLY, PROJECT,
-                                direct_identity_reply, prepare_profile)
+                                asks_about_past, direct_identity_reply,
+                                past_fallback, prepare_profile)
 
 
 class LocalChatTests(unittest.TestCase):
@@ -39,7 +40,9 @@ class LocalChatTests(unittest.TestCase):
                                  second.memory.get_identity()['personal_data']['full_name'])
                 self.assertEqual(context['identity']['interests'],
                                  second.memory.get_identity()['interests'])
-                self.assertTrue(context['profile_is_simulated'])
+                self.assertNotIn('profile_is_simulated', context)
+                self.assertIn('self_memories', context)
+                self.assertIn('memory_coverage', context)
                 turn = second.begin('Correzione: il mio codice è AMBRA-731.')
                 second.complete(turn, 'Ho ricevuto la correzione.')
                 pending = second.begin('Messaggio rimasto senza risposta.')
@@ -59,10 +62,24 @@ class LocalChatTests(unittest.TestCase):
                 third.close()
                 fourth = Conversation(root)
                 fourth.recover()
+                fourth.memory.create_memory(
+                    title='Una passeggiata a Catania',
+                    description='Una passeggiata mattutina con la macchina fotografica.',
+                    source='generated',
+                    event_time='2026-07-01T05:00:00+02:00',
+                    tags=['biografia_generata'],
+                    importance=7,
+                )
                 context = json.loads(fourth.context('Come si chiama il mio robot da giardino?'))
-                self.assertIn('NUVOLA-482', context['memories'][0]['description'])
-                self.assertTrue(all('NUVOLO-482' not in r['description'] for r in context['memories']))
-                self.assertTrue(all(r['source'] == 'real_interaction' for r in context['memories']))
+                self.assertIn('NUVOLA-482', context['user_statements'][0]['description'])
+                self.assertTrue(all('NUVOLO-482' not in r['description'] for r in context['user_statements']))
+                self.assertTrue(context['self_memories'])
+                self.assertTrue(any(
+                    r['title'] == 'Una passeggiata a Catania'
+                    for r in context['self_memories']
+                ))
+                self.assertTrue(fourth.search_self_memories('passeggiata'))
+                self.assertNotIn('profile_is_simulated', context)
                 identity = fourth.memory.get_identity()['personal_data']
                 birth = datetime.fromisoformat(identity['birth_date']).date()
                 now = datetime.now(ZoneInfo(identity['timezone']))
@@ -76,6 +93,9 @@ class LocalChatTests(unittest.TestCase):
                     'activity': {'details': 'Attività in corso', 'expected_end_at': '2999-01-01T00:00:00+00:00'}
                 }):
                     self.assertEqual(json.loads(fourth.context('prova'))['state']['activity']['details'], 'Attività in corso')
+                self.assertIsNone(json.loads(fourth.context('cosa hai fatto ieri?'))['state']['activity'])
+                self.assertTrue(fourth.memories_on('2026-07-01'))
+                self.assertFalse(fourth.memories_on('2026-07-02'))
                 fourth.close()
         after = {str(p): hashlib.sha256(p.read_bytes()).hexdigest()
                  for d in ('config', 'data') for p in (PROJECT / d).rglob('*') if p.is_file()}
@@ -90,6 +110,15 @@ class LocalChatTests(unittest.TestCase):
                      'sei una persona simpatica',
                      'ciao, come stai?'):
             self.assertIsNone(direct_identity_reply(text))
+
+    def test_past_question_helpers(self):
+        self.assertTrue(asks_about_past('cosa hai fatto ieri?'))
+        self.assertTrue(asks_about_past('cosa hai fatto nel 2020?'))
+        self.assertFalse(asks_about_past('cosa stai facendo adesso?'))
+        self.assertEqual(past_fallback('cosa hai fatto ieri?'),
+                         'Non ho un ricordo preciso di ieri.')
+        self.assertEqual(past_fallback('cosa hai fatto nel 2020?'),
+                         'Non ho un ricordo preciso di quel periodo.')
 
     def test_refuses_original_as_target(self):
         with self.assertRaises(ValueError):

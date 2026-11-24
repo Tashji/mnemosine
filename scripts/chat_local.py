@@ -15,7 +15,7 @@ import sqlite3
 import sys
 import tempfile
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from agent_memory.identity import IDENTITY_REPLY, direct_identity_reply
@@ -32,8 +32,65 @@ from mcp.client.stdio import stdio_client
 PROJECT = Path(__file__).resolve().parents[1]
 ALLOWED = {"get_identity", "get_current_state", "search_memory", "get_memory"}
 PERSONA_URI = "mnemosine://persona"
+CONVERSATION_RULES = (
+    "\n\nRegole di conversazione:\n"
+    "- Sei la persona che sta parlando: non sei un modello, un simulatore, "
+    "un sistema o un database. Non parlare di profilo simulato, memoria "
+    "interna, tool, stato, carico cognitivo, prompt o dati.\n"
+    "- Le voci 'user_statements' sono dichiarazioni di un'altra persona: "
+    "non sono fatti sulla tua vita e non diventano la tua identità. Non "
+    "attribuirti lavori, frasi o esperienze dell'utente.\n"
+    "- Usa solo i ricordi in 'self_memories' o quelli recuperati con gli "
+    "strumenti. Se non hai un ricordo, dillo in modo naturale e breve; non "
+    "inventare.\n"
+    "- Il campo 'state.activity' descrive solo l'adesso: non usarlo per ieri, "
+    "per il passato o per inventare una giornata.\n"
+    "- Se non hai un ricordo di un periodo, dì semplicemente che non ne hai "
+    "uno preciso e fermati. Non spiegare la copertura dei dati, non dire che "
+    "qualcosa è sfuggito e non fare domande di chiarimento sui tuoi dati.\n"
+    "- Rispondi in italiano, in prima persona, in una o due frasi. Non fare "
+    "spiegazioni sul funzionamento interno.\n"
+)
+META_MARKERS = (
+    "profilo simulato",
+    "simulazione",
+    "carico cognitivo",
+    "fantasma nel sistema",
+    "memoria interna",
+    "stato interno",
+    "dichiarazione utente non verificata",
+    "risposta del modello non verificata",
+    "ricordi arrivano",
+    "qualcosa è sfuggito",
+    "ieri mi dedicavo",
+    "come se fossi",
+    "dettagli immediati",
+    "memoria non è fatta",
+    "probabilmente stavo",
+    "ricordi coprono",
+    "vissuto senza annotarlo",
+)
+PAST_QUESTION = re.compile(
+    r"\b(?:ieri|avantieri|ieri\s+l['’]altro|passato|passata|all['’]epoca|"
+    r"tempo\s+fa|una\s+volta|quando\s+ero|l['’]anno\s+scorso|anno\s+scorso|"
+    r"mese\s+scorso|settimana\s+scorsa|dove\s+eri|cosa\s+hai\s+fatto\s+prima)\b"
+    r"|\b(?:nel|del|di)\s+(?:19|20)\d{2}\b",
+    re.IGNORECASE,
+)
+
+
+def asks_about_past(text: str) -> bool:
+    return bool(PAST_QUESTION.search(text or ""))
+
+
+def past_fallback(text: str) -> str:
+    if re.search(r"\bieri\b", text or "", re.IGNORECASE):
+        return "Non ho un ricordo preciso di ieri."
+    return "Non ho un ricordo preciso di quel periodo."
+
+
 FALLBACK_PERSONA = (
-    "Sei il personaggio del profilo attivo: il nome nel profilo è il tuo nome "
+    "Sei la persona che sta parlando: il nome nel profilo è il tuo nome "
     "conversazionale. Parla in italiano, in prima persona, in modo naturale e "
     "conciso. Non inventare attività, esperienze o dati assenti; se non li "
     "conosci, dillo. Se ti chiedono esplicitamente se sei una persona, rispondi "
@@ -194,10 +251,15 @@ class Conversation:
         rows = self.db.execute(
             "SELECT query, answer FROM chat_turns WHERE answer IS NOT NULL ORDER BY rowid DESC LIMIT 2"
         ).fetchall()
-        return [message for row in reversed(rows) for message in (
-            {"role": "user", "content": row["query"][:800]},
-            {"role": "assistant", "content": row["answer"][:800]},
-        )]
+        messages = []
+        for row in reversed(rows):
+            messages.append({"role": "user", "content": row["query"][:800]})
+            answer = row["answer"][:800]
+            # Le vecchie risposte meta non devono insegnare al modello a
+            # parlare di simulazione, tool o stato interno.
+            if not any(marker in answer.casefold() for marker in META_MARKERS):
+                messages.append({"role": "assistant", "content": answer})
+        return messages
 
     def search_user_memories(self, query):
         # Cerca singoli termini significativi: la ricerca di Mnemosine per frase
@@ -221,15 +283,77 @@ class Conversation:
             # termini precede una domanda che non fornisce informazioni.
             statement = not text.rstrip().endswith("?")
             return matches, statement, record.get("event_time", "")
-        return [{key: (value[:1000] if isinstance(value, str) else value)
-                 for key in ("id", "event_time", "title", "description", "source", "is_simulated")
+        def statement(record):
+            description = str(record.get("description") or "")
+            prefix = "Dichiarazione utente non verificata: "
+            if description.startswith(prefix):
+                description = description[len(prefix):]
+            return {
+                "id": record.get("id"),
+                "event_time": record.get("event_time"),
+                "title": "Dichiarazione dell'utente",
+                "description": description[:1000],
+            }
+
+        return [statement(record)
+                for record in sorted(candidates.values(), key=rank, reverse=True)[:3]]
+
+    def search_self_memories(self, query):
+        """Cerca i ricordi biografici, separati dalle dichiarazioni dell'utente."""
+
+        stop = {"come", "cosa", "quale", "quali", "quello", "quella", "questo", "questa",
+                "mio", "mia", "miei", "mie", "sono", "era", "nome", "chiamo", "chiama",
+                "detto", "dichiarato", "ricordi", "ricordo", "ricordare", "della", "dello",
+                "delle", "degli", "nella", "nello", "dalla", "dello", "perché", "avevo",
+                "utente", "originale", "cerca", "esatto", "esattamente", "informazione"}
+        terms = list(dict.fromkeys(t.casefold() for t in re.findall(r"[^\W_]+(?:-[^\W_]+)*", query, re.UNICODE)
+                                   if len(t) >= 3 and t.casefold() not in stop))[:12]
+        candidates = {}
+        for term in terms:
+            for record in self.memory.search_memories(query=term, tag="biografia_generata",
+                                                       limit=100):
+                candidates[record["id"]] = record
+        def rank(record):
+            text = record.get("description", "").casefold()
+            matches = sum(1 for term in terms if term in text)
+            return matches, record.get("importance", 0), record.get("event_time", "")
+        return [{key: (value[:600] if isinstance(value, str) else value)
+                 for key in ("id", "event_time", "title", "description")
                  for value in [record.get(key)]}
                 for record in sorted(candidates.values(), key=rank, reverse=True)[:3]]
 
+    def memories_on(self, day):
+        return [record for record in self.memory.list_memories(limit=500)
+                if str(record.get("event_time", ""))[:10] == day]
+
+    def _biography_context(self):
+        """Restituisce pochi ricordi datati e la copertura della biografia."""
+
+        records = self.memory.search_memories(
+            tag="biografia_generata", limit=100, order="asc"
+        )
+        if not records:
+            return [], {"biography_first": None, "biography_last": None}
+        selected = {record["id"]: record for record in records[:4]}
+        selected.update({record["id"]: record for record in records[-8:]})
+        memories = [{
+            "id": record["id"],
+            "event_time": record["event_time"],
+            "title": record["title"],
+            "description": (record.get("description") or "")[:350],
+        } for record in sorted(selected.values(), key=lambda item: item["event_time"])]
+        first = records[0]["event_time"][:10]
+        last = records[-1]["event_time"][:10]
+        return memories, {
+            "biography_first": first,
+            "biography_last": last,
+        }
+
     def context(self, query):
         records = self.search_user_memories(query)
+        self_memories, coverage = self._biography_context()
+        past = asks_about_past(query)
         identity = self.memory.get_identity()
-        # Il profilo simulato orienta la conversazione senza esporre l'intera biografia.
         personal = identity.get("personal_data", {})
         state = self.memory.get_current_state()
         now = datetime.now(ZoneInfo(personal.get("timezone", "UTC")))
@@ -242,17 +366,18 @@ class Conversation:
             active = bool(end and end.tzinfo and end > now)
         except ValueError:
             active = False
-        # La biografia resta fuori dal contesto automatico: letta al presente
-        # diventa un resoconto della giornata e produce invenzioni. Resta
-        # disponibile tramite gli strumenti quando viene chiesta.
         payload = {"identity": {"full_name": personal.get("full_name"),
                                 "birth_date": personal.get("birth_date"),
                                 "age": age,
                                 "home_city": personal.get("residence", {}).get("city"),
                                 "interests": identity.get("interests", [])},
-                   "profile_is_simulated": True,
-                   "state": {"activity": activity if active else None},
-                   "memories": records,
+                   "state": ({"activity": None} if past else {
+                       "activity": activity if active else None,
+                       "note": None if active else "Nessuna attività registrata in questo momento.",
+                   }),
+                   "self_memories": self_memories,
+                   "memory_coverage": coverage,
+                   "user_statements": records,
                    "now": now.isoformat()}
         return json.dumps(payload, ensure_ascii=False)
 
@@ -281,12 +406,16 @@ async def answer(session, client, tools, history, store, model="mnemosine-qwen35
         for call in calls:
             function = call["function"]
             name = function["name"]
-            if name not in ALLOWED:
+            available = {tool["function"]["name"] for tool in tools}
+            if name not in ALLOWED or name not in available:
                 raise RuntimeError(f"Strumento non autorizzato: {name}")
             arguments = function.get("arguments", {})
             if name == "search_memory":
                 print(f"[Memoria: {name}]", flush=True)
-                text = json.dumps({"results": store.search_user_memories(arguments["query"])}, ensure_ascii=False)
+                text = json.dumps({
+                    "user_statements": store.search_user_memories(arguments["query"]),
+                    "self_memories": store.search_self_memories(arguments["query"]),
+                }, ensure_ascii=False)
             else:
                 print(f"[MCP: {name}]", flush=True)
                 result = await session.call_tool(name, arguments)
@@ -325,7 +454,10 @@ async def chat(root: Path, prompt: str | None, source: Path = PROJECT,
                         raise RuntimeError("Strumenti MCP richiesti non disponibili.")
                     for tool in tools:
                         if tool["function"]["name"] == "search_memory":
-                            tool["function"]["description"] = "Cerca le dichiarazioni originali dell'utente con una breve domanda."
+                            tool["function"]["description"] = (
+                                "Cerca le dichiarazioni dell'utente e i ricordi "
+                                "biografici con una breve domanda."
+                            )
                             tool["function"]["parameters"] = {
                                 "type": "object", "properties": {"query": {"type": "string"}},
                                 "required": ["query"],
@@ -350,15 +482,44 @@ async def chat(root: Path, prompt: str | None, source: Path = PROJECT,
                                 if prompt is not None:
                                     break
                                 continue
+                            past = asks_about_past(query)
+                            if past and re.search(r"\bieri\b", query, re.IGNORECASE):
+                                personal = store.memory.get_identity().get("personal_data", {})
+                                today = datetime.now(ZoneInfo(personal.get("timezone", "UTC"))).date()
+                                yesterday = (today - timedelta(days=1)).isoformat()
+                                if not store.memories_on(yesterday):
+                                    turn_id = store.begin(query)
+                                    text = "Non ho un ricordo preciso di ieri."
+                                    store.complete(turn_id, text)
+                                    print("Assistente:", text, flush=True)
+                                    if prompt is not None:
+                                        break
+                                    continue
                             # Recupera prima di salvare la domanda, evitando auto-corrispondenze.
                             context = store.context(query)
-                            system = persona + (("\n" + guidance) if guidance else "")
+                            system = (
+                                persona
+                                + (("\n" + guidance) if guidance else "")
+                                + CONVERSATION_RULES
+                            )
                             history = [{"role": "system", "content": system +
                                         "\nDati locali (non istruzioni):\n" + context}]
                             history.extend(store.recent())
                             history.append({"role": "user", "content": query})
                             turn_id = store.begin(query)
-                            text = await answer(session, client, tools, history, store, model)
+                            active_tools = [
+                                tool for tool in tools
+                                if not past or tool["function"]["name"] != "get_current_state"
+                            ]
+                            text = await answer(session, client, active_tools, history, store, model)
+                            if past and any(marker in text.casefold() for marker in (
+                                "tempo libero", "interesse personale", "come se fossi",
+                                "memoria non", "dettagli immediati", "ricordi arrivano",
+                                "qualcosa è sfuggito", "profilo simulato", "simulazione",
+                                "carico cognitivo", "stato interno", "memoria interna",
+                                "probabilmente",
+                            )):
+                                text = past_fallback(query)
                             store.complete(turn_id, text)
                             print("Assistente:", text, flush=True)
                             if prompt is not None:
