@@ -43,6 +43,7 @@ else:
 from .config import CONFIG_FILENAMES, ConfigStore
 from .db import DATABASE_TABLES
 from .errors import AgentMemoryError, ConfigError, ValidationError
+from .italian_cities import clean_city_name, normalize_italian_city
 from .life import default_life
 from .migrations import (
     DATABASE_SCHEMAS,
@@ -769,6 +770,36 @@ def _geo_fields(
     return "", ""
 
 
+def _normalize_city_fields(
+    city: str,
+    province: str,
+    region: str,
+    country_code: str,
+) -> tuple[str, str, str]:
+    """Riconduce la città al comune canonico quando è possibile.
+
+    Per l'Italia il confronto avviene nel catalogo dei comuni; se la provincia
+    non è stata scelta e il nome è univoco, viene dedotta anche la provincia.
+    Per l'estero ci si limita a ripulire gli spazi: non esiste un catalogo
+    equivalente e non va inventata una località.
+    """
+
+    cleaned = clean_city_name(city)
+    if not cleaned:
+        return "", province, region
+    if country_code != "IT":
+        return cleaned, province, region
+
+    match = normalize_italian_city(cleaned, province)
+    if not match.matched:
+        return match.name, province, region
+    if not province and match.province:
+        entry = italian_province(match.province)
+        if entry is not None and (not region or region == entry[1]):
+            return match.name, match.province, region or entry[1]
+    return match.name, province, region
+
+
 def _foreign_geo_fields(
     values: Mapping[str, Any],
     *,
@@ -893,6 +924,19 @@ def build_profile_args(values: Mapping[str, Any]) -> argparse.Namespace:
             province_label="Provincia di residenza",
             region_label="Regione di residenza",
         )
+
+    birth_city, birth_province, birth_region = _normalize_city_fields(
+        birth_city, birth_province, birth_region, birth_country_code
+    )
+    residence_city = _form_limited(
+        values, "residence_city", "Città di residenza", maximum=120
+    )
+    residence_city, residence_province, residence_region = _normalize_city_fields(
+        residence_city,
+        residence_province,
+        residence_region,
+        residence_country_code,
+    )
     residence_since = _form_date(
         values, "residence_since", "Data di inizio residenza"
     )
@@ -973,10 +1017,7 @@ def build_profile_args(values: Mapping[str, Any]) -> argparse.Namespace:
             values, "citizenship", "Cittadinanza", maximum=80
         )
         or "italiana",
-        residence_city=_form_limited(
-            values, "residence_city", "Città di residenza", maximum=120
-        )
-        or None,
+        residence_city=residence_city or None,
         residence_province=residence_province or None,
         residence_region=residence_region or None,
         residence_country=residence_country,

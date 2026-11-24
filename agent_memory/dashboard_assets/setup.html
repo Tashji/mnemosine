@@ -130,7 +130,8 @@
               <div class="setup-grid">
                 <label class="login-field">
                   <span>Città di nascita</span>
-                  <input name="birth_city" maxlength="120" data-required>
+                  <input name="birth_city" maxlength="120" list="birth-city-options" autocomplete="off" data-required>
+                  <datalist id="birth-city-options"></datalist>
                 </label>
                 <label class="login-field">
                   <span>Paese</span>
@@ -172,7 +173,8 @@
               <div class="setup-grid">
                 <label class="login-field">
                   <span>Città</span>
-                  <input name="residence_city" maxlength="120">
+                  <input name="residence_city" maxlength="120" list="residence-city-options" autocomplete="off">
+                  <datalist id="residence-city-options"></datalist>
                 </label>
                 <label class="login-field">
                   <span>Paese</span>

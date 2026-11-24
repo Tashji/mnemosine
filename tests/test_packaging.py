@@ -116,7 +116,14 @@ class PackagedDataTests(unittest.TestCase):
 
     def test_dashboard_assets_are_inside_the_package(self) -> None:
         assets = PACKAGE_DIR / "dashboard_assets"
-        for name in ("index.html", "login.html", "setup.html", "app.js", "styles.css"):
+        for name in (
+            "index.html",
+            "login.html",
+            "setup.html",
+            "app.js",
+            "styles.css",
+            "italian-cities.json",
+        ):
             with self.subTest(asset=name):
                 self.assertTrue((assets / name).is_file())
 

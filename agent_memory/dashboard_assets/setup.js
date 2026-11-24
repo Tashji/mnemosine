@@ -647,6 +647,105 @@
     apply();
   }
 
+  const cityCatalog = { data: null, request: null };
+
+  function loadCityCatalog() {
+    if (cityCatalog.data) {
+      return Promise.resolve(cityCatalog.data);
+    }
+    if (!cityCatalog.request) {
+      cityCatalog.request = fetch("/static/italian-cities.json", {
+        cache: "no-store",
+      })
+        .then((response) => (response.ok ? response.json() : {}))
+        .then((data) => {
+          cityCatalog.data =
+            data && typeof data === "object" && data.provinces
+              ? data
+              : { provinces: {} };
+          return cityCatalog.data;
+        })
+        .catch(() => {
+          cityCatalog.data = { provinces: {} };
+          return cityCatalog.data;
+        });
+    }
+    return cityCatalog.request;
+  }
+
+  function initCitySuggestions(key) {
+    const input = form.querySelector(`[name="${key}_city"]`);
+    const list = document.getElementById(`${key}-city-options`);
+    const country = form.querySelector(`[data-country-select="${key}"]`);
+    const birthCountry =
+      key === "residence"
+        ? form.querySelector('[name="birth_country"]')
+        : null;
+    const province = form.querySelector(`[data-province-select="${key}"]`);
+    const region = form.querySelector(`[data-region-select="${key}"]`);
+    if (!input || !list) {
+      return;
+    }
+
+    let requestToken = 0;
+
+    function selectedCountryCode() {
+      const effectiveCountry =
+        country.value ||
+        (birthCountry ? birthCountry.value : "") ||
+        "Italia";
+      if (effectiveCountry === "Italia") {
+        return "IT";
+      }
+      const select = country.value ? country : birthCountry;
+      const option = select ? select.selectedOptions[0] : null;
+      return option ? option.dataset.code || "" : "";
+    }
+
+    function populate() {
+      const token = ++requestToken;
+      if (selectedCountryCode() !== "IT") {
+        list.replaceChildren();
+        return;
+      }
+      const selectedProvince = province ? province.value : "";
+      loadCityCatalog().then((data) => {
+        if (token !== requestToken) {
+          return;
+        }
+        const provinces = data.provinces || {};
+        let names = selectedProvince
+          ? provinces[selectedProvince]
+          : Object.values(provinces).flat();
+        if (!Array.isArray(names)) {
+          names = [];
+        }
+        const unique = [...new Set(names)].sort((left, right) =>
+          String(left).localeCompare(String(right), "it")
+        );
+        const fragment = document.createDocumentFragment();
+        unique.forEach((name) => {
+          const option = document.createElement("option");
+          option.value = String(name);
+          fragment.appendChild(option);
+        });
+        list.replaceChildren(fragment);
+      });
+    }
+
+    country.addEventListener("change", populate);
+    if (birthCountry) {
+      birthCountry.addEventListener("change", populate);
+    }
+    if (province) {
+      province.addEventListener("change", populate);
+    }
+    if (region) {
+      region.addEventListener("change", populate);
+    }
+    populate();
+  }
+
   function clearError() {
     if (errorBox) {
       errorBox.hidden = true;
@@ -920,5 +1019,7 @@
   initGeoMenus();
   initForeignGeoFields("birth");
   initForeignGeoFields("residence");
+  initCitySuggestions("birth");
+  initCitySuggestions("residence");
   showStep(0);
 })();

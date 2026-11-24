@@ -404,12 +404,28 @@ class DashboardSetupTests(SetupFixture):
         self.assertIn('list="residence-province-options"', page)
         self.assertIn('id="residence-region-options"', page)
         self.assertIn('id="residence-province-options"', page)
+        self.assertIn('list="birth-city-options"', page)
+        self.assertIn('list="residence-city-options"', page)
+        self.assertIn('id="birth-city-options"', page)
+        self.assertIn('id="residence-city-options"', page)
         self.assertIn("Italiano (it)", page)
         self.assertIn('<optgroup label="Lombardia">', page)
         self.assertIn("Milano (MI)", page)
         self.assertIn('data-region="Lombardia"', page)
         self.assertIn('<option value="" selected>Non indicata</option>', page)
         self.assertNotIn("{{", page)
+
+    def test_italian_city_catalog_is_served(self) -> None:
+        response = self._request("/static/italian-cities.json")
+        self.assertEqual(response.status, 200)
+        self.assertEqual(
+            response.headers["Content-Type"],
+            "application/json; charset=utf-8",
+        )
+        catalog = json.loads(response.read().decode("utf-8"))
+        self.assertIn("Ragusa", catalog["provinces"]["RG"])
+        self.assertIn("Milano", catalog["provinces"]["MI"])
+        self.assertEqual(catalog["_license"], "CC BY 4.0")
 
     def test_foreign_geo_catalog_is_served(self) -> None:
         response = self._request("/static/foreign-geo.json")
@@ -469,6 +485,32 @@ class DashboardSetupTests(SetupFixture):
         self.assertEqual(birth_place["province"], "MI")
         self.assertEqual(birth_place["region"], "Lombardia")
         residence = identity["personal_data"]["residence"]
+        self.assertEqual(residence["province"], "TO")
+        self.assertEqual(residence["region"], "Piemonte")
+
+    def test_city_typos_are_normalized_and_province_inferred(self) -> None:
+        _page, csrf = self._csrf("/setup")
+        response = self._submit(
+            csrf,
+            self._form(
+                birth_city="Raguss",
+                birth_province="",
+                birth_region="",
+                residence_city="Torinno",
+                residence_province="",
+                residence_region="",
+            ),
+        )
+        self.assertEqual(response.status, 303)
+        identity = json.loads(
+            (self.root / "config" / "identity.json").read_text(encoding="utf-8")
+        )
+        birth_place = identity["personal_data"]["birth_place"]
+        self.assertEqual(birth_place["city"], "Ragusa")
+        self.assertEqual(birth_place["province"], "RG")
+        self.assertEqual(birth_place["region"], "Sicilia")
+        residence = identity["personal_data"]["residence"]
+        self.assertEqual(residence["city"], "Torino")
         self.assertEqual(residence["province"], "TO")
         self.assertEqual(residence["region"], "Piemonte")
 
