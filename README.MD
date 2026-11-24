@@ -1599,7 +1599,7 @@ Prima configurazione da browser:
 
 - Nel passaggio **Carattere** ogni asse ha dieci livelli e ogni punto da 1 a 10 ha una descrizione distinta di come si manifesta; l’etichetta breve riassume la fascia, mentre il testo cambia a ogni punto dello slider. La descrizione si aggiorna finché non viene modificata; **Ripristina descrizione automatica** riporta il testo alla versione standard del livello.
 
-- Nel passaggio **Aspetto** ogni campo offre suggerimenti cliccabili; **Genera un aspetto** completa solo i campi vuoti con un profilo coerente, senza sovrascrivere quelli già compilati.
+- Nel passaggio **Aspetto** il personaggio si compone come in un creatore di personaggi: per ogni riga (corporatura, altezza, viso, carnagione, taglio e colore dei capelli, forma e colore degli occhi, segni particolari, stile) si sceglie una voce e la descrizione testuale si aggiorna da sola. L'anteprima del volto cambia con carnagione, capelli, occhi e stile, e una riga di riepilogo mostra le scelte attive. **Genera un personaggio** sorteggia una voce per ogni riga, **Azzera** svuota le scelte; i testi restano modificabili a mano nella sezione richiudibile.
 
 - Il profilo creato contiene i dati raccolti in `identity.json` e popola `social_graph.json` con le persone importanti. Non inserisce il dataset demo; i ricordi possono arrivare dal passaggio finale del wizard.
 

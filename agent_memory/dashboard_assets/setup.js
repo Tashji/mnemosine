@@ -38,77 +38,142 @@
     trait_resilience_sensitivity: "5",
   };
 
-  const visualSuggestions = {
-    body: [
-      "Corporatura snella, altezza media",
-      "Corporatura atletica e compatta",
-      "Corporatura robusta, spalle larghe",
-      "Corporatura esile, ossatura fine",
-    ],
-    face: [
-      "Viso ovale, lineamenti morbidi",
-      "Viso spigoloso, mascella definita",
-      "Viso rotondo, guance piene",
-      "Viso allungato, zigomi alti",
-    ],
-    hair: [
-      "Corti, castano scuro",
-      "Ricci neri, volume medio",
-      "Lunghi mossi, castano chiaro",
-      "Molto corti, biondo cenere",
-    ],
-    eyes: [
-      "A mandorla, verdi",
-      "Grandi e scuri",
-      "Castani, sguardo diretto",
-      "Azzurri, forma allungata",
-    ],
-    distinctive_marks: [
-      "Una piccola cicatrice sul sopracciglio",
-      "Un neo vicino al labbro",
-      "Lentiggini sul naso",
-      "Nessun segno evidente",
-    ],
-    style: [
-      "Casual, jeans e magliette scure",
-      "Minimal, colori neutri",
-      "Sportivo, felpe e sneakers",
-      "Elegante ma informale, camicia e giacca",
-    ],
-  };
+  const visualFields = [
+    "body",
+    "face",
+    "hair",
+    "eyes",
+    "distinctive_marks",
+    "style",
+  ];
 
-  const visualPresets = [
+  // Ogni riga del creatore aggiunge un pezzo alla descrizione del campo:
+  // la composizione avviene nell’ordine in cui le righe sono elencate.
+  const visualRows = [
     {
-      body: "Corporatura snella, altezza media",
-      face: "Viso ovale, lineamenti morbidi",
-      hair: "Corti, castano scuro",
-      eyes: "A mandorla, verdi",
-      distinctive_marks: "Un neo vicino al labbro",
-      style: "Casual, jeans e magliette scure",
+      id: "build",
+      field: "body",
+      label: "Corporatura",
+      options: [
+        { label: "Snella", value: "corporatura snella" },
+        { label: "Atletica", value: "corporatura atletica e tonica" },
+        { label: "Robusta", value: "corporatura robusta, spalle larghe" },
+        { label: "Esile", value: "corporatura esile, ossatura fine" },
+        { label: "Morbida", value: "corporatura morbida e arrotondata" },
+        { label: "Media", value: "corporatura media, proporzionata" },
+      ],
     },
     {
-      body: "Corporatura atletica e compatta",
-      face: "Viso spigoloso, mascella definita",
-      hair: "Molto corti, biondo cenere",
-      eyes: "Azzurri, forma allungata",
-      distinctive_marks: "Una piccola cicatrice sul sopracciglio",
-      style: "Sportivo, felpe e sneakers",
+      id: "height",
+      field: "body",
+      label: "Altezza",
+      options: [
+        { label: "Bassa", value: "altezza bassa" },
+        { label: "Media", value: "altezza media" },
+        { label: "Alta", value: "altezza alta" },
+        { label: "Molto alta", value: "altezza molto alta" },
+      ],
     },
     {
-      body: "Corporatura robusta, spalle larghe",
-      face: "Viso rotondo, guance piene",
-      hair: "Ricci neri, volume medio",
-      eyes: "Grandi e scuri",
-      distinctive_marks: "Lentiggini sul naso",
-      style: "Minimal, colori neutri",
+      id: "face_shape",
+      field: "face",
+      label: "Viso",
+      options: [
+        { label: "Ovale", value: "viso ovale, lineamenti morbidi" },
+        { label: "Rotondo", value: "viso rotondo, guance piene" },
+        { label: "Squadrato", value: "viso squadrato, mascella definita" },
+        { label: "Allungato", value: "viso allungato, zigomi alti" },
+      ],
     },
     {
-      body: "Corporatura esile, ossatura fine",
-      face: "Viso allungato, zigomi alti",
-      hair: "Lunghi mossi, castano chiaro",
-      eyes: "Castani, sguardo diretto",
-      distinctive_marks: "Nessun segno evidente",
-      style: "Elegante ma informale, camicia e giacca",
+      id: "skin",
+      field: "face",
+      label: "Carnagione",
+      options: [
+        { label: "Chiara", value: "carnagione chiara", swatch: "#f0cbb0" },
+        { label: "Olivastra", value: "carnagione olivastra", swatch: "#d8a97f" },
+        { label: "Ambrata", value: "carnagione ambrata", swatch: "#bf8a5f" },
+        { label: "Scura", value: "carnagione scura", swatch: "#8d5a3b" },
+        { label: "Molto scura", value: "carnagione molto scura", swatch: "#6a4028" },
+      ],
+    },
+    {
+      id: "hair_cut",
+      field: "hair",
+      label: "Capelli · taglio",
+      options: [
+        { label: "Corti", value: "capelli corti", hair: "corti" },
+        { label: "Ricci", value: "capelli ricci", hair: "ricci" },
+        { label: "Mossi", value: "capelli mossi", hair: "mossi" },
+        { label: "Lunghi", value: "capelli lunghi", hair: "lunghi" },
+        { label: "Rasati", value: "capelli rasati", hair: "rasati" },
+        { label: "Coda", value: "capelli legati a coda", hair: "coda" },
+      ],
+    },
+    {
+      id: "hair_color",
+      field: "hair",
+      label: "Capelli · colore",
+      standalonePrefix: "capelli ",
+      options: [
+        { label: "Neri", value: "neri", swatch: "#1f1a17" },
+        { label: "Castano scuro", value: "castani scuri", swatch: "#4a3324" },
+        { label: "Castano chiaro", value: "castani chiari", swatch: "#8a5f3c" },
+        { label: "Biondi", value: "biondi", swatch: "#c9a46a" },
+        { label: "Rossi", value: "rossi", swatch: "#a5482f" },
+        { label: "Grigi", value: "grigi", swatch: "#9a9a9a" },
+      ],
+    },
+    {
+      id: "eyes_shape",
+      field: "eyes",
+      label: "Occhi · forma",
+      options: [
+        { label: "A mandorla", value: "occhi a mandorla" },
+        { label: "Grandi", value: "occhi grandi" },
+        { label: "Allungati", value: "occhi allungati" },
+        { label: "Tondi", value: "occhi tondi" },
+      ],
+    },
+    {
+      id: "eyes_color",
+      field: "eyes",
+      label: "Occhi · colore",
+      standalonePrefix: "occhi ",
+      options: [
+        { label: "Castani", value: "castani", swatch: "#6b4a2f" },
+        { label: "Verdi", value: "verdi", swatch: "#4e7a4a" },
+        { label: "Azzurri", value: "azzurri", swatch: "#6f9fc4" },
+        { label: "Neri", value: "neri", swatch: "#2a2320" },
+        { label: "Grigi", value: "grigi", swatch: "#8a9096" },
+        { label: "Nocciola", value: "nocciola", swatch: "#8a6a3f" },
+      ],
+    },
+    {
+      id: "marks",
+      field: "distinctive_marks",
+      label: "Segni particolari",
+      options: [
+        { label: "Nessuno", value: "nessun segno evidente" },
+        { label: "Neo", value: "un neo vicino al labbro" },
+        { label: "Cicatrice", value: "una piccola cicatrice sul sopracciglio" },
+        { label: "Lentiggini", value: "lentiggini sul naso" },
+        { label: "Barba", value: "una barba corta e curata" },
+        { label: "Tatuaggio", value: "un tatuaggio sul collo" },
+      ],
+    },
+    {
+      id: "style",
+      field: "style",
+      label: "Stile",
+      options: [
+        { label: "Casual", value: "casual, jeans e magliette scure", outfit: "#3a4a63" },
+        { label: "Minimal", value: "minimal, colori neutri", outfit: "#5a5f66" },
+        { label: "Sportivo", value: "sportivo, felpe e sneakers", outfit: "#2f5d4a" },
+        { label: "Elegante", value: "elegante ma informale, camicia e giacca", outfit: "#4a3a52" },
+        { label: "Alternativo", value: "alternativo, giacca di pelle e anelli", outfit: "#6b3f4a" },
+        { label: "Formale", value: "formale, abito scuro", outfit: "#2f3a4a" },
+      ],
     },
   ];
 
@@ -274,62 +339,221 @@
   function initVisualSuggestions() {
     const status = document.getElementById("visual-suggestion-status");
     const randomButton = document.querySelector("[data-randomize-visual]");
+    const resetButton = form.querySelector("[data-reset-visual]");
+    const avatar = form.querySelector("[data-visual-avatar]");
+    const caption = form.querySelector("[data-avatar-caption]");
+    const container = form.querySelector("[data-visual-options]");
+    const selections = {};
+    const buttonsByRow = new Map();
 
-    Object.entries(visualSuggestions).forEach(([key, suggestions]) => {
-      const field = visualField(key);
-      const container = form.querySelector(
-        `[data-visual-suggestions="${key}"]`
-      );
-      if (!field || !container) {
+    function composeField(field) {
+      const chosen = visualRows
+        .filter((row) => row.field === field && selections[row.id])
+        .map((row) => ({ row, option: selections[row.id] }));
+      if (!chosen.length) {
+        return "";
+      }
+      const text =
+        chosen.length === 1 && chosen[0].row.standalonePrefix
+          ? `${chosen[0].row.standalonePrefix}${chosen[0].option.value}`
+          : chosen.map((entry) => entry.option.value).join(", ");
+      return text.charAt(0).toUpperCase() + text.slice(1);
+    }
+
+    function refreshPressed(field) {
+      visualRows.forEach((row) => {
+        if (field && row.field !== field) {
+          return;
+        }
+        const buttons = buttonsByRow.get(row.id);
+        if (!buttons) {
+          return;
+        }
+        buttons.forEach((button, option) => {
+          button.setAttribute(
+            "aria-pressed",
+            selections[row.id] === option ? "true" : "false"
+          );
+        });
+      });
+    }
+
+    function updateAvatar() {
+      if (avatar) {
+        const skin = selections.skin;
+        const hairColor = selections.hair_color;
+        const eyesColor = selections.eyes_color;
+        const style = selections.style;
+        avatar.style.setProperty(
+          "--avatar-skin",
+          (skin && skin.swatch) || "#e6b795"
+        );
+        avatar.style.setProperty(
+          "--avatar-hair",
+          (hairColor && hairColor.swatch) || "#3b2a21"
+        );
+        avatar.style.setProperty(
+          "--avatar-eyes",
+          (eyesColor && eyesColor.swatch) || "#4e7a4a"
+        );
+        avatar.style.setProperty(
+          "--avatar-outfit",
+          (style && style.outfit) || "#3a4a63"
+        );
+        avatar.dataset.hair =
+          (selections.hair_cut && selections.hair_cut.hair) || "corti";
+      }
+      if (caption) {
+        const parts = ["build", "height", "hair_cut", "hair_color", "eyes_color"]
+          .map((rowId) => selections[rowId] && selections[rowId].label)
+          .filter(Boolean);
+        caption.textContent = parts.length
+          ? parts.join(" · ")
+          : "Personaggio da definire";
+      }
+    }
+
+    function writeField(field) {
+      const textarea = visualField(field);
+      if (!textarea) {
+        return;
+      }
+      textarea.value = composeField(field);
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+
+    function buildRows() {
+      if (!container) {
         return;
       }
       container.textContent = "";
-      const label = document.createElement("span");
-      label.className = "setup-suggestions-label";
-      label.textContent = "Suggerimenti · clicca per usare";
-      container.appendChild(label);
-      suggestions.forEach((suggestion) => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "setup-suggestion";
-        button.textContent = suggestion;
-        button.addEventListener("click", () => {
-          field.value = suggestion;
-          field.dispatchEvent(new Event("input", { bubbles: true }));
-          field.focus();
-          if (status) {
-            status.textContent = "Suggerimento applicato: puoi modificarlo.";
+      visualRows.forEach((row) => {
+        const wrapper = document.createElement("div");
+        wrapper.className = "setup-creator-row";
+        const label = document.createElement("span");
+        label.className = "setup-creator-label";
+        label.textContent = row.label;
+        const choices = document.createElement("div");
+        choices.className = "setup-creator-choices";
+        const buttons = new Map();
+        row.options.forEach((option) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "setup-choice";
+          button.setAttribute("aria-pressed", "false");
+          if (option.swatch) {
+            const dot = document.createElement("span");
+            dot.className = "setup-choice-swatch";
+            dot.style.setProperty("--swatch", option.swatch);
+            dot.setAttribute("aria-hidden", "true");
+            button.appendChild(dot);
+          }
+          const text = document.createElement("span");
+          text.textContent = option.label;
+          button.appendChild(text);
+          button.addEventListener("click", () => {
+            if (selections[row.id] === option) {
+              delete selections[row.id];
+            } else {
+              selections[row.id] = option;
+            }
+            writeField(row.field);
+            refreshPressed(row.field);
+            updateAvatar();
+            if (status) {
+              status.textContent = "";
+            }
+          });
+          buttons.set(option, button);
+          choices.appendChild(button);
+        });
+        buttonsByRow.set(row.id, buttons);
+        wrapper.appendChild(label);
+        wrapper.appendChild(choices);
+        container.appendChild(wrapper);
+      });
+    }
+
+    function preselectFromText() {
+      visualRows.forEach((row) => {
+        const textarea = visualField(row.field);
+        if (!textarea || !textarea.value.trim()) {
+          return;
+        }
+        const value = textarea.value.toLowerCase();
+        const match = row.options.find((option) =>
+          value.includes(option.value.toLowerCase())
+        );
+        if (match) {
+          selections[row.id] = match;
+        }
+      });
+    }
+
+    buildRows();
+    preselectFromText();
+    refreshPressed();
+    updateAvatar();
+
+    // Se il testo viene riscritto a mano, le scelte che non compaiono più
+    // nel campo vengono deselezionate per non mostrare uno stato falso.
+    visualFields.forEach((field) => {
+      const textarea = visualField(field);
+      if (!textarea) {
+        return;
+      }
+      textarea.addEventListener("input", () => {
+        const value = textarea.value.toLowerCase();
+        visualRows.forEach((row) => {
+          if (row.field !== field) {
+            return;
+          }
+          const chosen = selections[row.id];
+          if (chosen && !value.includes(chosen.value.toLowerCase())) {
+            delete selections[row.id];
           }
         });
-        container.appendChild(button);
-      });
-      field.addEventListener("input", () => {
-        if (status) {
-          status.textContent = "";
-        }
+        refreshPressed(field);
+        updateAvatar();
       });
     });
 
-    if (!randomButton) {
-      return;
-    }
-    randomButton.addEventListener("click", () => {
-      const preset = visualPresets[Math.floor(Math.random() * visualPresets.length)];
-      let filled = 0;
-      Object.entries(preset).forEach(([key, value]) => {
-        const field = visualField(key);
-        if (field && !field.value.trim()) {
-          field.value = value;
-          field.dispatchEvent(new Event("input", { bubbles: true }));
-          filled += 1;
+    if (randomButton) {
+      randomButton.addEventListener("click", () => {
+        visualRows.forEach((row) => {
+          selections[row.id] =
+            row.options[Math.floor(Math.random() * row.options.length)];
+        });
+        visualFields.forEach(writeField);
+        refreshPressed();
+        updateAvatar();
+        if (status) {
+          status.textContent =
+            "Personaggio generato. Cambia solo le voci che vuoi.";
         }
       });
-      if (status) {
-        status.textContent = filled
-          ? `Ho completato ${filled} campi vuoti. Puoi modificarli.`
-          : "I campi sono già compilati: scegli un suggerimento o modifica il testo.";
-      }
-    });
+    }
+
+    if (resetButton) {
+      resetButton.addEventListener("click", () => {
+        visualRows.forEach((row) => {
+          delete selections[row.id];
+        });
+        visualFields.forEach((field) => {
+          const textarea = visualField(field);
+          if (textarea) {
+            textarea.value = "";
+            textarea.dispatchEvent(new Event("input", { bubbles: true }));
+          }
+        });
+        refreshPressed();
+        updateAvatar();
+        if (status) {
+          status.textContent =
+            "Aspetto azzerato: ricomincia dalle scelte o scrivi a mano.";
+        }
+      });
+    }
   }
 
   function applyScalarValues(values, useDefaults) {
