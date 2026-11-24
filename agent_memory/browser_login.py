@@ -19,12 +19,12 @@ from contextlib import suppress
 from pathlib import Path
 
 from .browser import (
+    PROFILE_RELATIVE_PATH,
     SERVICE_WORKERS_WARNING,
     SESSION_RELATIVE_PATH,
     BrowserPolicy,
     _playwright_available,
     _save_storage_state,
-    _storage_state,
 )
 from .errors import (
     AgentMemoryError,
@@ -79,21 +79,26 @@ def _run(policy: BrowserPolicy, origin: str) -> int:
         )
     from playwright.sync_api import sync_playwright
 
+    profile = policy.profile_path
+    if profile is None:
+        raise BrowserUnavailableError(
+            "Profilo Chrome non configurato: manca il percorso persistente."
+        )
     timeout_ms = int(policy.timeout_seconds * 1000)
     try:
+        profile.mkdir(parents=True, exist_ok=True)
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(
+            context = playwright.chromium.launch_persistent_context(
+                user_data_dir=str(profile),
                 headless=False,
                 executable_path=policy.executable_path,
-            )
-            context = browser.new_context(
                 accept_downloads=False,
                 service_workers=policy.service_worker_mode,
                 user_agent=policy.user_agent,
-                storage_state=_storage_state(policy),
+                args=["--no-first-run", "--no-default-browser-check"],
             )
             try:
-                page = context.new_page()
+                page = context.pages[0] if context.pages else context.new_page()
                 page.goto(origin, wait_until="domcontentloaded", timeout=timeout_ms)
                 print(f"Browser aperto su {origin}.")
                 print(
@@ -116,20 +121,22 @@ def _run(policy: BrowserPolicy, origin: str) -> int:
                 # La chiusura non è un esito: se fallisce non nasconde l'errore.
                 with suppress(Exception):
                     context.close()
-                with suppress(Exception):
-                    browser.close()
     except AgentMemoryError:
         raise
     except Exception as exc:
         raise BrowserError(
             f"Browser visibile non avviato: {exc}. Questo comando richiede uno "
-            "schermo; su un server remoto usa il browser della tua macchina."
+            "schermo e un profilo Chrome non già aperto in un'altra finestra."
         ) from exc
 
-    print(f"Sessione salvata in {SESSION_RELATIVE_PATH} (permessi 600).")
     print(
-        "Contiene cookie e token di accesso: non condividerla, non copiarla nel "
-        "repository e cancellala quando revochi l'accesso."
+        f"Profilo Chrome salvato in {PROFILE_RELATIVE_PATH.as_posix()} "
+        "(sessione persistente)."
+    )
+    print(f"Stato di compatibilità salvato in {SESSION_RELATIVE_PATH.as_posix()}.")
+    print(
+        "Il profilo contiene cookie, token e IndexedDB: non condividerlo, non "
+        "copiarlo nel repository e cancellalo quando revochi l'accesso."
     )
     return 0
 
@@ -141,6 +148,7 @@ def main(argv: list[str] | None = None) -> int:
         policy = BrowserPolicy.from_root(args.root)
         session_file = policy.session_path
         if args.check:
+            profile_saved = policy.profile_saved
             print(
                 json.dumps(
                     {
@@ -148,8 +156,11 @@ def main(argv: list[str] | None = None) -> int:
                         "allowed_origins": list(policy.allowed_origins),
                         "session_file": SESSION_RELATIVE_PATH.as_posix(),
                         "session_saved": bool(
-                            session_file is not None and session_file.is_file()
+                            profile_saved
+                            or (session_file is not None and session_file.is_file())
                         ),
+                        "profile_dir": PROFILE_RELATIVE_PATH.as_posix(),
+                        "profile_saved": profile_saved,
                         "user_agent": policy.user_agent,
                         "service_workers": policy.service_worker_mode,
                         "service_workers_warning": (

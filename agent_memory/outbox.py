@@ -46,7 +46,6 @@ from .browser import (
     BrowserPolicy,
     _playwright_available,
     _save_storage_state,
-    _storage_state,
 )
 from .config import ConfigStore
 from .errors import (
@@ -362,38 +361,43 @@ class PlaywrightWhatsAppBackend:
             self.policy.assert_allowed(WHATSAPP_URL)
         except AgentMemoryError as exc:
             raise OutboxBlockedError(str(exc)) from exc
-        session = self.policy.session_path
-        if session is None or not session.is_file():
+        if not self.policy.profile_saved:
             raise OutboxBlockedError(
-                "Nessuna sessione browser salvata: esegui "
+                "Nessun profilo Chrome con sessione salvata: esegui "
                 "`mnemosine-browser-login --origin https://web.whatsapp.com` "
                 "e completa l'accesso."
             )
 
     def _start(self) -> Any:
+        profile = self.policy.profile_path
+        if profile is None:
+            raise OutboxBlockedError("Profilo Chrome non configurato.")
         try:
             from playwright.sync_api import sync_playwright
         except ImportError as exc:  # pragma: no cover - difesa dal runtime
             raise OutboxBlockedError("Playwright non è disponibile.") from exc
         try:
             self._playwright = sync_playwright().start()
-            self._browser = self._playwright.chromium.launch(
+            self._context = self._playwright.chromium.launch_persistent_context(
+                user_data_dir=str(profile),
                 headless=False,
                 executable_path=self.policy.executable_path,
-            )
-            self._context = self._browser.new_context(
                 accept_downloads=False,
                 ignore_https_errors=False,
                 service_workers=self.policy.service_worker_mode,
                 user_agent=self.policy.user_agent,
-                storage_state=_storage_state(self.policy),
+                args=["--no-first-run", "--no-default-browser-check"],
             )
             self._context.set_default_timeout(self._timeout_ms)
-            self._page = self._context.new_page()
+            self._page = (
+                self._context.pages[0]
+                if self._context.pages
+                else self._context.new_page()
+            )
         except Exception as exc:
             self.close()
             raise OutboxBlockedError(
-                "Browser visibile non avviato: serve uno schermo e Chromium "
+                "Browser visibile non avviato: serve uno schermo e Chrome "
                 "installato per Playwright."
             ) from exc
         return self._page

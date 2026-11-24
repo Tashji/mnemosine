@@ -281,9 +281,9 @@ class DashboardSettings:
                 "user_agent": browser.user_agent,
                 "allowed_origins": list(browser.allowed_origins),
                 "navigation_timeout_seconds": browser.timeout_seconds,
-                "session_saved": (
-                    self.root / "data" / "browser" / "session.json"
-                ).is_file(),
+                "session_saved": browser.profile_saved
+                or (self.root / "data" / "browser" / "session.json").is_file(),
+                "profile_saved": browser.profile_saved,
             },
             "whatsapp": {
                 "enabled": whatsapp.enabled,

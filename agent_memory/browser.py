@@ -62,6 +62,9 @@ MAX_ELEMENT_LABEL = 120
 MAX_ELEMENT_VALUE = 60
 MAX_WAIT_TEXT = 300
 SESSION_RELATIVE_PATH = Path("data") / "browser" / "session.json"
+# WhatsApp conserva l'accesso anche in IndexedDB: un semplice storage state non
+# basta. Il login e l'outbox condividono quindi un profilo Chrome persistente.
+PROFILE_RELATIVE_PATH = Path("data") / "browser" / "chrome-profile"
 MAX_USER_AGENT_CHARS = 512
 # Quanto aspettare che una navigazione in corso finisca prima di leggere.
 READY_TIMEOUT_MS = 3_000
@@ -282,6 +285,7 @@ class BrowserPolicy:
         executable_path: str | None = None,
         resolver: Callable[[str], Iterable[str]] | None = None,
         session_path: Path | None = None,
+        profile_path: Path | None = None,
     ) -> None:
         if isinstance(timeout_seconds, bool) or not isinstance(
             timeout_seconds, (int, float)
@@ -315,6 +319,21 @@ class BrowserPolicy:
         self.session_path = (
             Path(session_path).expanduser() if session_path is not None else None
         )
+        self.profile_path = (
+            Path(profile_path).expanduser() if profile_path is not None else None
+        )
+
+    @property
+    def profile_saved(self) -> bool:
+        """Il profilo Chrome contiene dati persistenti di una sessione."""
+
+        path = self.profile_path
+        if path is None or not path.is_dir():
+            return False
+        try:
+            return any(path.iterdir())
+        except OSError:
+            return False
 
     @property
     def allowed_origins(self) -> tuple[str, ...]:
@@ -393,6 +412,7 @@ class BrowserPolicy:
             timeout_seconds=timeout,
             executable_path=executable_path or None,
             session_path=base / SESSION_RELATIVE_PATH,
+            profile_path=base / PROFILE_RELATIVE_PATH,
         )
 
     def _resolve(self, host: str) -> tuple[str, ...]:
@@ -1386,11 +1406,14 @@ class BrowserController:
             "allowed_origins": list(self.policy.allowed_origins),
             "navigation_timeout_seconds": self.policy.timeout_seconds,
             "playwright_available": _playwright_available(),
-            "session_saved": bool(
+            "session_saved": self.policy.profile_saved
+            or bool(
                 self.policy.session_path is not None
                 and self.policy.session_path.is_file()
             ),
             "session_file": SESSION_RELATIVE_PATH.as_posix(),
+            "profile_saved": self.policy.profile_saved,
+            "profile_dir": PROFILE_RELATIVE_PATH.as_posix(),
             "user_agent": self.policy.user_agent,
             "service_workers": self.policy.service_worker_mode,
             "service_workers_warning": (

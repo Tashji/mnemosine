@@ -319,6 +319,10 @@ class BrowserPolicyTests(unittest.TestCase):
             policy.session_path,
             (root / "data" / "browser" / "session.json").resolve(),
         )
+        self.assertEqual(
+            policy.profile_path,
+            (root / "data" / "browser" / "chrome-profile").resolve(),
+        )
 
     def test_config_rejects_http_origin(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -809,6 +813,16 @@ class BrowserSessionTests(unittest.TestCase):
             policy = BrowserPolicy([], session_path=Path(tmp) / "session.json")
             self.assertFalse(_save_storage_state(policy, BrokenContext()))
 
+    def test_profile_saved_detects_persistent_chrome_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profile = Path(tmp) / "chrome-profile"
+            policy = BrowserPolicy([], profile_path=profile)
+            self.assertFalse(policy.profile_saved)
+            profile.mkdir()
+            self.assertFalse(policy.profile_saved)
+            (profile / "Local State").write_text("{}", encoding="utf-8")
+            self.assertTrue(policy.profile_saved)
+
     def test_element_info_skips_unusable_handles(self) -> None:
         class Handle:
             def __init__(
@@ -873,6 +887,8 @@ class BrowserLoginTests(unittest.TestCase):
         self.assertTrue(payload["enabled"])
         self.assertEqual(payload["session_file"], "data/browser/session.json")
         self.assertFalse(payload["session_saved"])
+        self.assertEqual(payload["profile_dir"], "data/browser/chrome-profile")
+        self.assertFalse(payload["profile_saved"])
         self.assertEqual(payload["service_workers"], "block")
         self.assertIsNone(payload["service_workers_warning"])
         self.assertIsNone(payload["user_agent"])

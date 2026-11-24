@@ -1014,7 +1014,7 @@ Con `service_workers` a `true` il browser passa `allow` a Playwright, sia nella 
 
 Cosa si accetta: un sito in whitelist può, tramite il suo service worker, contattare server che la whitelist non elenca, e il browser non lo vede. Ha senso solo per un sito preciso, già autorizzato, di cui ci si fida; non va acceso "in generale" per far funzionare qualche pagina in più.
 
-Il flag toglie un ostacolo, non garantisce il sito. Nei test su WhatsApp Web non ha cambiato nulla: la pagina di accesso compare sia con `allow` sia con `block`. Il blocco vero, lì, è lo user agent: WhatsApp rifiuta `HeadlessChrome` e mostra «WhatsApp works with Google Chrome 100+». La finestra visibile di `mnemosine-browser-login` ha lo user agent normale di Chrome e carica la pagina; la sessione headless no, perché oggi non c'è un modo per dichiararne uno diverso. In un ambiente minimale senza font di sistema, come questa VM, manca anche il presupposto del mount: senza fontconfig l'applicazione non viene montata affatto.
+Il flag toglie un ostacolo, non garantisce il sito. Nei test su WhatsApp Web la pagina di accesso compare sia con `allow` sia con `block`; lo user agent realistico evita il rifiuto di `HeadlessChrome`. Serve però anche un profilo Chrome persistente: WhatsApp conserva l'autenticazione anche in IndexedDB, che `session.json` non cattura. `mnemosine-browser-login` e `mnemosine-outbox` usano quindi lo stesso profilo in `data/browser/chrome-profile`; `session.json` resta per compatibilità e per il browser generico.
 
 #### User agent del profilo
 
@@ -1044,7 +1044,7 @@ mnemosine-browser-login --check
 mnemosine-browser-login --origin https://web.whatsapp.com
 ```
 
-Il comando richiede uno schermo e un terminale interattivo, perché l'accesso (password, QR, secondo fattore) lo completa una persona. Il file che produce contiene credenziali: è escluso dal repository, va cancellato quando revochi l'accesso e non va copiato in un backup condiviso. Il browser headless blocca i service worker per impostazione predefinita: le pagine che ne hanno bisogno per funzionare possono non caricarsi. Il limite è voluto, perché le richieste partite da un service worker non passano dal filtro delle origini; si revoca solo con `browser.service_workers` a `true` (sezione precedente).
+Il comando richiede uno schermo e un terminale interattivo, perché l'accesso (password, QR, secondo fattore) lo completa una persona. Il profilo che produce contiene cookie, token e IndexedDB: è escluso dal repository, va cancellato quando revochi l'accesso e non va copiato in un backup condiviso. Non aprire lo stesso profilo in un'altra finestra mentre l'outbox sta inviando. Il browser headless blocca i service worker per impostazione predefinita: le pagine che ne hanno bisogno per funzionare possono non caricarsi. Il limite è voluto, perché le richieste partite da un service worker non passano dal filtro delle origini; si revoca solo con `browser.service_workers` a `true` (sezione precedente).
 
 Comandi:
 
