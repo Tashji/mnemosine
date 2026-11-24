@@ -57,6 +57,7 @@ from .profile import (
     PROFILE_STATE_INCOMPLETE,
     PROFILE_STATE_MISSING,
     PROFILE_STATE_READY,
+    TRAIT_GUIDES,
     _profile_lock,
     build_profile_args,
     create_profile,
@@ -2041,6 +2042,12 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 _select_options(LANGUAGE_LEVEL_OPTIONS, ""),
             )
             .replace("{{values_json}}", html.escape(payload, quote=True))
+            .replace(
+                "{{trait_guides_json}}",
+                json.dumps(TRAIT_GUIDES, ensure_ascii=False).replace(
+                    "<", "\\u003c"
+                ),
+            )
         )
         self._send_html(page, status=status)
 

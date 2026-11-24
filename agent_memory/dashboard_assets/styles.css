@@ -2429,11 +2429,45 @@ select:hover {
 .setup-slider-scale {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 12px;
+  margin-bottom: 6px;
   color: var(--faint);
   font-size: 9px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+.setup-trait-band {
+  margin: 0 0 10px;
+  color: var(--gold);
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.setup-slider .login-field span small {
+  color: var(--faint);
+  font-size: 9px;
+  font-weight: 400;
+}
+
+.setup-trait-reset {
+  margin: -2px 0 10px;
+  padding: 0;
+  border: 0;
+  color: var(--faint);
+  background: none;
+  font: inherit;
+  font-size: 10px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.setup-trait-reset:hover {
+  color: var(--gold);
+}
+
+.setup-trait-reset[hidden] {
+  display: none;
 }
 
 .setup-slider .login-field {

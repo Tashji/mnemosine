@@ -83,6 +83,226 @@ TRAIT_LABELS = {
     "logic_impulsivity": ("logica", "impulsività"),
     "resilience_sensitivity": ("resilienza", "sensibilità"),
 }
+
+# Descrizioni standard per fasce di livello. Il wizard le propone quando si
+# sposta uno slider, ma l'utente può sempre sostituirle con una nota propria.
+TRAIT_GUIDES: dict[str, tuple[dict[str, Any], ...]] = {
+    "introversion_extraversion": (
+        {
+            "min": 1,
+            "max": 2,
+            "label": "Forte introversione",
+            "description": (
+                "Ricarica energia nella solitudine e preferisce pochi rapporti "
+                "profondi. Nei gruppi numerosi ascolta più di quanto parla e, "
+                "dopo una giornata sociale, ha bisogno di silenzio."
+            ),
+        },
+        {
+            "min": 3,
+            "max": 4,
+            "label": "Introversione prevalente",
+            "description": (
+                "Sta bene con gli altri, ma sceglie con cura occasioni e tempi. "
+                "Preferisce conversazioni a due o piccoli gruppi; dopo un periodo "
+                "intenso cerca spazio per sé."
+            ),
+        },
+        {
+            "min": 5,
+            "max": 5,
+            "label": "Equilibrio",
+            "description": (
+                "Alterna apertura e ritiro senza che uno dei due prevalga. Sa "
+                "stare in gruppo, ma non dipende dalla compagnia per ricaricarsi."
+            ),
+        },
+        {
+            "min": 6,
+            "max": 7,
+            "label": "Estroversione prevalente",
+            "description": (
+                "Si orienta volentieri verso gli altri e pensa meglio quando può "
+                "confrontarsi. Cerca il contatto, conservando un margine di "
+                "silenzio quando la situazione lo richiede."
+            ),
+        },
+        {
+            "min": 8,
+            "max": 10,
+            "label": "Forte estroversione",
+            "description": (
+                "Trae energia dalle persone e dalle situazioni vivaci. Prende "
+                "l'iniziativa, pensa ad alta voce e cerca stimoli sociali "
+                "frequenti; la solitudine prolungata può diventare faticosa."
+            ),
+        },
+    ),
+    "empathy_detachment": (
+        {
+            "min": 1,
+            "max": 2,
+            "label": "Forte empatia",
+            "description": (
+                "Percepisce rapidamente gli stati d'animo altrui e tende a "
+                "farsene carico. Può intuire un disagio prima che venga detto, "
+                "ma rischia di assorbire emozioni non proprie."
+            ),
+        },
+        {
+            "min": 3,
+            "max": 4,
+            "label": "Empatia prevalente",
+            "description": (
+                "Considera il punto di vista dell'altro prima di rispondere e "
+                "nota i segnali non detti. Sa ascoltare senza perdere del tutto "
+                "il proprio confine, anche se le situazioni difficili lasciano "
+                "il segno."
+            ),
+        },
+        {
+            "min": 5,
+            "max": 5,
+            "label": "Equilibrio",
+            "description": (
+                "Alterna ascolto emotivo e distanza di analisi. Riconosce il "
+                "vissuto altrui senza assumerlo automaticamente come proprio."
+            ),
+        },
+        {
+            "min": 6,
+            "max": 7,
+            "label": "Distacco prevalente",
+            "description": (
+                "Guarda le situazioni con lucidità e mantiene una distanza "
+                "emotiva utile a decidere. L'impressione è di distanza o scarsa "
+                "partecipazione, ma non per questo c'è indifferenza."
+            ),
+        },
+        {
+            "min": 8,
+            "max": 10,
+            "label": "Forte distacco",
+            "description": (
+                "Preferisce analizzare i fatti e mantenere il controllo sulle "
+                "emozioni. Nei momenti difficili mantiene la calma, ma può "
+                "sottovalutare il bisogno altrui di vicinanza."
+            ),
+        },
+    ),
+    "logic_impulsivity": (
+        {
+            "min": 1,
+            "max": 2,
+            "label": "Forte logica",
+            "description": (
+                "Prima di agire raccoglie informazioni, confronta le opzioni e "
+                "cerca una spiegazione coerente. Può rallentare quando la "
+                "situazione chiede una risposta immediata, ma decide con criterio."
+            ),
+        },
+        {
+            "min": 3,
+            "max": 4,
+            "label": "Logica prevalente",
+            "description": (
+                "Tende a ragionare prima di esporsi e a verificare le "
+                "conseguenze. L'istinto entra in gioco, ma di solito dopo una "
+                "valutazione."
+            ),
+        },
+        {
+            "min": 5,
+            "max": 5,
+            "label": "Equilibrio",
+            "description": (
+                "Passa dal ragionamento all'azione senza che uno dei due "
+                "prevalga. Sa pianificare, ma accetta anche di improvvisare "
+                "quando serve."
+            ),
+        },
+        {
+            "min": 6,
+            "max": 7,
+            "label": "Impulsività prevalente",
+            "description": (
+                "Reagisce in fretta a ciò che sente e preferisce provare invece "
+                "di pianificare a lungo. L'energia aiuta a sbloccare le "
+                "situazioni, ma può portare a decisioni da rivedere."
+            ),
+        },
+        {
+            "min": 8,
+            "max": 10,
+            "label": "Forte impulsività",
+            "description": (
+                "Agisce quasi subito, seguendo l'istinto e il momento. La "
+                "risposta è rapida e diretta, ma servono limiti chiari per non "
+                "confondere l'entusiasmo con la fretta."
+            ),
+        },
+    ),
+    "resilience_sensitivity": (
+        {
+            "min": 1,
+            "max": 2,
+            "label": "Forte resilienza",
+            "description": (
+                "Assorbe i colpi e si riorganizza in fretta. Tende a "
+                "minimizzare il peso delle difficoltà e a ripartire senza "
+                "fermarsi troppo a lungo."
+            ),
+        },
+        {
+            "min": 3,
+            "max": 4,
+            "label": "Resilienza prevalente",
+            "description": (
+                "Regge bene la pressione e cerca una soluzione prima di "
+                "lasciarsi sopraffare. Riconosce il disagio, ma tende a "
+                "contenerlo."
+            ),
+        },
+        {
+            "min": 5,
+            "max": 5,
+            "label": "Equilibrio",
+            "description": (
+                "Sa resistere e, quando serve, lasciarsi attraversare dal "
+                "vissuto. Non confonde la forza con il silenzio emotivo."
+            ),
+        },
+        {
+            "min": 6,
+            "max": 7,
+            "label": "Sensibilità prevalente",
+            "description": (
+                "Percepisce con intensità ciò che accade e ne elabora il "
+                "significato. Ha bisogno di tempo per riordinare le emozioni, "
+                "ma questa attenzione rende il suo sguardo più fine."
+            ),
+        },
+        {
+            "min": 8,
+            "max": 10,
+            "label": "Forte sensibilità",
+            "description": (
+                "Vive i segnali emotivi con grande intensità e li nota anche "
+                "quando gli altri li ignorano. Può stancarsi più in fretta in "
+                "ambienti duri, ma coglie sfumature che sfuggono ai più."
+            ),
+        },
+    ),
+}
+
+
+def trait_guide(trait_id: str, value: int) -> dict[str, Any]:
+    """Restituisce la fascia standard del tratto per un valore 1–10."""
+
+    for band in TRAIT_GUIDES.get(trait_id, ()):
+        if band["min"] <= value <= band["max"]:
+            return band
+    raise ValidationError(f"Tratto sconosciuto o fuori scala: {trait_id}={value}.")
 MAX_SETUP_ROWS = 20
 MAX_TEXT_FIELD = 2000
 LANGUAGE_CODE_RE = re.compile(r"^[a-z]{2,3}(?:-[a-z0-9]{2,8})?$")
@@ -737,12 +957,7 @@ def build_profile_args(values: Mapping[str, Any]) -> argparse.Namespace:
             "value": value,
             "left": left,
             "right": right,
-            "description": note
-            or (
-                f"Equilibrato tra {left} e {right}."
-                if value == 5
-                else f"Più orientato verso {left if value < 5 else right}."
-            ),
+            "description": note or trait_guide(trait_id, value)["description"],
         }
 
     return argparse.Namespace(

@@ -20,6 +20,7 @@ from agent_memory.profile import (
     PROFILE_STATE_INCOMPLETE,
     PROFILE_STATE_MISSING,
     PROFILE_STATE_READY,
+    TRAIT_GUIDES,
     profile_state,
 )
 
@@ -199,6 +200,21 @@ class SetupFixture(unittest.TestCase):
         self.fail(f"Job di completamento non terminato: {last}")
 
 
+class TraitGuideTests(unittest.TestCase):
+    def test_guides_cover_every_level_and_fit_the_note_limit(self) -> None:
+        for trait_id, bands in TRAIT_GUIDES.items():
+            covered = [
+                value
+                for band in bands
+                for value in range(band["min"], band["max"] + 1)
+            ]
+            self.assertEqual(covered, list(range(1, 11)), trait_id)
+            for band in bands:
+                self.assertTrue(band["label"].strip(), trait_id)
+                self.assertTrue(band["description"].strip(), trait_id)
+                self.assertLessEqual(len(band["description"]), 500, trait_id)
+
+
 class DashboardSetupTests(SetupFixture):
     def test_profile_state_and_empty_root_redirect(self) -> None:
         self.assertEqual(profile_state(self.root), PROFILE_STATE_MISSING)
@@ -222,6 +238,10 @@ class DashboardSetupTests(SetupFixture):
         self.assertIn('data-step="5"', page)
         self.assertIn('data-step="6"', page)
         self.assertIn('data-add-row="parent"', page)
+        self.assertIn('id="trait-guides"', page)
+        self.assertIn('data-trait="introversion_extraversion"', page)
+        self.assertIn("Forte introversione", page)
+        self.assertIn("Ripristina descrizione automatica", page)
         self.assertIn('name="trait_introversion_extraversion"', page)
         self.assertIn('name="visual_body"', page)
         self.assertIn('name="visual_fixed_seed"', page)
@@ -306,6 +326,26 @@ class DashboardSetupTests(SetupFixture):
         response = self._request("/setup")
         self.assertEqual(response.status, 303)
         self.assertEqual(response.headers["Location"], "/")
+
+    def test_default_trait_description_follows_the_selected_level(self) -> None:
+        _page, csrf = self._csrf("/setup")
+        response = self._submit(
+            csrf,
+            self._form(
+                trait_introversion_extraversion="9",
+                trait_introversion_extraversion_note="",
+            ),
+        )
+        self.assertEqual(response.status, 303)
+        identity = json.loads(
+            (self.root / "config" / "identity.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            identity["personality"]["traits"]["introversion_extraversion"][
+                "description"
+            ],
+            TRAIT_GUIDES["introversion_extraversion"][-1]["description"],
+        )
 
     def test_setup_uses_selects_for_ambiguous_fields(self) -> None:
         page, _csrf = self._csrf("/setup")

@@ -32,6 +32,8 @@
           <code>{{root}}</code>
         </p>
 
+        <script type="application/json" id="trait-guides">{{trait_guides_json}}</script>
+
         <p class="login-error" role="alert">{{error}}</p>
 
         <form method="post" action="/setup" id="setup-form" novalidate {{form_hidden}}>
@@ -215,8 +217,9 @@
               <h2 id="step-character-title">Carattere</h2>
               <p class="setup-hint">
                 I quattro assi vanno da 1 a 10. Il valore descrive il punto di
-                equilibrio, non un giudizio. Interessi, valori e abitudini
-                rendono il profilo riconoscibile.
+                equilibrio, non un giudizio. La descrizione si adatta al livello:
+                puoi modificarla e la tua versione resta. Interessi, valori e
+                abitudini rendono il profilo riconoscibile.
               </p>
             </div>
 
@@ -228,12 +231,14 @@
                     <label for="trait-introversion-extraversion">Introversione ↔ Estroversione</label>
                     <output for="trait-introversion-extraversion">5</output>
                   </div>
-                  <input id="trait-introversion-extraversion" type="range" name="trait_introversion_extraversion" min="1" max="10" step="1" value="5" data-trait>
+                  <input id="trait-introversion-extraversion" type="range" name="trait_introversion_extraversion" min="1" max="10" step="1" value="5" data-trait="introversion_extraversion">
                   <div class="setup-slider-scale"><span>Introversione</span><span>Estroversione</span></div>
+                  <p class="setup-trait-band" data-trait-band="introversion_extraversion" aria-live="polite">Equilibrio</p>
                   <label class="login-field">
-                    <span>Nota facoltativa</span>
-                    <textarea name="trait_introversion_extraversion_note" maxlength="500" rows="2" placeholder="Come si manifesta questo tratto?"></textarea>
+                    <span>Come si manifesta <small>· modificabile</small></span>
+                    <textarea name="trait_introversion_extraversion_note" maxlength="500" rows="4" placeholder="Descrizione automatica del tratto"></textarea>
                   </label>
+                  <button type="button" class="setup-trait-reset" data-trait-reset="introversion_extraversion" hidden>Ripristina descrizione automatica</button>
                 </div>
 
                 <div class="setup-slider">
@@ -241,12 +246,14 @@
                     <label for="trait-empathy-detachment">Empatia ↔ Distacco</label>
                     <output for="trait-empathy-detachment">5</output>
                   </div>
-                  <input id="trait-empathy-detachment" type="range" name="trait_empathy_detachment" min="1" max="10" step="1" value="5" data-trait>
+                  <input id="trait-empathy-detachment" type="range" name="trait_empathy_detachment" min="1" max="10" step="1" value="5" data-trait="empathy_detachment">
                   <div class="setup-slider-scale"><span>Empatia</span><span>Distacco</span></div>
+                  <p class="setup-trait-band" data-trait-band="empathy_detachment" aria-live="polite">Equilibrio</p>
                   <label class="login-field">
-                    <span>Nota facoltativa</span>
-                    <textarea name="trait_empathy_detachment_note" maxlength="500" rows="2" placeholder="Come si manifesta questo tratto?"></textarea>
+                    <span>Come si manifesta <small>· modificabile</small></span>
+                    <textarea name="trait_empathy_detachment_note" maxlength="500" rows="4" placeholder="Descrizione automatica del tratto"></textarea>
                   </label>
+                  <button type="button" class="setup-trait-reset" data-trait-reset="empathy_detachment" hidden>Ripristina descrizione automatica</button>
                 </div>
 
                 <div class="setup-slider">
@@ -254,12 +261,14 @@
                     <label for="trait-logic-impulsivity">Logica ↔ Impulsività</label>
                     <output for="trait-logic-impulsivity">5</output>
                   </div>
-                  <input id="trait-logic-impulsivity" type="range" name="trait_logic_impulsivity" min="1" max="10" step="1" value="5" data-trait>
+                  <input id="trait-logic-impulsivity" type="range" name="trait_logic_impulsivity" min="1" max="10" step="1" value="5" data-trait="logic_impulsivity">
                   <div class="setup-slider-scale"><span>Logica</span><span>Impulsività</span></div>
+                  <p class="setup-trait-band" data-trait-band="logic_impulsivity" aria-live="polite">Equilibrio</p>
                   <label class="login-field">
-                    <span>Nota facoltativa</span>
-                    <textarea name="trait_logic_impulsivity_note" maxlength="500" rows="2" placeholder="Come si manifesta questo tratto?"></textarea>
+                    <span>Come si manifesta <small>· modificabile</small></span>
+                    <textarea name="trait_logic_impulsivity_note" maxlength="500" rows="4" placeholder="Descrizione automatica del tratto"></textarea>
                   </label>
+                  <button type="button" class="setup-trait-reset" data-trait-reset="logic_impulsivity" hidden>Ripristina descrizione automatica</button>
                 </div>
 
                 <div class="setup-slider">
@@ -267,12 +276,14 @@
                     <label for="trait-resilience-sensitivity">Resilienza ↔ Sensibilità</label>
                     <output for="trait-resilience-sensitivity">5</output>
                   </div>
-                  <input id="trait-resilience-sensitivity" type="range" name="trait_resilience_sensitivity" min="1" max="10" step="1" value="5" data-trait>
+                  <input id="trait-resilience-sensitivity" type="range" name="trait_resilience_sensitivity" min="1" max="10" step="1" value="5" data-trait="resilience_sensitivity">
                   <div class="setup-slider-scale"><span>Resilienza</span><span>Sensibilità</span></div>
+                  <p class="setup-trait-band" data-trait-band="resilience_sensitivity" aria-live="polite">Equilibrio</p>
                   <label class="login-field">
-                    <span>Nota facoltativa</span>
-                    <textarea name="trait_resilience_sensitivity_note" maxlength="500" rows="2" placeholder="Come si manifesta questo tratto?"></textarea>
+                    <span>Come si manifesta <small>· modificabile</small></span>
+                    <textarea name="trait_resilience_sensitivity_note" maxlength="500" rows="4" placeholder="Descrizione automatica del tratto"></textarea>
                   </label>
+                  <button type="button" class="setup-trait-reset" data-trait-reset="resilience_sensitivity" hidden>Ripristina descrizione automatica</button>
                 </div>
               </div>
             </fieldset>

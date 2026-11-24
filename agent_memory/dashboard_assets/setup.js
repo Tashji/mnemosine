@@ -55,6 +55,33 @@
 
   const initialValues = parseInitialValues();
   const hasInitialValues = Object.keys(initialValues).length > 0;
+  const traitGuides = parseTraitGuides();
+  const traitStates = new WeakMap();
+
+  function parseTraitGuides() {
+    const node = document.getElementById("trait-guides");
+    if (!node) {
+      return {};
+    }
+    try {
+      const parsed = JSON.parse(node.textContent || "{}");
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (_error) {
+      return {};
+    }
+  }
+
+  function traitGuideFor(traitId, value) {
+    const bands = Array.isArray(traitGuides[traitId])
+      ? traitGuides[traitId]
+      : [];
+    const numeric = Number(value);
+    return (
+      bands.find(
+        (band) => Number(band.min) <= numeric && numeric <= Number(band.max)
+      ) || null
+    );
+  }
 
   function setFieldValue(element, value) {
     if (element.type === "range") {
@@ -93,9 +120,72 @@
     }
   }
 
-  function updateAllRanges() {
+  function updateTraitBand(element) {
+    const traitId = element.dataset.trait;
+    const bandNode = form.querySelector(`[data-trait-band="${traitId}"]`);
+    const guide = traitGuideFor(traitId, element.value);
+    if (bandNode && guide) {
+      bandNode.textContent = guide.label;
+    }
+  }
+
+  function updateTraitDescription(element, forceAuto) {
+    const traitId = element.dataset.trait;
+    const note = form.querySelector(`[name="trait_${traitId}_note"]`);
+    const reset = form.querySelector(`[data-trait-reset="${traitId}"]`);
+    const guide = traitGuideFor(traitId, element.value);
+    if (!note || !guide) {
+      return;
+    }
+    let state = traitStates.get(element);
+    if (!state) {
+      const current = note.value.trim();
+      state = { auto: !current || current === guide.description };
+      traitStates.set(element, state);
+    }
+    if (forceAuto) {
+      state.auto = true;
+    }
+    if (state.auto) {
+      note.value = guide.description;
+    }
+    if (reset) {
+      reset.hidden = state.auto;
+    }
+  }
+
+  function refreshTrait(element, forceAuto) {
+    updateRangeOutput(element);
+    updateTraitBand(element);
+    updateTraitDescription(element, Boolean(forceAuto));
+  }
+
+  function initTraitGuides() {
     form.querySelectorAll('input[type="range"][data-trait]').forEach((element) => {
-      updateRangeOutput(element);
+      refreshTrait(element, false);
+      element.addEventListener("input", () => refreshTrait(element, false));
+      const traitId = element.dataset.trait;
+      const note = form.querySelector(`[name="trait_${traitId}_note"]`);
+      const reset = form.querySelector(`[data-trait-reset="${traitId}"]`);
+      if (note) {
+        note.addEventListener("input", () => {
+          const guide = traitGuideFor(traitId, element.value);
+          const state = traitStates.get(element) || { auto: false };
+          state.auto =
+            !note.value.trim() ||
+            Boolean(guide && note.value.trim() === guide.description);
+          traitStates.set(element, state);
+          if (reset) {
+            reset.hidden = state.auto;
+          }
+        });
+      }
+      if (reset && note) {
+        reset.addEventListener("click", () => {
+          refreshTrait(element, true);
+          note.focus();
+        });
+      }
     });
   }
 
@@ -659,10 +749,6 @@
     });
   });
 
-  form.querySelectorAll('input[type="range"][data-trait]').forEach((element) => {
-    element.addEventListener("input", () => updateRangeOutput(element));
-  });
-
   document.querySelectorAll("[data-add-row]").forEach((button) => {
     button.addEventListener("click", () => {
       const type = button.dataset.addRow;
@@ -690,7 +776,7 @@
 
   applyScalarValues(initialValues, !hasInitialValues);
   initializeRows(initialValues);
-  updateAllRanges();
+  initTraitGuides();
   initGeoMenus();
   initForeignGeoFields("birth");
   initForeignGeoFields("residence");
