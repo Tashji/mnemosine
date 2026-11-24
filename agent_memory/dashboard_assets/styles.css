@@ -2281,6 +2281,83 @@ select:hover {
   grid-column: 1 / -1;
 }
 
+.setup-visual-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.setup-visual-toolbar .setup-hint {
+  max-width: 66ch;
+  margin: 0;
+}
+
+.setup-visual-random {
+  flex: 0 0 auto;
+  padding: 8px 13px;
+  border: 1px solid rgba(217, 171, 92, 0.45);
+  border-radius: 999px;
+  color: var(--gold);
+  background: var(--gold-soft);
+  font: inherit;
+  font-size: 10px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.setup-visual-random:hover {
+  border-color: var(--gold);
+  color: var(--text);
+}
+
+.setup-visual-status {
+  min-height: 15px;
+  margin: 8px 0 4px;
+  color: var(--muted);
+}
+
+.setup-visual-field {
+  min-width: 0;
+}
+
+.setup-visual-field .login-field {
+  margin-bottom: 4px;
+}
+
+.setup-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+
+.setup-suggestions-label {
+  flex-basis: 100%;
+  color: var(--faint);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.setup-suggestion {
+  padding: 5px 9px;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  color: var(--muted);
+  background: rgba(17, 20, 27, 0.55);
+  font: inherit;
+  font-size: 10px;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.setup-suggestion:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
 .login-field textarea,
 .login-field select {
   width: 100%;

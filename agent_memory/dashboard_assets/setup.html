@@ -290,14 +290,36 @@
 
             <fieldset class="setup-section">
               <legend>Aspetto e seed visivo</legend>
-              <p class="setup-hint">Definisci le caratteristiche fisiche del personaggio. Il seed è facoltativo e non garantisce da solo che il volto resti identico. Potrai aggiungere in seguito un'immagine di riferimento e generare immagini dalla sezione Aspetto della dashboard.</p>
+              <div class="setup-visual-toolbar">
+                <p class="setup-hint">Scegli un suggerimento per riempire un campo, oppure genera un aspetto completo: il pulsante compila solo i campi vuoti. Ogni valore resta modificabile. Il seed è facoltativo e non garantisce da solo che il volto resti identico.</p>
+                <button type="button" class="setup-visual-random" data-randomize-visual title="Compila solo i campi ancora vuoti">✦ Genera un aspetto</button>
+              </div>
+              <p class="setup-hint setup-visual-status" id="visual-suggestion-status" aria-live="polite"></p>
               <div class="setup-grid">
-                <label class="login-field setup-field-wide"><span>Corporatura</span><textarea name="visual_body" rows="2" maxlength="2000"></textarea></label>
-                <label class="login-field setup-field-wide"><span>Viso e lineamenti</span><textarea name="visual_face" rows="2" maxlength="2000"></textarea></label>
-                <label class="login-field"><span>Capelli</span><textarea name="visual_hair" rows="2" maxlength="2000"></textarea></label>
-                <label class="login-field"><span>Occhi</span><textarea name="visual_eyes" rows="2" maxlength="2000"></textarea></label>
-                <label class="login-field setup-field-wide"><span>Segni particolari</span><textarea name="visual_distinctive_marks" rows="2" maxlength="2000"></textarea></label>
-                <label class="login-field setup-field-wide"><span>Stile visivo</span><textarea name="visual_style" rows="2" maxlength="2000"></textarea></label>
+                <div class="setup-visual-field setup-field-wide">
+                  <label class="login-field"><span>Corporatura</span><textarea name="visual_body" rows="2" maxlength="2000" placeholder="Es. corporatura snella, altezza media"></textarea></label>
+                  <div class="setup-suggestions" data-visual-suggestions="body"></div>
+                </div>
+                <div class="setup-visual-field setup-field-wide">
+                  <label class="login-field"><span>Viso e lineamenti</span><textarea name="visual_face" rows="2" maxlength="2000" placeholder="Es. viso ovale, lineamenti morbidi"></textarea></label>
+                  <div class="setup-suggestions" data-visual-suggestions="face"></div>
+                </div>
+                <div class="setup-visual-field">
+                  <label class="login-field"><span>Capelli</span><textarea name="visual_hair" rows="2" maxlength="2000" placeholder="Es. corti, castano scuro"></textarea></label>
+                  <div class="setup-suggestions" data-visual-suggestions="hair"></div>
+                </div>
+                <div class="setup-visual-field">
+                  <label class="login-field"><span>Occhi</span><textarea name="visual_eyes" rows="2" maxlength="2000" placeholder="Es. a mandorla, verdi"></textarea></label>
+                  <div class="setup-suggestions" data-visual-suggestions="eyes"></div>
+                </div>
+                <div class="setup-visual-field setup-field-wide">
+                  <label class="login-field"><span>Segni particolari</span><textarea name="visual_distinctive_marks" rows="2" maxlength="2000" placeholder="Es. un neo vicino al labbro"></textarea></label>
+                  <div class="setup-suggestions" data-visual-suggestions="distinctive_marks"></div>
+                </div>
+                <div class="setup-visual-field setup-field-wide">
+                  <label class="login-field"><span>Stile visivo</span><textarea name="visual_style" rows="2" maxlength="2000" placeholder="Es. casual, jeans e magliette scure"></textarea></label>
+                  <div class="setup-suggestions" data-visual-suggestions="style"></div>
+                </div>
                 <label class="login-field"><span>Seed fisso (facoltativo)</span><input type="number" name="visual_fixed_seed" min="0" max="2147483647" step="1"></label>
               </div>
             </fieldset>

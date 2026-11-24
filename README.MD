@@ -1597,6 +1597,8 @@ Prima configurazione da browser:
 
 - Nel passaggio **Carattere** ogni asse mostra una descrizione standard per fascia di livello (1–2, 3–4, 5, 6–7, 8–10). La descrizione si aggiorna con lo slider finché non viene modificata; **Ripristina descrizione automatica** riporta il testo alla versione standard.
 
+- Nel passaggio **Aspetto** ogni campo offre suggerimenti cliccabili; **Genera un aspetto** completa solo i campi vuoti con un profilo coerente, senza sovrascrivere quelli già compilati.
+
 - Il profilo creato contiene i dati raccolti in `identity.json` e popola `social_graph.json` con le persone importanti. Non inserisce il dataset demo; i ricordi possono arrivare dal passaggio finale del wizard.
 
 - L’ultimo passaggio può generare la biografia procedurale e costruire l’indice vettoriale. Le operazioni partono in background e la pagina di completamento segue l’avanzamento con polling su `/setup/finalize/status`; i pulsanti restano disabilitati finché il job è in corso. Se un’operazione fallisce, il profilo resta valido e si può riprovare da `/setup/finalize`; biografia e indice restano disponibili anche dai comandi CLI. Un solo job di completamento può essere attivo per dashboard: una nuova richiesta mentre il job è in corso viene ignorata. Se il server viene riavviato, lo stato del job in memoria si perde, ma i dati già scritti restano.

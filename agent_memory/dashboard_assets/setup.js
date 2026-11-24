@@ -38,6 +38,80 @@
     trait_resilience_sensitivity: "5",
   };
 
+  const visualSuggestions = {
+    body: [
+      "Corporatura snella, altezza media",
+      "Corporatura atletica e compatta",
+      "Corporatura robusta, spalle larghe",
+      "Corporatura esile, ossatura fine",
+    ],
+    face: [
+      "Viso ovale, lineamenti morbidi",
+      "Viso spigoloso, mascella definita",
+      "Viso rotondo, guance piene",
+      "Viso allungato, zigomi alti",
+    ],
+    hair: [
+      "Corti, castano scuro",
+      "Ricci neri, volume medio",
+      "Lunghi mossi, castano chiaro",
+      "Molto corti, biondo cenere",
+    ],
+    eyes: [
+      "A mandorla, verdi",
+      "Grandi e scuri",
+      "Castani, sguardo diretto",
+      "Azzurri, forma allungata",
+    ],
+    distinctive_marks: [
+      "Una piccola cicatrice sul sopracciglio",
+      "Un neo vicino al labbro",
+      "Lentiggini sul naso",
+      "Nessun segno evidente",
+    ],
+    style: [
+      "Casual, jeans e magliette scure",
+      "Minimal, colori neutri",
+      "Sportivo, felpe e sneakers",
+      "Elegante ma informale, camicia e giacca",
+    ],
+  };
+
+  const visualPresets = [
+    {
+      body: "Corporatura snella, altezza media",
+      face: "Viso ovale, lineamenti morbidi",
+      hair: "Corti, castano scuro",
+      eyes: "A mandorla, verdi",
+      distinctive_marks: "Un neo vicino al labbro",
+      style: "Casual, jeans e magliette scure",
+    },
+    {
+      body: "Corporatura atletica e compatta",
+      face: "Viso spigoloso, mascella definita",
+      hair: "Molto corti, biondo cenere",
+      eyes: "Azzurri, forma allungata",
+      distinctive_marks: "Una piccola cicatrice sul sopracciglio",
+      style: "Sportivo, felpe e sneakers",
+    },
+    {
+      body: "Corporatura robusta, spalle larghe",
+      face: "Viso rotondo, guance piene",
+      hair: "Ricci neri, volume medio",
+      eyes: "Grandi e scuri",
+      distinctive_marks: "Lentiggini sul naso",
+      style: "Minimal, colori neutri",
+    },
+    {
+      body: "Corporatura esile, ossatura fine",
+      face: "Viso allungato, zigomi alti",
+      hair: "Lunghi mossi, castano chiaro",
+      eyes: "Castani, sguardo diretto",
+      distinctive_marks: "Nessun segno evidente",
+      style: "Elegante ma informale, camicia e giacca",
+    },
+  ];
+
   let currentStep = 0;
   const rowCounters = {};
 
@@ -185,6 +259,71 @@
           refreshTrait(element, true);
           note.focus();
         });
+      }
+    });
+  }
+
+  function visualField(key) {
+    return form.querySelector(`[name="visual_${key}"]`);
+  }
+
+  function initVisualSuggestions() {
+    const status = document.getElementById("visual-suggestion-status");
+    const randomButton = document.querySelector("[data-randomize-visual]");
+
+    Object.entries(visualSuggestions).forEach(([key, suggestions]) => {
+      const field = visualField(key);
+      const container = form.querySelector(
+        `[data-visual-suggestions="${key}"]`
+      );
+      if (!field || !container) {
+        return;
+      }
+      container.textContent = "";
+      const label = document.createElement("span");
+      label.className = "setup-suggestions-label";
+      label.textContent = "Suggerimenti · clicca per usare";
+      container.appendChild(label);
+      suggestions.forEach((suggestion) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "setup-suggestion";
+        button.textContent = suggestion;
+        button.addEventListener("click", () => {
+          field.value = suggestion;
+          field.dispatchEvent(new Event("input", { bubbles: true }));
+          field.focus();
+          if (status) {
+            status.textContent = "Suggerimento applicato: puoi modificarlo.";
+          }
+        });
+        container.appendChild(button);
+      });
+      field.addEventListener("input", () => {
+        if (status) {
+          status.textContent = "";
+        }
+      });
+    });
+
+    if (!randomButton) {
+      return;
+    }
+    randomButton.addEventListener("click", () => {
+      const preset = visualPresets[Math.floor(Math.random() * visualPresets.length)];
+      let filled = 0;
+      Object.entries(preset).forEach(([key, value]) => {
+        const field = visualField(key);
+        if (field && !field.value.trim()) {
+          field.value = value;
+          field.dispatchEvent(new Event("input", { bubbles: true }));
+          filled += 1;
+        }
+      });
+      if (status) {
+        status.textContent = filled
+          ? `Ho completato ${filled} campi vuoti. Puoi modificarli.`
+          : "I campi sono già compilati: scegli un suggerimento o modifica il testo.";
       }
     });
   }
@@ -777,6 +916,7 @@
   applyScalarValues(initialValues, !hasInitialValues);
   initializeRows(initialValues);
   initTraitGuides();
+  initVisualSuggestions();
   initGeoMenus();
   initForeignGeoFields("birth");
   initForeignGeoFields("residence");
