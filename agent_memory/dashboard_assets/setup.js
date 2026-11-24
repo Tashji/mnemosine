@@ -55,24 +55,20 @@
       field: "body",
       label: "Corporatura",
       options: [
+        { label: "Esile", value: "corporatura esile, ossatura fine" },
         { label: "Snella", value: "corporatura snella" },
+        { label: "Media", value: "corporatura media, proporzionata" },
         { label: "Atletica", value: "corporatura atletica e tonica" },
         { label: "Robusta", value: "corporatura robusta, spalle larghe" },
-        { label: "Esile", value: "corporatura esile, ossatura fine" },
         { label: "Morbida", value: "corporatura morbida e arrotondata" },
-        { label: "Media", value: "corporatura media, proporzionata" },
+        { label: "Formosa", value: "corporatura formosa, fianchi pronunciati" },
       ],
     },
     {
       id: "height",
       field: "body",
-      label: "Altezza",
-      options: [
-        { label: "Bassa", value: "altezza bassa" },
-        { label: "Media", value: "altezza media" },
-        { label: "Alta", value: "altezza alta" },
-        { label: "Molto alta", value: "altezza molto alta" },
-      ],
+      label: "Altezza in centimetri",
+      range: { min: 150, max: 205, step: 1, value: 170 },
     },
     {
       id: "face_shape",
@@ -83,6 +79,8 @@
         { label: "Rotondo", value: "viso rotondo, guance piene" },
         { label: "Squadrato", value: "viso squadrato, mascella definita" },
         { label: "Allungato", value: "viso allungato, zigomi alti" },
+        { label: "A cuore", value: "viso a cuore, fronte ampia e mento appuntito" },
+        { label: "Triangolare", value: "viso triangolare, fronte stretta e mascella ampia" },
       ],
     },
     {
@@ -90,6 +88,7 @@
       field: "face",
       label: "Carnagione",
       options: [
+        { label: "Chiarissima", value: "carnagione chiarissima", swatch: "#f7d9c4" },
         { label: "Chiara", value: "carnagione chiara", swatch: "#f0cbb0" },
         { label: "Olivastra", value: "carnagione olivastra", swatch: "#d8a97f" },
         { label: "Ambrata", value: "carnagione ambrata", swatch: "#bf8a5f" },
@@ -98,16 +97,26 @@
       ],
     },
     {
-      id: "hair_cut",
+      id: "hair_length",
       field: "hair",
-      label: "Capelli · taglio",
+      label: "Capelli · lunghezza",
       options: [
-        { label: "Corti", value: "capelli corti", hair: "corti" },
-        { label: "Ricci", value: "capelli ricci", hair: "ricci" },
-        { label: "Mossi", value: "capelli mossi", hair: "mossi" },
-        { label: "Lunghi", value: "capelli lunghi", hair: "lunghi" },
         { label: "Rasati", value: "capelli rasati", hair: "rasati" },
-        { label: "Coda", value: "capelli legati a coda", hair: "coda" },
+        { label: "Corti", value: "capelli corti", hair: "corti" },
+        { label: "Medi", value: "capelli medi", hair: "medi" },
+        { label: "Lunghi", value: "capelli lunghi", hair: "lunghi" },
+        { label: "Raccolti", value: "capelli raccolti in una coda", hair: "coda" },
+      ],
+    },
+    {
+      id: "hair_texture",
+      field: "hair",
+      label: "Capelli · texture",
+      standalonePrefix: "capelli ",
+      options: [
+        { label: "Lisci", value: "lisci", texture: "lisci" },
+        { label: "Mossi", value: "mossi", texture: "mossi" },
+        { label: "Ricci", value: "ricci", texture: "ricci" },
       ],
     },
     {
@@ -118,8 +127,10 @@
       options: [
         { label: "Neri", value: "neri", swatch: "#1f1a17" },
         { label: "Castano scuro", value: "castani scuri", swatch: "#4a3324" },
+        { label: "Castani", value: "castani", swatch: "#6b4a33" },
         { label: "Castano chiaro", value: "castani chiari", swatch: "#8a5f3c" },
         { label: "Biondi", value: "biondi", swatch: "#c9a46a" },
+        { label: "Biondo cenere", value: "biondi cenere", swatch: "#b7a98c" },
         { label: "Rossi", value: "rossi", swatch: "#a5482f" },
         { label: "Grigi", value: "grigi", swatch: "#9a9a9a" },
       ],
@@ -142,11 +153,12 @@
       standalonePrefix: "occhi ",
       options: [
         { label: "Castani", value: "castani", swatch: "#6b4a2f" },
+        { label: "Nocciola", value: "nocciola", swatch: "#8a6a3f" },
         { label: "Verdi", value: "verdi", swatch: "#4e7a4a" },
         { label: "Azzurri", value: "azzurri", swatch: "#6f9fc4" },
-        { label: "Neri", value: "neri", swatch: "#2a2320" },
         { label: "Grigi", value: "grigi", swatch: "#8a9096" },
-        { label: "Nocciola", value: "nocciola", swatch: "#8a6a3f" },
+        { label: "Neri", value: "neri", swatch: "#2a2320" },
+        { label: "Ambra", value: "ambra", swatch: "#b58a3f" },
       ],
     },
     {
@@ -159,7 +171,9 @@
         { label: "Cicatrice", value: "una piccola cicatrice sul sopracciglio" },
         { label: "Lentiggini", value: "lentiggini sul naso" },
         { label: "Barba", value: "una barba corta e curata" },
+        { label: "Baffi", value: "dei baffi curati" },
         { label: "Tatuaggio", value: "un tatuaggio sul collo" },
+        { label: "Occhiali", value: "occhiali dalla montatura sottile" },
       ],
     },
     {
@@ -173,6 +187,8 @@
         { label: "Elegante", value: "elegante ma informale, camicia e giacca", outfit: "#4a3a52" },
         { label: "Alternativo", value: "alternativo, giacca di pelle e anelli", outfit: "#6b3f4a" },
         { label: "Formale", value: "formale, abito scuro", outfit: "#2f3a4a" },
+        { label: "Streetwear", value: "streetwear, felpa ampia e sneakers", outfit: "#3d4d5c" },
+        { label: "Bohemien", value: "bohemien, tessuti morbidi e accessori artigianali", outfit: "#6a5540" },
       ],
     },
   ];
@@ -442,6 +458,11 @@
     const container = form.querySelector("[data-visual-options]");
     const selections = {};
     const buttonsByRow = new Map();
+    const rangeInputs = new Map();
+
+    function heightSelection(cm) {
+      return { label: `${cm} cm`, value: `altezza ${cm} cm`, cm };
+    }
 
     function composeField(field) {
       const chosen = visualRows
@@ -497,11 +518,38 @@
           "--avatar-outfit",
           (style && style.outfit) || "#3a4a63"
         );
-        avatar.dataset.hair =
-          (selections.hair_cut && selections.hair_cut.hair) || "corti";
+        const height = selections.height;
+        const scale =
+          height && height.cm
+            ? 0.9 + ((height.cm - 150) / 55) * 0.16
+            : 1;
+        avatar.style.setProperty("--avatar-scale", scale.toFixed(3));
+        const length =
+          selections.hair_length && selections.hair_length.hair;
+        const texture =
+          selections.hair_texture && selections.hair_texture.texture;
+        let hair = length || "corti";
+        if (
+          (hair === "corti" || hair === "medi") &&
+          texture === "ricci"
+        ) {
+          hair = "ricci";
+        } else if (
+          (hair === "corti" || hair === "medi") &&
+          texture === "mossi"
+        ) {
+          hair = "mossi";
+        }
+        avatar.dataset.hair = hair;
       }
       if (caption) {
-        const parts = ["build", "height", "hair_cut", "hair_color", "eyes_color"]
+        const parts = [
+          "build",
+          "height",
+          "hair_length",
+          "hair_color",
+          "eyes_color",
+        ]
           .map((rowId) => selections[rowId] && selections[rowId].label)
           .filter(Boolean);
         caption.textContent = parts.length
@@ -519,6 +567,29 @@
       textarea.dispatchEvent(new Event("input", { bubbles: true }));
     }
 
+    function randomizeRow(row) {
+      if (row.range) {
+        const input = rangeInputs.get(row.id);
+        if (!input) {
+          return;
+        }
+        const steps = Math.round(
+          (row.range.max - row.range.min) / row.range.step
+        );
+        const value =
+          row.range.min +
+          Math.floor(Math.random() * (steps + 1)) * row.range.step;
+        input.value = String(value);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        return;
+      }
+      selections[row.id] =
+        row.options[Math.floor(Math.random() * row.options.length)];
+      writeField(row.field);
+      refreshPressed(row.field);
+      updateAvatar();
+    }
+
     function buildRows() {
       if (!container) {
         return;
@@ -527,9 +598,66 @@
       visualRows.forEach((row) => {
         const wrapper = document.createElement("div");
         wrapper.className = "setup-creator-row";
+        const head = document.createElement("div");
+        head.className = "setup-creator-head";
         const label = document.createElement("span");
         label.className = "setup-creator-label";
         label.textContent = row.label;
+        const dice = document.createElement("button");
+        dice.type = "button";
+        dice.className = "setup-creator-dice";
+        dice.textContent = "🎲";
+        dice.title = `Sorteggia ${row.label.toLowerCase()}`;
+        dice.setAttribute("aria-label", `Sorteggia ${row.label.toLowerCase()}`);
+        dice.addEventListener("click", () => {
+          randomizeRow(row);
+          if (status) {
+            status.textContent = "";
+          }
+        });
+        head.appendChild(label);
+        head.appendChild(dice);
+        wrapper.appendChild(head);
+
+        if (row.range) {
+          const range = document.createElement("div");
+          range.className = "setup-creator-range";
+          const input = document.createElement("input");
+          input.type = "range";
+          input.min = String(row.range.min);
+          input.max = String(row.range.max);
+          input.step = String(row.range.step);
+          input.value = String(row.range.value);
+          input.setAttribute("aria-label", row.label);
+          const output = document.createElement("output");
+          output.textContent = `${row.range.value} cm`;
+          range.appendChild(input);
+          range.appendChild(output);
+          const scale = document.createElement("div");
+          scale.className = "setup-creator-range-scale";
+          const minimum = document.createElement("span");
+          minimum.textContent = `${row.range.min} cm`;
+          const maximum = document.createElement("span");
+          maximum.textContent = `${row.range.max} cm`;
+          scale.appendChild(minimum);
+          scale.appendChild(maximum);
+          input.addEventListener("input", () => {
+            const cm = Number(input.value);
+            selections[row.id] = heightSelection(cm);
+            output.textContent = `${cm} cm`;
+            writeField(row.field);
+            updateAvatar();
+            if (status) {
+              status.textContent = "";
+            }
+          });
+          rangeInputs.set(row.id, input);
+          wrapper.appendChild(range);
+          wrapper.appendChild(scale);
+          container.appendChild(wrapper);
+          return;
+        }
+
         const choices = document.createElement("div");
         choices.className = "setup-creator-choices";
         const buttons = new Map();
@@ -565,7 +693,6 @@
           choices.appendChild(button);
         });
         buttonsByRow.set(row.id, buttons);
-        wrapper.appendChild(label);
         wrapper.appendChild(choices);
         container.appendChild(wrapper);
       });
@@ -578,6 +705,26 @@
           return;
         }
         const value = textarea.value.toLowerCase();
+        if (row.range) {
+          const match = value.match(/altezza\s+(\d{2,3})\s*cm/i);
+          if (!match) {
+            return;
+          }
+          const cm = Number(match[1]);
+          if (cm < row.range.min || cm > row.range.max) {
+            return;
+          }
+          selections[row.id] = heightSelection(cm);
+          const input = rangeInputs.get(row.id);
+          if (input) {
+            input.value = String(cm);
+            const output = input.parentElement.querySelector("output");
+            if (output) {
+              output.textContent = `${cm} cm`;
+            }
+          }
+          return;
+        }
         const match = row.options.find((option) =>
           value.includes(option.value.toLowerCase())
         );
@@ -617,16 +764,13 @@
 
     if (randomButton) {
       randomButton.addEventListener("click", () => {
-        visualRows.forEach((row) => {
-          selections[row.id] =
-            row.options[Math.floor(Math.random() * row.options.length)];
-        });
+        visualRows.forEach((row) => randomizeRow(row));
         visualFields.forEach(writeField);
         refreshPressed();
         updateAvatar();
         if (status) {
           status.textContent =
-            "Personaggio generato. Cambia solo le voci che vuoi.";
+            "Aspetto generato. Cambia solo le voci che vuoi.";
         }
       });
     }
@@ -635,6 +779,16 @@
       resetButton.addEventListener("click", () => {
         visualRows.forEach((row) => {
           delete selections[row.id];
+          if (row.range) {
+            const input = rangeInputs.get(row.id);
+            if (input) {
+              input.value = String(row.range.value);
+              const output = input.parentElement.querySelector("output");
+              if (output) {
+                output.textContent = `${row.range.value} cm`;
+              }
+            }
+          }
         });
         visualFields.forEach((field) => {
           const textarea = visualField(field);

@@ -261,7 +261,7 @@ class DashboardSetupTests(SetupFixture):
         self.assertIn("data-avatar-caption", page)
         self.assertIn("data-reset-visual", page)
         self.assertIn('data-randomize-visual', page)
-        self.assertIn("Genera un personaggio", page)
+        self.assertIn("Genera tutto", page)
         self.assertIn("Scrivi i dettagli a mano", page)
         self.assertIn('id="visual-suggestion-status"', page)
         self.assertIn('name="visual_fixed_seed"', page)
