@@ -618,6 +618,85 @@ class SettingsHTTPTests(unittest.TestCase):
         response = self._request("/api/relations", cookie=cookie)
         self.assertNotIn("api_contact", [p["user_id"] for p in json.loads(response.read())["contacts"]])
 
+    def test_acquaintances_api_requires_auth_and_confirms_sensitive_facts(self) -> None:
+        payload = {
+            "action": "create",
+            "display_name": "Orso",
+            "channel": "forum",
+            "handle": "orso77",
+        }
+        self.assertEqual(self._request("/api/acquaintances").status, 401)
+        self.assertEqual(self._post_json("/api/acquaintances", payload, "").status, 401)
+        cookie = self._login()
+        page = self._request("/", cookie=cookie).read().decode("utf-8")
+        self.assertIn('data-view="acquaintances"', page)
+        self.assertIn('id="view-acquaintances"', page)
+        self.assertEqual(self._post_json("/api/acquaintances", payload, cookie).status, 400)
+        token = self._csrf(cookie)
+        request = urllib.request.Request(
+            self.base_url + "/api/acquaintances",
+            method="POST",
+            data=json.dumps({**payload, "csrf": token}).encode(),
+            headers={
+                "Origin": "https://foreign.example",
+                "Cookie": cookie,
+                "Content-Type": "application/json",
+            },
+        )
+        with self.assertRaises(urllib.error.HTTPError) as error:
+            self.opener.open(request, timeout=10)
+        self.assertEqual(error.exception.code, 403)
+        error.exception.close()
+
+        response = self._post_json(
+            "/api/acquaintances", {**payload, "csrf": token}, cookie
+        )
+        self.assertEqual(response.status, 200)
+        data = json.loads(self._request("/api/acquaintances", cookie=cookie).read())
+        self.assertEqual(data["count"], 1)
+        person = data["people"][0]
+        self.assertEqual(person["status"], "unknown")
+
+        observe = {
+            "action": "observe",
+            "person_id": person["person_id"],
+            "category": "health",
+            "value": "Ha un ginocchio malandato",
+            "csrf": self._csrf(cookie),
+        }
+        self.assertEqual(
+            self._post_json("/api/acquaintances", observe, cookie).status, 200
+        )
+        data = json.loads(self._request("/api/acquaintances", cookie=cookie).read())
+        fact = data["people"][0]["facts"][0]
+        self.assertTrue(fact["sensitive"])
+        self.assertEqual(fact["status"], "candidate")
+
+        confirm = {
+            "action": "fact_status",
+            "person_id": person["person_id"],
+            "fact_id": fact["id"],
+            "status": "confirmed",
+            "csrf": self._csrf(cookie),
+        }
+        self.assertEqual(
+            self._post_json("/api/acquaintances", confirm, cookie).status, 200
+        )
+        data = json.loads(self._request("/api/acquaintances", cookie=cookie).read())
+        self.assertEqual(data["people"][0]["facts"][0]["status"], "confirmed")
+
+        remove = {
+            "action": "remove",
+            "person_id": person["person_id"],
+            "confirmation": "RIMUOVI",
+            "csrf": self._csrf(cookie),
+        }
+        self.assertEqual(
+            self._post_json("/api/acquaintances", remove, cookie).status, 200
+        )
+        data = json.loads(self._request("/api/acquaintances", cookie=cookie).read())
+        self.assertEqual(data["count"], 0)
+
     def test_autonomy_review_requires_admin_and_preserves_new_impulse(self) -> None:
         from datetime import UTC, datetime
 

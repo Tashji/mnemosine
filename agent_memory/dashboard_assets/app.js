@@ -13,6 +13,10 @@ const VIEW_META = {
     title: "Relazioni",
     subtitle: "Contatti, fiducia e storico completo delle interazioni.",
   },
+  acquaintances: {
+    title: "Incontrati",
+    subtitle: "Profili progressivi di persone conosciute per gradi.",
+  },
   timeline: {
     title: "Timeline",
     subtitle: "Ricordi episodici, fonti e livelli di accesso.",
@@ -85,6 +89,18 @@ const PROFILE_STATUS_LABELS = {
   ready: "Pronto",
   missing: "Assente",
   incomplete: "Incompleto",
+};
+
+const ACQUAINTANCE_STATUS_LABELS = {
+  unknown: "Sconosciuto",
+  acquaintance: "Conoscente",
+  known: "Conosciuto",
+};
+
+const ACQUAINTANCE_FACT_STATUS_LABELS = {
+  candidate: "Candidato",
+  confirmed: "Confermato",
+  rejected: "Scartato",
 };
 
 const DEFENSE_LABELS = {
@@ -1061,6 +1077,412 @@ async function loadRelations(force = false) {
   } catch (error) {
     setNotice(`Impossibile caricare le relazioni: ${error.message}`);
     clear(content, emptyState("Relazioni non disponibili", error.message));
+  }
+}
+
+/* -- persone incontrate -------------------------------------------------- */
+
+async function acquaintanceRequest(payload, message) {
+  try {
+    await postJson("/api/acquaintances", payload);
+    state.loaded.acquaintances = null;
+    await loadAcquaintances(true);
+    setNotice(message, "success");
+  } catch (error) {
+    setNotice(error.message);
+  }
+}
+
+function acquaintanceCreateForm() {
+  const form = settingsForm(
+    "Aggiungi persona",
+    [
+      settingsField(
+        "Nickname",
+        settingsInput("display_name", "", "text", {
+          required: true,
+          maxlength: "80",
+          placeholder: "Quello che si conosce all'inizio",
+        })
+      ),
+      settingsField(
+        "Canale",
+        settingsInput("channel", "", "text", {
+          maxlength: "40",
+          placeholder: "forum, chat, whatsapp…",
+        })
+      ),
+      settingsField(
+        "Handle o nome utente",
+        settingsInput("handle", "", "text", { maxlength: "120" })
+      ),
+    ],
+    async (data) => {
+      await postJson("/api/acquaintances", {
+        action: "create",
+        display_name: String(data.get("display_name") || ""),
+        channel: String(data.get("channel") || ""),
+        handle: String(data.get("handle") || ""),
+      });
+      state.loaded.acquaintances = null;
+      await loadAcquaintances(true);
+      setNotice("Persona aggiunta al registro.", "success");
+    }
+  );
+  return h(
+    "details",
+    { class: "settings-card acquaintance-create" },
+    h("summary", { text: "Aggiungi persona incontrata" }),
+    h("p", {
+      class: "acquaintance-intro",
+      text: "Basta il nickname: gli altri dati si aggiungono man mano che emergono, senza trasformarli subito in certezze.",
+    }),
+    form
+  );
+}
+
+function acquaintanceFactActions(person, fact) {
+  const actions = [];
+  if (fact.status !== "confirmed") {
+    actions.push(
+      h("button", {
+        type: "button",
+        class: "button button-quiet",
+        text: "Conferma",
+        onClick: () =>
+          acquaintanceRequest(
+            {
+              action: "fact_status",
+              person_id: person.person_id,
+              fact_id: fact.id,
+              status: "confirmed",
+            },
+            "Fatto confermato."
+          ),
+      })
+    );
+  }
+  if (fact.status !== "rejected") {
+    actions.push(
+      h("button", {
+        type: "button",
+        class: "button button-quiet",
+        text: "Scarta",
+        onClick: () =>
+          acquaintanceRequest(
+            {
+              action: "fact_status",
+              person_id: person.person_id,
+              fact_id: fact.id,
+              status: "rejected",
+            },
+            "Fatto scartato."
+          ),
+      })
+    );
+  }
+  actions.push(
+    h("button", {
+      type: "button",
+      class: "acquaintance-fact-remove",
+      text: "Rimuovi",
+      onClick: () =>
+        acquaintanceRequest(
+          {
+            action: "fact_remove",
+            person_id: person.person_id,
+            fact_id: fact.id,
+          },
+          "Fatto rimosso."
+        ),
+    })
+  );
+  return actions;
+}
+
+function acquaintanceFacts(person) {
+  const facts = Array.isArray(person.facts) ? person.facts : [];
+  if (!facts.length) {
+    return h("p", {
+      class: "relation-notes",
+      text: "Nessun fatto registrato: per ora si conosce solo il nickname.",
+    });
+  }
+  const groups = new Map();
+  for (const fact of facts) {
+    if (!groups.has(fact.category)) groups.set(fact.category, []);
+    groups.get(fact.category).push(fact);
+  }
+  return h(
+    "div",
+    { class: "acquaintance-facts" },
+    [...groups.entries()].map(([category, items]) =>
+      h(
+        "div",
+        { class: "acquaintance-fact-group" },
+        h("span", {
+          class: "acquaintance-fact-label",
+          text: items[0].category_label || category,
+        }),
+        h(
+          "div",
+          { class: "acquaintance-fact-list" },
+          items.map((fact) =>
+            h(
+              "div",
+              { class: "acquaintance-fact" },
+              h(
+                "div",
+                { class: "acquaintance-fact-main" },
+                h("span", {
+                  class: "acquaintance-fact-value",
+                  text: fact.value,
+                }),
+                h("span", {
+                  class: `tag acquaintance-fact-status is-${fact.status}`,
+                  text:
+                    ACQUAINTANCE_FACT_STATUS_LABELS[fact.status] ||
+                    fact.status,
+                }),
+                fact.sensitive
+                  ? h("span", {
+                      class: "tag acquaintance-fact-sensitive",
+                      text: "Sensibile",
+                    })
+                  : null
+              ),
+              fact.source
+                ? h("p", {
+                    class: "acquaintance-fact-source",
+                    text: fact.source,
+                  })
+                : null,
+              h(
+                "div",
+                { class: "acquaintance-fact-actions" },
+                acquaintanceFactActions(person, fact)
+              )
+            )
+          )
+        )
+      )
+    )
+  );
+}
+
+function acquaintanceAddFact(person, categories) {
+  const options = categories
+    .filter((category) => category.id !== "nickname")
+    .map((category) =>
+      h("option", {
+        value: category.id,
+        text: category.sensitive
+          ? `${category.label} · sensibile`
+          : category.label,
+      })
+    );
+  const form = settingsForm(
+    "Registra fatto",
+    [
+      settingsField("Categoria", h("select", { name: "category" }, options)),
+      settingsField(
+        "Valore",
+        settingsInput("value", "", "text", {
+          required: true,
+          maxlength: "500",
+        })
+      ),
+      settingsField(
+        "Fonte",
+        settingsInput("source", "", "text", {
+          maxlength: "500",
+          placeholder: "thread, messaggio, profilo pubblico…",
+        })
+      ),
+      settingsField(
+        "Confidenza (0–1)",
+        settingsInput("confidence", "0.4", "number", {
+          min: "0",
+          max: "1",
+          step: "0.1",
+        })
+      ),
+    ],
+    async (data) => {
+      await postJson("/api/acquaintances", {
+        action: "observe",
+        person_id: person.person_id,
+        category: String(data.get("category") || ""),
+        value: String(data.get("value") || ""),
+        source: String(data.get("source") || ""),
+        confidence: Number(data.get("confidence") || 0.4),
+      });
+      state.loaded.acquaintances = null;
+      await loadAcquaintances(true);
+      setNotice("Fatto registrato come candidato.", "success");
+    }
+  );
+  return h(
+    "details",
+    { class: "acquaintance-add" },
+    h("summary", { text: "Aggiungi un fatto" }),
+    form
+  );
+}
+
+function acquaintanceEdit(person) {
+  const form = settingsForm(
+    "Salva profilo",
+    [
+      settingsField(
+        "Stato",
+        h(
+          "select",
+          { name: "status" },
+          Object.entries(ACQUAINTANCE_STATUS_LABELS).map(([id, label]) =>
+            h("option", {
+              value: id,
+              text: label,
+              selected: person.status === id,
+            })
+          )
+        )
+      ),
+      settingsField(
+        "Note",
+        h("textarea", { name: "notes", rows: "3", maxlength: "2000" },
+          person.notes || "")
+      ),
+    ],
+    async (data) => {
+      await postJson("/api/acquaintances", {
+        action: "update",
+        person_id: person.person_id,
+        status: String(data.get("status") || "unknown"),
+        notes: String(data.get("notes") || ""),
+      });
+      state.loaded.acquaintances = null;
+      await loadAcquaintances(true);
+      setNotice("Profilo aggiornato.", "success");
+    }
+  );
+  return h(
+    "details",
+    { class: "acquaintance-edit" },
+    h("summary", { text: "Stato e note" }),
+    form,
+    h("button", {
+      type: "button",
+      class: "button button-danger",
+      text: "Rimuovi persona",
+      onClick: async () => {
+        const confirmation = window.prompt(
+          `Rimuovere ${person.display_name}? Scrivi RIMUOVI per confermare.`
+        );
+        if (confirmation !== "RIMUOVI") return;
+        await acquaintanceRequest(
+          {
+            action: "remove",
+            person_id: person.person_id,
+            confirmation,
+          },
+          "Persona rimossa dal registro."
+        );
+      },
+    })
+  );
+}
+
+function acquaintanceCard(person, categories) {
+  const counts = person.fact_counts || {
+    candidate: 0,
+    confirmed: 0,
+    rejected: 0,
+  };
+  const channels = Array.isArray(person.channels) ? person.channels : [];
+  const meta = [
+    `${counts.confirmed} confermati`,
+    `${counts.candidate} candidati`,
+    `${person.observation_count ?? 0} osservazioni`,
+  ];
+  if (person.last_seen_at) {
+    meta.push(`ultimo ${fmtDate(person.last_seen_at, { time: true })}`);
+  }
+  return h(
+    "article",
+    { class: "panel acquaintance-card" },
+    h(
+      "div",
+      { class: "acquaintance-head" },
+      h(
+        "div",
+        { class: "acquaintance-title" },
+        h("h3", { text: person.display_name }),
+        h("p", {
+          class: "acquaintance-id",
+          text: `${person.person_id}${channels.length ? ` · ${channels.join(", ")}` : ""}`,
+        })
+      ),
+      h("span", {
+        class: `tag acquaintance-status is-${person.status}`,
+        text: ACQUAINTANCE_STATUS_LABELS[person.status] || person.status,
+      })
+    ),
+    h(
+      "div",
+      {
+        class: "acquaintance-meter",
+        title: `${person.completeness ?? 0}% dei dati di base confermati`,
+      },
+      h("span", { style: `width:${person.completeness ?? 0}%` })
+    ),
+    h("p", { class: "acquaintance-meta", text: meta.join(" · ") }),
+    acquaintanceFacts(person),
+    h(
+      "div",
+      { class: "acquaintance-tools" },
+      acquaintanceAddFact(person, categories),
+      acquaintanceEdit(person)
+    )
+  );
+}
+
+function renderAcquaintances(data) {
+  const people = Array.isArray(data.people) ? data.people : [];
+  const categories = Array.isArray(data.categories) ? data.categories : [];
+  $("#acquaintances-count").textContent = `${people.length} profili`;
+  const content = $("#acquaintances-content");
+  clear(
+    content,
+    acquaintanceCreateForm(),
+    people.length
+      ? h(
+          "div",
+          { class: "acquaintance-grid" },
+          people.map((person) => acquaintanceCard(person, categories))
+        )
+      : emptyState(
+          "Nessuna persona incontrata",
+          "Aggiungi un nickname oppure registra la prima osservazione con il tool MCP record_acquaintance_observation."
+        )
+  );
+}
+
+async function loadAcquaintances(force = false) {
+  if (state.loaded.acquaintances && !force) {
+    renderAcquaintances(state.loaded.acquaintances);
+    return;
+  }
+  const content = $("#acquaintances-content");
+  setLoading(content, "Caricamento delle persone incontrate…");
+  try {
+    const data = await api("/api/acquaintances");
+    state.loaded.acquaintances = data;
+    renderAcquaintances(data);
+    setNotice("");
+  } catch (error) {
+    setNotice(`Impossibile caricare le persone incontrate: ${error.message}`);
+    clear(content, emptyState("Registro non disponibile", error.message));
   }
 }
 
@@ -2629,6 +3051,7 @@ const LOADERS = {
   overview: loadOverview,
   life: loadLife,
   relations: loadRelations,
+  acquaintances: loadAcquaintances,
   timeline: loadTimeline,
   traits: loadTraits,
   semantic: loadSemantic,

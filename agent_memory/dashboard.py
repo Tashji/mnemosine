@@ -41,6 +41,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
+from .acquaintances import AcquaintanceService
 from .audit import AuditLog
 from .autonomy import AutonomyService
 from .biography import BiographyService
@@ -93,6 +94,7 @@ SESSION_PATH = "/api/session"
 RELATIONS_PATH = "/api/relations"
 SHADOW_TRAITS_PATH = "/api/traits/shadow"
 SETTINGS_PATH = "/api/settings"
+ACQUAINTANCES_PATH = "/api/acquaintances"
 SETTINGS_BROWSER_PATH = "/api/settings/browser"
 SETTINGS_WHATSAPP_PATH = "/api/settings/whatsapp"
 SETTINGS_BEHAVIOR_PATH = "/api/settings/behavior"
@@ -114,6 +116,7 @@ VISUAL_POST_PATHS = {
 }
 SETTINGS_POST_PATHS = {
     RELATIONS_PATH,
+    ACQUAINTANCES_PATH,
     SHADOW_TRAITS_PATH,
     SETTINGS_BROWSER_PATH,
     SETTINGS_WHATSAPP_PATH,
@@ -124,6 +127,7 @@ SETTINGS_POST_PATHS = {
 }
 DASHBOARD_WRITE_ACTIONS = {
     RELATIONS_PATH: "relations.save",
+    ACQUAINTANCES_PATH: "acquaintances.save",
     SHADOW_TRAITS_PATH: "shadow_traits.save",
     SETTINGS_BROWSER_PATH: "settings.browser",
     SETTINGS_WHATSAPP_PATH: "settings.whatsapp",
@@ -1572,6 +1576,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 except ValueError as exc:
                     raise ValidationError("offset e limit devono essere interi.") from exc
                 self._send_json(self.server.data.relations(offset=offset, limit=limit, user_id=self._first(params, "user_id") or None))
+            elif path == ACQUAINTANCES_PATH:
+                self._send_json(
+                    AcquaintanceService(self.server.data.root).snapshot()
+                )
             elif path == SETTINGS_PATH:
                 self._send_json(DashboardSettings(self.server.data.root).snapshot())
             elif path == LIFE_PATH:
@@ -1840,6 +1848,8 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             result = VisualService(self.server.data.root).check_provider()
         elif path == RELATIONS_PATH:
             result = settings.save_contact(payload)
+        elif path == ACQUAINTANCES_PATH:
+            result = AcquaintanceService(self.server.data.root).save(payload)
         elif path == SHADOW_TRAITS_PATH:
             result = settings.save_shadow_trait(payload)
             self.server.data.reload()

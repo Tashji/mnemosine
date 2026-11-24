@@ -60,6 +60,9 @@ class McpServerTests(unittest.TestCase):
         names = {tool.name for tool in tools}
         self.assertIn("get_identity", names)
         self.assertIn("identity_disclosure", names)
+        self.assertIn("list_acquaintances", names)
+        self.assertIn("get_acquaintance", names)
+        self.assertIn("record_acquaintance_observation", names)
         self.assertIn("life_situation", names)
         self.assertIn("life_status", names)
         self.assertIn("life_decide", names)

@@ -25,6 +25,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from .acquaintances import AcquaintanceService
 from .audit import AuditLog
 from .autonomy import AutonomyService
 from .browser import BrowserController
@@ -37,6 +38,7 @@ from .persona import PERSONA_URI, load_persona
 from .retrieval import RetrievalService
 from .semantic import SemanticService
 from .service import MemoryService, ShadowService
+from .tools_acquaintances import register_acquaintance_tools
 from .tools_autonomy import register_autonomy_tools
 from .tools_browser import register_browser_tools
 from .tools_files import register_file_tools
@@ -142,6 +144,7 @@ def create_server(
 
     browser_controller = browser or BrowserController(root)
     autonomy = AutonomyService(root, browser_controller)
+    acquaintances = AcquaintanceService(root)
     files = FileSandbox(root)
     visual = VisualService(root)
     service = MemoryService(root)
@@ -177,6 +180,7 @@ def create_server(
         mcp, service=service, semantic=semantic, retrieval=retrieval
     )
     register_autonomy_tools(mcp, autonomy=autonomy)
+    register_acquaintance_tools(mcp, service=acquaintances)
     register_browser_tools(mcp, browser=browser_controller)
     register_file_tools(mcp, files=files, visual=visual)
     register_status_tools(mcp, root=root, retrieval=retrieval, files=files)

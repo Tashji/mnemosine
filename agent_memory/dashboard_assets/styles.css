@@ -3543,6 +3543,217 @@ select:hover {
   overflow-wrap: anywhere;
 }
 
+/* -- persone incontrate -------------------------------------------------- */
+
+.acquaintance-top {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.acquaintance-create {
+  margin-bottom: 16px;
+  padding: 16px 18px;
+}
+
+.acquaintance-create summary,
+.acquaintance-add summary,
+.acquaintance-edit summary {
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.acquaintance-create summary:hover,
+.acquaintance-add summary:hover,
+.acquaintance-edit summary:hover {
+  color: var(--gold);
+}
+
+.acquaintance-intro {
+  margin: 6px 0 12px;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.acquaintance-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.acquaintance-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.acquaintance-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.acquaintance-title h3 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.acquaintance-id {
+  margin: 2px 0 0;
+  color: var(--faint);
+  font-size: 10px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.acquaintance-status {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.acquaintance-meter {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.acquaintance-meter span {
+  display: block;
+  height: 100%;
+  background: var(--gold);
+  transition: width 200ms ease;
+}
+
+.acquaintance-meta {
+  margin: 0;
+  color: var(--faint);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.acquaintance-facts {
+  display: grid;
+  gap: 10px;
+}
+
+.acquaintance-fact-group {
+  display: grid;
+  gap: 5px;
+}
+
+.acquaintance-fact-label {
+  color: var(--faint);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.acquaintance-fact-list {
+  display: grid;
+  gap: 6px;
+}
+
+.acquaintance-fact {
+  display: grid;
+  gap: 5px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: rgba(8, 17, 29, 0.45);
+}
+
+.acquaintance-fact-main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.acquaintance-fact-value {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.acquaintance-fact-status.is-candidate {
+  color: var(--muted);
+}
+
+.acquaintance-fact-status.is-confirmed {
+  color: #8fbf9a;
+  border-color: rgba(143, 191, 154, 0.4);
+}
+
+.acquaintance-fact-status.is-rejected {
+  color: var(--faint);
+  text-decoration: line-through;
+}
+
+.acquaintance-fact-sensitive {
+  color: #d59a9a;
+  border-color: rgba(213, 154, 154, 0.4);
+}
+
+.acquaintance-fact-source {
+  margin: 0;
+  color: var(--faint);
+  font-size: 10px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.acquaintance-fact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.acquaintance-fact-actions .button {
+  padding: 4px 8px;
+  font-size: 10px;
+}
+
+.acquaintance-fact-remove {
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--faint);
+  background: transparent;
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.acquaintance-fact-remove:hover {
+  border-color: rgba(213, 154, 154, 0.4);
+  color: #d59a9a;
+}
+
+.acquaintance-tools {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.acquaintance-add,
+.acquaintance-edit {
+  display: grid;
+  gap: 8px;
+}
+
+.acquaintance-add .settings-form,
+.acquaintance-edit .settings-form {
+  margin-top: 4px;
+}
+
 /* -- impostazioni -------------------------------------------------------- */
 
 .settings-grid {

@@ -170,6 +170,8 @@ L'architettura dovrà separare l'identità dell'agente, i tratti psicologici, i 
 
 - `social_graph.json`: registra le relazioni con gli utenti, i livelli di fiducia e intimità e lo storico sintetico delle interazioni rilevanti.
 
+- `acquaintances.json`: registro separato delle persone incontrate ma non ancora diventate relazioni fidate. Contiene identità note, stato, note e fatti candidati o confermati. Viene creato al primo utilizzo e non è richiesto ai profili esistenti.
+
 ### 1.2. Database SQLite
 
 - `timeline_episodic.db`: conserva i ricordi personali in ordine cronologico, compresi gli eventi autobiografici generati, le interazioni reali, le esperienze e i cambiamenti rilevanti.
@@ -811,6 +813,12 @@ Per ogni persona saranno mantenuti:
 Con una fiducia bassa, l'agente manterrà una maggiore distanza sociale. Con una fiducia elevata, ad esempio pari a 90, potrà condividere aspetti più vulnerabili della propria personalità simulata.
 
 Il sistema potrà utilizzare il RAG per recuperare le interazioni precedenti con una persona specifica, evitando di confondere ricordi relativi a utenti diversi.
+
+### 11.1. Persone incontrate e profiling progressivo
+
+Oltre alle relazioni fidate, il registro `config/acquaintances.json` conserva i profili parziali delle persone incontrate (per esempio su un forum) senza inserirle in `social_graph.json`. Ogni persona parte dal solo nickname e accumula fatti candidati; un fatto diventa confermato solo dopo una verifica esplicita nella vista **Incontrati** della dashboard.
+
+Le categorie coprono nickname, nome, città, età, lavoro, formazione, aspetto, interessi, valori, abitudini, relazioni e altro. Salute, religione, politica, orientamento, indirizzo e contatti sono marcati come sensibili: i tool MCP possono registrarli solo come candidati, mentre la conferma resta un'azione amministrativa. I tool `list_acquaintances`, `get_acquaintance` e `record_acquaintance_observation` leggono e aggiungono osservazioni; conferma, scarto e rimozione passano dalla dashboard. La barra di completezza conta le categorie di base confermate e il registro non concede permessi né crea legami nel grafo fidato.
 
 ---
 
@@ -1683,13 +1691,15 @@ Impostazioni dalla dashboard:
 
 - Ogni scrittura passa dalla sessione autenticata e da un token CSRF monouso; i valori vengono riletti con le classi del runtime prima di sostituire il file. Un archivio non cancella i dati: resta nella cartella di backup e può essere ripristinato a mano.
 
-La dashboard espone nove viste:
+La dashboard espone dieci viste:
 
 - **Panoramica**: identità, stato corrente, conteggi, ultimi ricordi, riepilogo cliccabile delle relazioni, stato del ciclo autonomo con l'outbox e contenuto della sandbox `files/`.
 
 - **Vita**: stato del motore deliberativo, episodio attivo, ultimo episodio, prossimo istante utile e riepilogo dell'esito. La vista è in sola lettura; l'accensione e lo spegnimento richiedono `ABILITO` o `DISATTIVA` e restano separati dai flag generici di **Comportamento**.
 
 - **Relazioni**: elenco dei contatti ordinato per ultima interazione e scheda completa con fiducia, intimità, preferenze, fatti confermati, confini relazionali e storico delle interazioni (con apertura diretta dei ricordi collegati). Si possono aggiungere e modificare i contatti senza alterare storico e contatori. La rimozione richiede di scrivere `RIMUOVI` ed elimina il contatto e il suo storico relazionale, non i ricordi episodici. La whitelist WhatsApp resta separata e non viene modificata automaticamente.
+
+- **Incontrati**: profili progressivi delle persone conosciute per gradi. Ogni scheda mostra stato, canali, barra di completezza, fatti candidati/confermati/scartati con fonte e confidenza, un form per aggiungere osservazioni e la gestione di stato, note e rimozione. I dati sensibili sono evidenziati e si confermano solo da qui; il registro è separato dal grafo fidato.
 
 - **Timeline**: ricerca e filtri per fonte e livello di accesso; i ricordi latenti e repressi sono visibili solo attivando esplicitamente l'opzione dedicata. Il dettaglio mostra revisioni, collegamenti episodici e conoscenze collegate.
 
@@ -1703,7 +1713,7 @@ La dashboard espone nove viste:
 
 - **Aspetto**: caratteristiche fisiche, seed visivo e generazione manuale delle immagini, con conferma esplicita prima di ogni invio al provider.
 
-Le API di consultazione sono in sola lettura; i POST gestiscono accesso, logout, prima configurazione, completamento del profilo (biografia e indice), la gestione dei contatti in **Relazioni**, il toggle amministrativo di **Vita** (`/api/life`) e le scritture di **Impostazioni** (integrazioni, comportamento e archiviazione del profilo). Ogni POST autenticato richiede un token CSRF monouso. Il server ascolta su `127.0.0.1` per impostazione predefinita: contiene dati amministrativi e tratti dell'ombra, quindi non va pubblicato su Internet. L'opzione `--host` permette di cambiare l'indirizzo; su un host non loopback l'autenticazione è obbligatoria. Usa `--https` per cifrare il traffico quando la dashboard è raggiungibile da altri dispositivi.
+Le API di consultazione sono in sola lettura; i POST gestiscono accesso, logout, prima configurazione, completamento del profilo (biografia e indice), la gestione dei contatti in **Relazioni**, il registro **Incontrati** (`/api/acquaintances`), il toggle amministrativo di **Vita** (`/api/life`) e le scritture di **Impostazioni** (integrazioni, comportamento e archiviazione del profilo). Ogni POST autenticato richiede un token CSRF monouso. Il server ascolta su `127.0.0.1` per impostazione predefinita: contiene dati amministrativi e tratti dell'ombra, quindi non va pubblicato su Internet. L'opzione `--host` permette di cambiare l'indirizzo; su un host non loopback l'autenticazione è obbligatoria. Usa `--https` per cifrare il traffico quando la dashboard è raggiungibile da altri dispositivi.
 
 ### 17.4. Routine giornaliera e stato corrente
 
