@@ -67,8 +67,11 @@ cd mnemosine
 
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -e ".[browser]"      # oppure: pip install -r requirements.txt
-python -m playwright install chromium   # solo se vuoi i tool browser
+pip install -e ".[browser]"      # pacchetto, comandi mnemosine-* e Playwright
+python -m playwright install chromium   # binario del browser per tool e test E2E
+
+# alternativa senza Playwright: pip install -e .
+# (i soli requirements.txt non installano i comandi mnemosine-*)
 
 # 1. Prima cosa: il wizard per creare il primo profilo
 mnemosine-start                  # oppure: python -m agent_memory.start
