@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import tempfile
 import threading
@@ -142,6 +143,40 @@ class VisualDashboardTests(unittest.TestCase):
         })
         self.assertEqual(response.status, 500)
         self.assertIn("Provider non configurato", json.loads(response.read())["error"])
+
+    def test_visual_provider_endpoint_saves_without_exposing_key(self):
+        secret = "sk-dashboard-1234567890"
+        response = self._post("/api/visual/provider", {
+            "provider": "openai",
+            "base_url": "https://api.openai.com/v1",
+            "model": "gpt-image-1",
+            "api_key": secret,
+        })
+        self.assertEqual(response.status, 200)
+        status = json.loads(response.read())
+        self.assertEqual(status["provider_id"], "openai")
+        self.assertTrue(status["external"])
+        self.assertNotIn(secret, json.dumps(status))
+
+        response = self._request("/api/settings")
+        self.assertEqual(response.status, 200)
+        settings = json.loads(response.read())
+        self.assertNotIn(secret, json.dumps(settings))
+        self.assertEqual(settings["mcp"]["args"][-2], "--root")
+        self.assertEqual(
+            os.path.normcase(os.path.realpath(settings["mcp"]["args"][-1])),
+            os.path.normcase(os.path.realpath(self.root)),
+        )
+        self.assertTrue(settings["mcp"]["command"])
+
+        response = self._post("/api/visual/provider", {
+            "provider": "local",
+            "base_url": "http://192.168.1.20:7860",
+            "model": "",
+            "api_key": "",
+        })
+        self.assertEqual(response.status, 400)
+        self.assertIn("questo computer", json.loads(response.read())["error"])
 
     def test_image_delete_and_token_check_endpoints(self):
         service = VisualService(self.root)

@@ -1999,6 +1999,9 @@
     }
     const required = Array.from(step.querySelectorAll("[data-required]"));
     for (const element of required) {
+      if (element.disabled) {
+        continue;
+      }
       const value = String(element.value || "").trim();
       if (!value) {
         showError(`Compila il campo “${fieldLabel(element)}”.`, element);
@@ -2152,6 +2155,27 @@
     });
   }
 
+  function initImageProvider() {
+    const select = form.querySelector('[name="image_provider"]');
+    if (!select) {
+      return;
+    }
+    const panels = Array.from(form.querySelectorAll("[data-image-fields]"));
+    const sync = () => {
+      panels.forEach((panel) => {
+        const active = panel.dataset.imageFields === select.value;
+        panel.hidden = !active;
+        panel
+          .querySelectorAll("input, select, textarea")
+          .forEach((element) => {
+            element.disabled = !active;
+          });
+      });
+    };
+    select.addEventListener("change", sync);
+    sync();
+  }
+
   function nextStep() {
     if (validateStep(currentStep)) {
       showStep(currentStep + 1);
@@ -2223,6 +2247,7 @@
   });
 
   applyScalarValues(initialValues, !hasInitialValues);
+  initImageProvider();
   initializeRows(initialValues);
   initTraitGuides();
   initVisualSuggestions();

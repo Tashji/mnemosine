@@ -539,6 +539,68 @@
               </label>
             </div>
 
+            <fieldset class="setup-section">
+              <legend>Immagini del profilo (opzionale)</legend>
+              <p class="setup-hint">
+                Mnemosine non include un generatore di immagini: collega il tuo.
+                Puoi configurare qui un’API online, Replicate o un server locale
+                Forge/A1111. La generazione resta disattivata finché non la
+                abiliti dalla vista Aspetto; potrai cambiare provider anche lì.
+              </p>
+              <div class="setup-grid">
+                <label class="login-field">
+                  <span>Provider immagini</span>
+                  <select name="image_provider" id="image-provider">
+                    <option value="none" selected>Configura più tardi</option>
+                    <option value="openai">API online compatibile OpenAI</option>
+                    <option value="replicate">Replicate (FLUX.1 Kontext Pro)</option>
+                    <option value="local">Locale · Forge / A1111</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="setup-grid" data-image-fields="openai" hidden>
+                <label class="login-field">
+                  <span>URL base</span>
+                  <input type="url" name="image_base_url" value="https://api.openai.com/v1" data-required spellcheck="false">
+                </label>
+                <label class="login-field">
+                  <span>Modello</span>
+                  <input name="image_model" value="gpt-image-1" maxlength="200" data-required>
+                </label>
+                <label class="login-field">
+                  <span>Chiave API</span>
+                  <input type="password" name="image_api_key" data-required autocomplete="new-password" spellcheck="false">
+                </label>
+              </div>
+
+              <div class="setup-grid" data-image-fields="replicate" hidden>
+                <label class="login-field">
+                  <span>Token Replicate</span>
+                  <input type="password" name="image_api_key" data-required autocomplete="new-password" spellcheck="false">
+                </label>
+                <p class="setup-hint">
+                  Crealo su <a href="https://replicate.com/account/api-tokens" target="_blank" rel="noreferrer">replicate.com/account/api-tokens</a>.
+                  Resta in un file locale protetto e non viene mai mostrato.
+                </p>
+              </div>
+
+              <div class="setup-grid" data-image-fields="local" hidden>
+                <label class="login-field">
+                  <span>URL base</span>
+                  <input type="url" name="image_base_url" value="http://127.0.0.1:7860" data-required spellcheck="false">
+                </label>
+                <label class="login-field">
+                  <span>Checkpoint (facoltativo)</span>
+                  <input name="image_model" maxlength="200" placeholder="es. realisticVisionV60_v60" spellcheck="false">
+                </label>
+                <p class="setup-hint">
+                  Avvia Forge/A1111 con <code>--api --nowebui --port 7860</code> e
+                  lascia che Mnemosine usi la sua API. La reference resta sul computer.
+                </p>
+              </div>
+            </fieldset>
+
             <p class="setup-review-note">
               Se un’operazione fallisce, il profilo resta creato e potrai
               riprovare dalla pagina di completamento senza rifare il wizard.

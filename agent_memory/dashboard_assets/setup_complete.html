@@ -105,6 +105,23 @@
           Collega l’agente con <code>mnemosine --root {{root}}</code>
         </p>
 
+        <section class="setup-complete-mcp">
+          <p class="eyebrow">Collega il tuo modello</p>
+          <h2>Mnemosine è il server, non il modello</h2>
+          <p class="setup-hint">
+            Aggiungi questo blocco alla configurazione MCP del tuo client
+            (Claude Desktop, Cursor, LM Studio, Ollama o un agente scritto da te).
+            Il client può usare qualsiasi modello: memoria, identità e persona
+            arrivano dal profilo. Dopo la modifica riavvia il client.
+          </p>
+          <pre class="settings-code"><code>{{mcp_json}}</code></pre>
+          <p class="setup-hint">
+            Per generare le immagini del profilo apri la dashboard, vai in
+            <strong>Aspetto</strong> e configura lì il provider online o il server
+            locale Forge/A1111: la generazione resta spenta finché non la abiliti.
+          </p>
+        </section>
+
         <p class="login-note">
           La biografia crea ricordi simulati e non sovrascrive quelli esistenti.
           L’indice può essere ricostruito in qualsiasi momento dai testi in

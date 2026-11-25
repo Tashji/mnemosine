@@ -79,6 +79,11 @@ from .setup_options import (
     timezone_groups,
 )
 from .visual import VisualService
+from .visual_providers import (
+    provider_from_form,
+    save_provider as save_visual_provider,
+    validate_provider,
+)
 
 ASSETS_DIR = Path(__file__).resolve().parent / "dashboard_assets"
 ACCESS_LEVELS = {"conscious", "latent", "repressed"}
@@ -111,12 +116,14 @@ VISUAL_REFERENCE_REMOVE_PATH = "/api/visual/reference/remove"
 VISUAL_GENERATE_PATH = "/api/visual/generate"
 VISUAL_IMAGE_DELETE_PATH = "/api/visual/image/delete"
 VISUAL_TOKEN_CHECK_PATH = "/api/visual/token/check"
+VISUAL_PROVIDER_PATH = "/api/visual/provider"
 VISUAL_POST_PATHS = {
     VISUAL_PROFILE_PATH,
     VISUAL_REFERENCE_REMOVE_PATH,
     VISUAL_GENERATE_PATH,
     VISUAL_IMAGE_DELETE_PATH,
     VISUAL_TOKEN_CHECK_PATH,
+    VISUAL_PROVIDER_PATH,
 }
 SETTINGS_POST_PATHS = {
     RELATIONS_PATH,
@@ -147,6 +154,7 @@ DASHBOARD_WRITE_ACTIONS = {
     VISUAL_GENERATE_PATH: "visual.generate",
     VISUAL_IMAGE_DELETE_PATH: "visual.image.delete",
     VISUAL_TOKEN_CHECK_PATH: "visual.token.check",
+    VISUAL_PROVIDER_PATH: "visual.provider.save",
 }
 FORM_TOKEN_TTL = 30 * 60
 FINALIZE_ACTIONS = ("biography", "index")
@@ -1612,7 +1620,18 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                     },
                 )
             elif path == SETTINGS_PATH:
-                self._send_json(DashboardSettings(self.server.data.root).snapshot())
+                snapshot = DashboardSettings(self.server.data.root).snapshot()
+                snapshot["mcp"] = {
+                    "command": sys.executable,
+                    "args": [
+                        "-m",
+                        "agent_memory.server",
+                        "--root",
+                        str(self.server.data.root),
+                    ],
+                    "cwd": str(project_root()),
+                }
+                self._send_json(snapshot)
             elif path == MAINTENANCE_PATH:
                 self._send_json(
                     MaintenanceService(self.server.data.root).snapshot()
@@ -1864,7 +1883,16 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             raise ValidationError("Modulo scaduto o non valido. Riprova.")
 
         settings = DashboardSettings(self.server.data.root)
-        if path == VISUAL_PROFILE_PATH:
+        if path == VISUAL_PROVIDER_PATH:
+            result = VisualService(self.server.data.root).save_provider(
+                {
+                    "provider": payload.get("provider"),
+                    "base_url": payload.get("base_url", ""),
+                    "model": payload.get("model", ""),
+                    "api_key": payload.get("api_key", ""),
+                }
+            )
+        elif path == VISUAL_PROFILE_PATH:
             result = VisualService(self.server.data.root).configure(
                 payload.get("profile", {}),
                 enabled=payload.get("enabled"),
@@ -1995,7 +2023,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         preserved = {
             key: value
             for key, value in (values or {}).items()
-            if key != "csrf"
+            if key != "csrf" and key not in {"image_api_key", "image_token"}
         }
         payload = json.dumps(preserved, ensure_ascii=False)
         birth_country = preserved.get("birth_country") or "Italia"
@@ -2124,7 +2152,14 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 status=HTTPStatus.BAD_REQUEST,
             )
             return
+        provider_payload = provider_from_form(form)
         try:
+            if provider_payload is not None:
+                validate_provider(
+                    self.server.data.root,
+                    provider_payload,
+                    allow_existing_secret=False,
+                )
             args = build_profile_args(form)
             create_profile(self.server.data.root, args, force=False)
         except (ConfigError, ValidationError) as exc:
@@ -2138,6 +2173,24 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             )
             return
 
+        if provider_payload is not None:
+            try:
+                save_visual_provider(
+                    self.server.data.root,
+                    provider_payload,
+                    allow_existing_secret=False,
+                )
+                self.server.audit_write("visual.provider", "ok")
+            except (ConfigError, ValidationError) as exc:
+                self.server.audit_write(
+                    "visual.provider", "error", error_type=type(exc).__name__
+                )
+                if not self.server.quiet:
+                    sys.stderr.write(
+                        "Provider immagini non salvato dopo la creazione del "
+                        f"profilo: {exc}\n"
+                    )
+                    sys.stderr.flush()
         self.server.audit_write("profile.setup", "ok")
         self.server.data.reload()
         if not self.server.quiet:
@@ -2302,8 +2355,27 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             job_progress = "0"
         biography_state_name = biography_state.removeprefix("is-")
         index_state_name = index_state.removeprefix("is-")
+        mcp_config = json.dumps(
+            {
+                "mcpServers": {
+                    "mnemosine": {
+                        "command": sys.executable,
+                        "args": [
+                            "-m",
+                            "agent_memory.server",
+                            "--root",
+                            str(self.server.data.root),
+                        ],
+                        "cwd": str(project_root()),
+                    }
+                }
+            },
+            indent=2,
+            ensure_ascii=False,
+        )
         page = (
             template.replace("{{root}}", html.escape(str(self.server.data.root)))
+            .replace("{{mcp_json}}", html.escape(mcp_config))
             .replace("{{error}}", html.escape(error))
             .replace("{{job_hidden}}", job_hidden)
             .replace("{{job_class}}", html.escape(job_class))

@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import hmac
 import json
 import os
 import secrets
@@ -23,6 +22,17 @@ from urllib.request import HTTPRedirectHandler, build_opener
 from .config import ConfigStore
 from .errors import ConfigError, ValidationError
 from .profile import _profile_lock
+from .visual_providers import (
+    build_backend,
+    check_connection,
+    config_fingerprint,
+    configured_provider,
+    load_provider,
+    provider_label,
+    provider_source,
+    resolve_api_key,
+    save_provider as save_visual_provider,
+)
 
 MAX_REFERENCE_BYTES = 8 * 1024 * 1024
 MAX_GENERATED_BYTES = 32 * 1024 * 1024
@@ -147,7 +157,7 @@ class VisualService:
         self.visual_dir = self.root / "data" / "visual"
         self.reference_path = self.visual_dir / "reference.jpg"
         self.output_dir = self.root / "files" / "images"
-        self.backend = backend or ReplicateBackend()
+        self.backend = backend
         self._generation_lock = _generation_lock_for(self.root)
 
     @staticmethod
@@ -156,20 +166,17 @@ class VisualService:
         return raw if isinstance(raw, dict) else {}
 
     def status(self) -> dict[str, Any]:
-        try:
-            _token, source = resolve_token(self.root)
-        except ConfigError:
-            _token, configured, source = None, False, None
-        else:
-            configured = True
+        provider_config = load_provider(self.root)
+        provider = provider_config["provider"]
+        configured = configured_provider(self.root, provider_config)
+        source = provider_source(self.root, provider_config)
+        fingerprint = config_fingerprint(self.root, provider_config)
         checked = self._read_token_status()
         if (
             not configured
+            or checked.get("provider") != provider
+            or checked.get("config_hash") != fingerprint
             or checked.get("source") != source
-            or not hmac.compare_digest(
-                checked.get("token_fingerprint", "").encode("utf-8"),
-                hashlib.sha256(_token.encode("utf-8")).hexdigest().encode("ascii") if _token else b"",
-            )
         ):
             checked = {}
         identity = self.config.get("identity")
@@ -225,13 +232,18 @@ class VisualService:
                 key: profile.get(key, "") for key in PROFILE_FIELDS
             } | {"fixed_seed": profile.get("fixed_seed")},
             "enabled": bool(flags.get("visual_generation_enabled", False)),
-            "provider": "Replicate · FLUX.1 Kontext Pro",
-            "price_per_image_usd": 0.04,
+            "provider": provider_label(provider_config),
+            "provider_id": provider,
+            "external": provider_config["external"],
+            "base_url": provider_config.get("base_url", ""),
+            "model": provider_config.get("model", ""),
+            "price_per_image_usd": 0.04 if provider == "replicate" else None,
             "provider_configured": configured,
             "provider_source": source,
             "provider_checked_at": checked.get("checked_at"),
             "provider_valid": checked.get("valid"),
             "provider_username": checked.get("username"),
+            "provider_detail": checked.get("detail"),
             "reference_available": reference_available,
             "reference_path": "reference.jpg" if reference_available else None,
             "generated_images": files,
@@ -260,7 +272,7 @@ class VisualService:
         current_flags = self.config.get("current_state").get("flags", {})
         old_enabled = bool(current_flags.get("visual_generation_enabled"))
         if enabled and not old_enabled and (not isinstance(confirmation, str) or confirmation.strip() != "GENERA"):
-            raise ValidationError("Scrivi GENERA per abilitare le richieste a pagamento al provider esterno.")
+            raise ValidationError("Scrivi GENERA per abilitare la generazione visiva.")
         with _profile_lock(self.root, timeout=30):
             identity = self.config.get("identity")
             identity["visual_profile"] = {"schema_version": 1, **cleaned}
@@ -345,19 +357,40 @@ class VisualService:
         return {"removed": True, "id": image_id, **self.status()}
 
     def check_provider(self) -> dict[str, Any]:
-        """Verifica il token sull'account Replicate senza avviare generazioni."""
+        """Verifica il provider scelto senza avviare generazioni."""
 
-        token, source = resolve_token(self.root)
-        from .visual_token import check_token
+        config = load_provider(self.root)
+        provider = config["provider"]
+        source = provider_source(self.root, config)
+        detail: str | None = None
+        username: str | None = None
+        token_fingerprint: str | None = None
+        if provider == "replicate":
+            token, source = resolve_token(self.root)
+            from .visual_token import check_token
 
-        result = check_token(token)
-        username = result.get("username")
+            result = check_token(token)
+            username = result.get("username")
+            if not isinstance(username, str):
+                username = None
+            token_fingerprint = hashlib.sha256(
+                token.encode("utf-8")
+            ).hexdigest()
+            detail = username
+        else:
+            token = resolve_api_key(self.root) if provider == "openai" else ""
+            result = check_connection(config, token)
+            detail_value = result.get("detail")
+            detail = detail_value if isinstance(detail_value, str) else None
         record = {
             "checked_at": datetime.now(UTC).replace(microsecond=0).isoformat(),
             "valid": bool(result.get("valid")),
-            "username": username if isinstance(username, str) else None,
+            "username": username,
+            "detail": detail,
+            "provider": provider,
+            "config_hash": config_fingerprint(self.root, config),
             "source": source,
-            "token_fingerprint": hashlib.sha256(token.encode("utf-8")).hexdigest(),
+            "token_fingerprint": token_fingerprint,
         }
         with _profile_lock(self.root, timeout=30):
             self._ensure_private_dir(self.visual_dir)
@@ -365,6 +398,12 @@ class VisualService:
                 self.token_status_path(),
                 json.dumps(record, ensure_ascii=False).encode("utf-8"),
             )
+        return self.status()
+
+    def save_provider(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Cambia provider immagini senza abilitare la generazione."""
+
+        save_visual_provider(self.root, payload)
         return self.status()
 
     def token_status_path(self) -> Path:
@@ -388,6 +427,9 @@ class VisualService:
         return {
             "source": record.get("source") if isinstance(record.get("source"), str) else None,
             "token_fingerprint": record.get("token_fingerprint") if isinstance(record.get("token_fingerprint"), str) else "",
+            "provider": record.get("provider") if isinstance(record.get("provider"), str) else None,
+            "config_hash": record.get("config_hash") if isinstance(record.get("config_hash"), str) else "",
+            "detail": record.get("detail") if isinstance(record.get("detail"), str) else None,
             "checked_at": checked_at if isinstance(checked_at, str) else None,
             "valid": valid if isinstance(valid, bool) else None,
             "username": username if isinstance(username, str) else None,
@@ -396,7 +438,7 @@ class VisualService:
     def generate_image(self, prompt: str) -> dict[str, Any]:
         """Il tool MCP non dispone di un consenso per l'invio a servizi esterni."""
         raise ValidationError(
-            "La generazione remota richiede conferma manuale nella sezione Aspetto della dashboard."
+            "La generazione richiede conferma manuale nella vista Aspetto della dashboard."
         )
 
     def generate(self, scene: str, *, consent_to_external_processing: bool) -> dict[str, Any]:
@@ -406,8 +448,20 @@ class VisualService:
         if not flags.get("visual_generation_enabled") or flags.get("maintenance_mode"):
             raise ValidationError("Generazione disabilitata o modalità manutenzione attiva.")
         if not consent_to_external_processing:
-            raise ValidationError("Conferma esplicita dell'invio immagine al provider esterno richiesta.")
-        token, _source = resolve_token(self.root)
+            raise ValidationError("Conferma esplicita della generazione richiesta.")
+        provider_config = load_provider(self.root)
+        provider = provider_config["provider"]
+        if provider == "replicate":
+            token, _source = resolve_token(self.root)
+        elif provider == "openai":
+            token = resolve_api_key(self.root)
+            if not token:
+                raise ConfigError(
+                    "Chiave API non configurata: aprila dalla vista Aspetto "
+                    "e salvala nel profilo."
+                )
+        else:
+            token = ""
         if not isinstance(scene, str) or not scene.strip() or len(scene) > MAX_PROMPT_CHARS or "\x00" in scene:
             raise ValidationError(f"La scena deve contenere da 1 a {MAX_PROMPT_CHARS} caratteri.")
         if not self.reference_path.is_file() or self.reference_path.is_symlink():
@@ -436,12 +490,18 @@ class VisualService:
         if not self._generation_lock.acquire(blocking=False):
             raise ValidationError("È già in corso una generazione; attendi il risultato prima di riprovare.")
         try:
-            raw = self.backend.generate(prompt, self.reference_path, seed, token=token)
-            return self._store_output(raw, scene.strip(), seed)
+            backend = self.backend or build_backend(provider_config)
+            raw = backend.generate(prompt, self.reference_path, seed, token=token)
+            model = provider_config.get("model") or (
+                MODEL if provider == "replicate" else provider
+            )
+            return self._store_output(raw, scene.strip(), seed, model=model)
         finally:
             self._generation_lock.release()
 
-    def _store_output(self, raw: bytes, scene: str, seed: int) -> dict[str, Any]:
+    def _store_output(
+        self, raw: bytes, scene: str, seed: int, *, model: str = MODEL
+    ) -> dict[str, Any]:
         try:
             from PIL import Image, UnidentifiedImageError
         except ImportError as exc:
@@ -468,7 +528,7 @@ class VisualService:
             "id": image_id,
             "scene": scene,
             "seed": seed,
-            "model": MODEL,
+            "model": model,
             "created_at": created_at,
             "reference_used": True,
         }

@@ -16,6 +16,7 @@ from unittest.mock import patch
 
 from agent_memory.dashboard import DashboardData, create_server
 from agent_memory.dashboard_auth import DashboardAuth
+from agent_memory.visual_providers import api_key_path, load_provider
 from agent_memory.profile import (
     PROFILE_STATE_INCOMPLETE,
     PROFILE_STATE_MISSING,
@@ -1039,6 +1040,76 @@ class DashboardSetupTests(SetupFixture):
         self.assertEqual(payload["job"]["state"], "done")
         self.assertEqual(payload["job"]["steps"][0]["state"], "success")
         self.assertEqual(payload["job"]["progress"], 100)
+
+    def test_setup_saves_local_image_provider(self) -> None:
+        _page, csrf = self._csrf("/setup")
+        response = self._submit(
+            csrf,
+            self._form(
+                image_provider="local",
+                image_base_url="http://127.0.0.1:7860",
+                image_model="demo.safetensors",
+            ),
+        )
+        self.assertEqual(response.status, 303)
+        config = load_provider(self.root)
+        self.assertEqual(config["provider"], "local")
+        self.assertEqual(config["base_url"], "http://127.0.0.1:7860")
+        self.assertEqual(config["model"], "demo.safetensors")
+
+    def test_setup_rejects_a_non_loopback_local_provider(self) -> None:
+        _page, csrf = self._csrf("/setup")
+        response = self._submit(
+            csrf,
+            self._form(
+                image_provider="local",
+                image_base_url="http://192.168.1.20:7860",
+                image_model="",
+            ),
+        )
+        self.assertEqual(response.status, 400)
+        self.assertIn("questo computer", response.read().decode("utf-8"))
+        self.assertNotEqual(profile_state(self.root), PROFILE_STATE_READY)
+
+    def test_setup_saves_openai_key_and_never_echoes_it(self) -> None:
+        secret = "sk-setup-1234567890"
+        _page, csrf = self._csrf("/setup")
+        response = self._submit(
+            csrf,
+            self._form(
+                image_provider="openai",
+                image_base_url="https://api.openai.com/v1",
+                image_model="gpt-image-1",
+                image_api_key=secret,
+                first_name="",
+            ),
+        )
+        self.assertEqual(response.status, 400)
+        self.assertNotIn(secret, response.read().decode("utf-8"))
+
+        _page, csrf = self._csrf("/setup")
+        response = self._submit(
+            csrf,
+            self._form(
+                image_provider="openai",
+                image_base_url="https://api.openai.com/v1",
+                image_model="gpt-image-1",
+                image_api_key=secret,
+            ),
+        )
+        self.assertEqual(response.status, 303)
+        self.assertEqual(api_key_path(self.root).read_text(encoding="utf-8").strip(), secret)
+        self.assertEqual(load_provider(self.root)["provider"], "openai")
+
+    def test_finalize_page_shows_a_ready_mcp_config(self) -> None:
+        _page, csrf = self._csrf("/setup")
+        response = self._submit(csrf)
+        self.assertEqual(response.status, 303)
+        page = self._request("/setup/finalize").read().decode("utf-8")
+        self.assertIn("mcpServers", page)
+        self.assertIn("agent_memory.server", page)
+        self.assertIn("--root", page)
+        self.assertNotIn("{{", page)
 
     def test_setup_template_is_not_public(self) -> None:
         response = self._request("/static/setup.html")

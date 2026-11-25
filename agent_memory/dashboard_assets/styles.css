@@ -3734,6 +3734,24 @@ select:hover {
   margin-top: 8px;
 }
 
+.setup-complete-mcp {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.setup-complete-mcp h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.setup-complete-mcp .settings-code {
+  margin: 4px 0;
+}
+
 .setup-complete-actions {
   display: flex;
   gap: 10px;
@@ -5069,6 +5087,20 @@ select:hover {
 
 .maintenance-restore-panel[hidden] {
   display: none;
+}
+
+.settings-code {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--surface-sunken, rgba(127, 127, 127, 0.08));
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: all;
 }
 
 .maintenance-command {

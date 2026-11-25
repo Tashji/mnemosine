@@ -77,7 +77,7 @@ python -m playwright install chromium   # binario del browser per tool e test E2
 mnemosine-start                  # oppure: python -m agent_memory.start
 ```
 
-Il comando prepara un profilo in `~/.mnemosine/profile`, avvia la dashboard in locale e apre il browser sulla pagina di configurazione (`/setup`). Il wizard raccoglie anagrafica, carattere, famiglia e persone importanti, crea i cinque file JSON e i quattro database, poi genera biografia e indice. Non serve conoscere `--root` né le opzioni della dashboard.
+Il comando prepara un profilo in `~/.mnemosine/profile`, avvia la dashboard in locale e apre il browser sulla pagina di configurazione (`/setup`). Il wizard raccoglie anagrafica, carattere, famiglia e persone importanti, crea i cinque file JSON e i quattro database, poi genera biografia e indice. Non serve conoscere `--root` né le opzioni della dashboard. Nel passaggio **6 · Completamento** puoi già collegare il generatore di immagini; la pagina finale mostra il blocco MCP da copiare nel tuo client.
 
 Al primo avvio il server rifiuta una directory senza profilo e indica proprio questo comando:
 
@@ -94,6 +94,8 @@ Nessun profilo in questa directory: al primo avvio esegui `mnemosine-start` ...
 - **Il browser non si apre**: apri l'indirizzo stampato a mano, oppure avvia con `--no-open` e visita `/setup`.
 - **Dove viene salvato il profilo**: `~/.mnemosine/profile`. `--root <cartella>` o la variabile `AGENT_MEMORY_PROFILE` cambiano la posizione; il profilo non viene mai scritto dentro il repository.
 - **Biografia o indice si interrompono**: il profilo resta valido. Riapri `/setup/finalize` dalla dashboard oppure esegui `mnemosine-biography --root <profilo> --apply` e `mnemosine-index --root <profilo> --rebuild`; entrambi sono idempotenti.
+- **Non so come collegare il mio modello**: apri **Impostazioni → Collega il tuo modello (MCP)** e usa **Copia configurazione**, oppure riapri la pagina finale del wizard. Va incollata nel client MCP (Claude Desktop, Cursor, LM Studio, un agente tuo); Mnemosine non esegue il modello e non richiede una chiave del modello.
+- **Non so come generare le immagini del profilo**: in **Aspetto → Provider** scegli API compatibile OpenAI, Replicate o server locale Forge/A1111, salva e poi digita `GENERA`. La stessa scelta è nel passaggio 6 del wizard. La configurazione manuale di `integrations.json` non serve.
 - **Playwright non è installato**: `python -m playwright install chromium`; senza browser i test end-to-end vengono saltati e i tool browser restano disabilitati.
 - **Backup, coerenza e indice**: la vista **Manutenzione** della dashboard crea e verifica i backup, esegue il controllo di coerenza e mostra lo stato dell'indice. Il ripristino si esegue da terminale con la dashboard ferma, usando il comando già compilato nella vista.
 - **Vuoi ripartire da zero**: ferma il server e avvia con un'altra `--root`; i backup precedenti restano in `<profilo>/backups`. Non cancellare `config/` o `data/` a mano.
@@ -114,6 +116,8 @@ mnemosine-index --root ./profiles/marco --rebuild
 ### Collega il tuo modello via MCP
 
 Mnemosine non è legato a un modello: memoria, identità e personalità vivono nel profilo, e qualsiasi client MCP può usarlo — Claude Desktop, Cursor, LM Studio, Ollama o un agente scritto da te. Il client porta il modello; Mnemosine porta ciò che il modello ricorda ed è.
+
+Non devi cercare il comando a mano: dopo la creazione del profilo la pagina finale mostra il blocco JSON, e in seguito lo trovi in **Impostazioni → Collega il tuo modello (MCP)** con il pulsante **Copia configurazione**. Il comando e la radice sono già compilati per l'installazione in uso. Incolla il blocco nella configurazione MCP del client e riavvialo.
 
 ```json
 {
@@ -1989,9 +1993,15 @@ La dashboard include la vista **Aspetto**. Durante la creazione del profilo o in
 
 È possibile caricare una reference PNG, JPEG o WebP (massimo 8 MiB e 20 megapixel). Viene normalizzata e conservata localmente in `data/visual/`; non viene inviata al provider quando viene caricata.
 
-La generazione manuale usa **FLUX.1 Kontext Pro** tramite Replicate. Installa l'extra opzionale `pip install 'mnemosine[visual]'`. Il token si salva con `mnemosine-visual-token --root <profilo>`: l'input è nascosto, il valore finisce in `data/secrets/replicate_token` con permessi `0600` ed è escluso dal repository. `REPLICATE_API_TOKEN` nell'ambiente del processo ha la precedenza, ma resta sconsigliato perché finisce nella storia della shell; il token non va mai in chat, in file versionati o nei dati del profilo. `mnemosine-visual-token --check` verifica il token sull'endpoint dell'account senza generare immagini, `--remove` lo cancella. L'attivazione richiede di digitare `GENERA`; ogni generazione richiede inoltre conferma esplicita dell'invio a Replicate. Solo allora prompt e reference vengono inviati al provider. Il flag nasce spento, non ci sono invii automatici e il tool MCP `generate_image` non può aggirare il consenso.
+Mnemosine non include un generatore di immagini: collega il tuo. Puoi farlo nel passaggio **6 · Completamento** del wizard oppure, dopo la creazione del profilo, in **Aspetto → Provider**. Non serve modificare `integrations.json` a mano. Sono disponibili tre strade:
 
-Il prezzo consultato è **$0,04 per immagine**; controlla il listino aggiornato prima dell'uso. Il seed aiuta la ripetibilità ma non garantisce identità stabile né risultati identici fra versioni del modello. Gli output sono verificati, ripuliti dai metadati e salvati localmente in `files/images/`; la galleria mostra fino a 50 risultati recenti e ogni immagine può essere eliminata. La card Provider indica l’origine del token, l’esito e la data dell’ultima verifica salvata con «Verifica ora». Se il token cambia, viene rimosso o cambia origine, la precedente verifica non viene più mostrata: occorre verificarlo nuovamente. Anche `mnemosine-visual-token --check` controlla l’account senza generare immagini, ma stampa solo l’esito e non aggiorna la card della dashboard. La continuità facciale resta probabilistica: non è un modello addestrato né una verifica dell'identità.
+- **API compatibile OpenAI** — un servizio online che espone `POST /images/edits` (OpenAI, un gateway compatibile o un host che parla lo stesso protocollo). Inserisci URL base HTTPS, nome del modello e chiave API. La chiave finisce in `data/secrets/visual_api_key` con permessi `0600`, non viene mai mostrata né restituita dalle API della dashboard. Il prompt e la reference vengono inviati al servizio scelto, quindi la generazione richiede il consenso esplicito.
+- **Server locale Forge / A1111** — avvia Forge o Automatic1111 con `--api` (per esempio `--api --nowebui --port 7860`) e indica l'URL, di norma `http://127.0.0.1:7860`. Mnemosine accetta solo indirizzi loopback (`127.0.0.1`, `localhost`, `::1`): un server locale non viene mai chiamato su Internet. Usa `POST /sdapi/v1/img2img`; il checkpoint è facoltativo e, se vuoto, resta quello attivo nel server. Prompt e reference restano sul computer; non serve alcuna chiave.
+- **Replicate** — il percorso esistente con **FLUX.1 Kontext Pro**. Serve l'extra `pip install 'mnemosine[visual]'` e un token Replicate, salvato con `mnemosine-visual-token --root <profilo>` in `data/secrets/replicate_token` (`0600`). `REPLICATE_API_TOKEN` nell'ambiente ha la precedenza, ma resta sconsigliato perché finisce nella storia della shell. Il prezzo consultato è **$0,04 per immagine**: controlla il listino aggiornato prima dell'uso.
+
+La configurazione scelta vive nella sezione `visual` di `config/integrations.json`; chiavi e token non vengono mai scritti lì. **Salvare il provider non attiva la generazione**: in Aspetto bisogna digitare `GENERA` per abilitarla, e ogni invio a un provider esterno richiede una conferma. Il flag nasce spento, non ci sono invii automatici e il tool MCP `generate_image` non può aggirare il consenso. Con il provider locale la conferma serve comunque, ma i dati non lasciano il computer.
+
+Il seed aiuta la ripetibilità ma non garantisce identità stabile né risultati identici fra versioni del modello. Gli output sono verificati, ripuliti dai metadati e salvati localmente in `files/images/`; la galleria mostra fino a 50 risultati recenti e ogni immagine può essere eliminata. La card Provider indica l’origine, l’esito e la data dell’ultima verifica salvata con «Verifica ora»; se cambi provider o chiave, la verifica precedente non vale più. La continuità facciale resta probabilistica: non è un modello addestrato né una verifica dell'identità. IP-Adapter FaceID e gli altri modelli di riconoscimento facciale non sono inclusi: molti hanno licenze non commerciali e richiedono pesi e una installazione separata.
 
 ### 18.1. Obiettivo
 

@@ -3305,6 +3305,85 @@ function renderVisual(data) {
     }
   );
 
+  const currentProvider = data.provider_id || "replicate";
+  const providerSelect = h(
+    "select",
+    { name: "provider" },
+    h("option", { value: "replicate" }, "Replicate · FLUX.1 Kontext Pro"),
+    h("option", { value: "openai" }, "API online compatibile OpenAI"),
+    h("option", { value: "local" }, "Locale · Forge / A1111")
+  );
+  providerSelect.value = currentProvider;
+  const replicateKey = settingsInput("api_key", "", "password", {
+    autocomplete: "new-password",
+    spellcheck: "false",
+    placeholder: data.provider_configured && currentProvider === "replicate"
+      ? "Lascia vuoto per mantenere il token salvato"
+      : "Token Replicate",
+  });
+  const openaiBase = settingsInput("base_url", currentProvider === "openai" ? data.base_url || "https://api.openai.com/v1" : "https://api.openai.com/v1", "url", { spellcheck: "false" });
+  const openaiModel = settingsInput("model", currentProvider === "openai" ? data.model || "gpt-image-1" : "gpt-image-1");
+  const openaiKey = settingsInput("api_key", "", "password", {
+    autocomplete: "new-password",
+    spellcheck: "false",
+    placeholder: data.provider_configured && currentProvider === "openai"
+      ? "Lascia vuoto per mantenere la chiave salvata"
+      : "Chiave API",
+  });
+  const localBase = settingsInput("base_url", currentProvider === "local" ? data.base_url || "http://127.0.0.1:7860" : "http://127.0.0.1:7860", "url", { spellcheck: "false" });
+  const localModel = settingsInput("model", currentProvider === "local" ? data.model || "" : "", "text", { placeholder: "es. realisticVisionV60_v60", spellcheck: "false" });
+  const providerPanels = {
+    replicate: h(
+      "div",
+      { class: "visual-provider-fields", "data-provider-panel": "replicate" },
+      settingsField("Token Replicate", replicateKey, "Crealo su replicate.com/account/api-tokens. Resta in data/secrets/ e non viene mai mostrato.")
+    ),
+    openai: h(
+      "div",
+      { class: "visual-provider-fields", "data-provider-panel": "openai" },
+      settingsField("URL base", openaiBase, "Includi /v1 se il provider lo richiede."),
+      settingsField("Modello", openaiModel, "Il nome del modello di immagini accettato dal provider."),
+      settingsField("Chiave API", openaiKey, "Salvata in data/secrets/visual_api_key.")
+    ),
+    local: h(
+      "div",
+      { class: "visual-provider-fields", "data-provider-panel": "local" },
+      settingsField("URL base", localBase, "Solo loopback: 127.0.0.1, localhost o ::1."),
+      settingsField("Checkpoint", localModel, "Facoltativo: il nome del checkpoint caricato in Forge/A1111."),
+      h("p", { class: "settings-hint", text: "Avvia Forge/A1111 con --api --nowebui --port 7860. Mnemosine usa la sua API e non invia nulla fuori dal computer." })
+    ),
+  };
+  function syncProviderPanels() {
+    Object.entries(providerPanels).forEach(([kind, panel]) => {
+      const active = kind === providerSelect.value;
+      panel.hidden = !active;
+      panel.querySelectorAll("input, select, textarea").forEach((element) => {
+        element.disabled = !active;
+      });
+    });
+  }
+  providerSelect.addEventListener("change", syncProviderPanels);
+  syncProviderPanels();
+  const providerForm = settingsForm(
+    "Salva provider",
+    [
+      settingsField("Provider immagini", providerSelect, "Mnemosine non esegue il modello: usa l'API che gli indichi."),
+      ...Object.values(providerPanels),
+    ],
+    async (formData) => {
+      const payload = {
+        provider: String(formData.get("provider") || ""),
+        base_url: String(formData.get("base_url") || ""),
+        model: String(formData.get("model") || ""),
+        api_key: String(formData.get("api_key") || ""),
+      };
+      const result = await postJson("/api/visual/provider", payload);
+      state.loaded.visual = result;
+      renderVisual(result);
+      setNotice("Provider immagini salvato. La generazione resta disattivata finché non la abiliti.", "success");
+    }
+  );
+
   const reference = data.reference_available
     ? h("div", { class: "visual-reference" },
         h("img", { src: "/api/visual/image/reference", alt: "Immagine di riferimento del profilo" }),
@@ -3339,22 +3418,36 @@ function renderVisual(data) {
     } catch (error) { setNotice(error.message); }
     finally { uploadButton.disabled = false; }
   } });
+  const external = data.external !== false;
+  const price = Number(data.price_per_image_usd || 0);
   const referenceCard = settingsCard(
     "Immagine di riferimento",
-    "Salvata localmente; viene inviata a Replicate soltanto quando confermi una generazione.",
+    external
+      ? "Salvata localmente; viene inviata al provider soltanto quando confermi una generazione."
+      : "Salvata localmente e usata dal server locale: non esce dal computer.",
     h("div", { class: "visual-reference-stack" }, reference, upload, uploadButton)
   );
 
-  const warning = h("p", { class: "settings-warning", text: `La generazione usa Replicate e FLUX.1 Kontext Pro: testo e immagine di riferimento saranno inviati al provider esterno; ogni output costa circa $${Number(data.price_per_image_usd || 0.04).toFixed(2)} secondo il listino consultato al 2026-10-28. La coerenza del volto non è garantita.` });
+  const costNote = data.provider_id === "local"
+    ? " · nessun costo per immagine"
+    : price
+      ? ` · circa $${price.toFixed(2)} per immagine`
+      : " · costo secondo il listino del provider";
+  const warning = h("p", {
+    class: "settings-warning",
+    text: external
+      ? `La generazione usa ${data.provider}: testo e immagine di riferimento saranno inviati al provider esterno${price ? `; ogni output costa circa $${price.toFixed(2)}` : "; il costo dipende dal listino del provider"}. La coerenza del volto non è garantita.`
+      : `La generazione usa ${data.provider} su questo computer: prompt e reference non vengono inviati a servizi esterni. La coerenza del volto non è garantita.`,
+  });
   const enable = settingsCheck("visual_enabled", "Consenti generazione visiva", Boolean(data.enabled), "Le richieste vengono avviate manualmente qui, mai in automatico.");
   const enableConfirm = settingsField("Conferma attivazione (solo quando abiliti)", settingsInput("enable_confirmation", "", "text", { placeholder: "Scrivi GENERA", autocomplete: "off" }));
   let generateForm;
   generateForm = settingsForm("Genera immagine", [
-    h("label", { class: "settings-check" }, h("input", { type: "checkbox", name: "external_consent" }), h("span", {}, h("strong", { text: "Confermo l'invio a Replicate" }), h("small", { text: "La reference e il prompt saranno elaborati da un servizio cloud a pagamento." }))),
+    h("label", { class: "settings-check" }, h("input", { type: "checkbox", name: "external_consent" }), h("span", {}, h("strong", { text: external ? "Confermo l'invio al provider immagini" : "Confermo la generazione sul server locale" }), h("small", { text: external ? "La reference e il prompt saranno elaborati da un servizio esterno; potrebbero avere un costo." : "La reference e il prompt restano su questo computer." }))),
     settingsField("Scena o modifica", h("textarea", { name: "scene", rows: "3", maxlength: "1000", placeholder: "Es. ritratto all'aperto in una giornata di sole" })),
   ], async (formData) => {
     if (!formData.has("external_consent")) {
-      throw new Error("Conferma esplicita l'invio della reference e del prompt a Replicate.");
+      throw new Error(external ? "Conferma esplicitamente l'invio della reference e del prompt al provider." : "Conferma esplicitamente la generazione con la reference locale.");
     }
     const button = generateForm.querySelector('button[type="submit"]');
     button.disabled = true;
@@ -3413,26 +3506,77 @@ function renderVisual(data) {
     finally { if (button.isConnected) button.disabled = false; }
   } });
   const providerCard = settingsCard(
-    "Provider",
+    "Provider immagini",
     data.provider,
     h("div", { class: "visual-generation" },
+      providerForm,
       h("p", { class: "settings-hint", text: data.provider_configured
-        ? `Token configurato, origine: ${data.provider_source === "environment" ? "variabile d'ambiente" : "file locale protetto"}.`
-        : "Nessun token configurato: la generazione resta bloccata. Salvalo con mnemosine-visual-token --root <profilo>." }),
+        ? (data.provider_id === "local"
+          ? `Server locale configurato su ${data.base_url}.`
+          : data.provider_id === "openai"
+            ? `API configurata: ${data.base_url} · ${data.model || "modello predefinito"}.`
+            : `Token configurato, origine: ${data.provider_source === "environment" ? "variabile d'ambiente" : "file locale protetto"}.`)
+        : "Provider non configurato: compila i campi qui sopra e salva. La generazione resta bloccata finché non lo configuri." }),
       h("p", { class: "settings-meta", text: data.provider_checked_at
-        ? `Ultima verifica: ${data.provider_checked_at} — ${data.provider_valid ? "valido" : "rifiutato"}${data.provider_username ? ` (account ${data.provider_username})` : ""}.`
+        ? `Ultima verifica: ${data.provider_checked_at} — ${data.provider_valid ? "raggiungibile" : "non riuscita"}${data.provider_detail ? ` (${data.provider_detail})` : data.provider_username ? ` (account ${data.provider_username})` : ""}.`
         : "Nessuna verifica registrata." }),
       data.provider_configured ? checkButton : null,
-      h("p", { class: "settings-hint", text: "La verifica legge solo l'account Replicate e non invia prompt né immagini." })
+      h("p", { class: "settings-hint", text: external ? "La verifica non invia prompt né immagini e non genera costi." : "La verifica contatta solo il server locale." })
     )
   );
   clear(content, h("div", { class: "visual-grid" },
     settingsCard("Profilo visivo", "Descrizione persistente e seed del personaggio.", form),
     referenceCard,
     providerCard,
-    settingsCard("Generazione", data.provider_configured ? `${data.provider} · circa $${Number(data.price_per_image_usd || 0.04).toFixed(2)} per immagine` : `${data.provider} · token non configurato: esegui mnemosine-visual-token --root <profilo>`, h("div", { class: "visual-generation" }, warning, activationForm, data.enabled ? generateForm : emptyState("Generazione disattivata", "Salva prima l'autorizzazione esplicita."))),
+    settingsCard("Generazione", data.provider_configured ? `${data.provider}${costNote}` : `${data.provider} · provider non configurato`, h("div", { class: "visual-generation" }, warning, activationForm, data.enabled ? generateForm : emptyState("Generazione disattivata", "Salva prima l'autorizzazione esplicita."))),
     settingsCard("Immagini generate", "Cronologia locale di scene e seed.", images.length ? h("div", { class: "visual-gallery" }, ...images) : emptyState("Ancora nessuna immagine", "Le immagini generate appariranno qui."))
   ));
+}
+
+function mcpConnectionCard(data) {
+  const mcp = data.mcp || {};
+  const config = {
+    mcpServers: {
+      mnemosine: {
+        command: mcp.command || "mnemosine",
+        args: mcp.args || ["--root", data.root || ""],
+        ...(mcp.cwd ? { cwd: mcp.cwd } : {}),
+      },
+    },
+  };
+  const configText = JSON.stringify(config, null, 2);
+  const code = h("pre", { class: "settings-code" }, h("code", { text: configText }));
+  const copyButton = h("button", {
+    class: "button button-quiet",
+    type: "button",
+    text: "Copia configurazione",
+    onClick: async () => {
+      try {
+        await navigator.clipboard.writeText(configText);
+        setNotice("Configurazione MCP copiata.", "success");
+      } catch (error) {
+        setNotice("Copia non riuscita: seleziona il testo e copialo a mano.");
+      }
+    },
+  });
+  return settingsCard(
+    "Collega il tuo modello (MCP)",
+    "Mnemosine non esegue il modello: è il server che il tuo client interroga.",
+    h(
+      "div",
+      { class: "visual-generation" },
+      h("p", {
+        class: "settings-hint",
+        text: "Aggiungi questo blocco alla configurazione MCP del tuo client (Claude Desktop, Cursor, LM Studio, un agente scritto da te). Il client può usare qualsiasi modello: memoria, identità e persona arrivano dal profilo, non dal prompt del client.",
+      }),
+      code,
+      copyButton,
+      h("p", {
+        class: "settings-hint",
+        text: "Se hai installato il pacchetto, al posto di command/args puoi usare \"mnemosine\" con gli stessi argomenti. Dopo la modifica riavvia il client MCP.",
+      })
+    )
+  );
 }
 
 function renderSettings(data) {
@@ -3445,6 +3589,7 @@ function renderSettings(data) {
     h(
       "div",
       { class: "settings-grid" },
+      mcpConnectionCard(data),
       settingsCard(
         "Browser controllato",
         "Whitelist, interazione, service worker e identità del browser.",
