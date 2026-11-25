@@ -2410,6 +2410,54 @@ select:hover {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0.16)),
     var(--avatar-outfit, #3a4a63);
+  transition: width 180ms ease, height 180ms ease, left 180ms ease,
+    border-radius 180ms ease;
+}
+
+.setup-avatar[data-build="esile"] .setup-avatar-shoulders {
+  left: 19px;
+  width: 98px;
+  height: 42px;
+}
+
+.setup-avatar[data-build="snella"] .setup-avatar-shoulders {
+  left: 14px;
+  width: 108px;
+  height: 44px;
+}
+
+.setup-avatar[data-build="media"] .setup-avatar-shoulders {
+  left: 8px;
+  width: 120px;
+  height: 46px;
+}
+
+.setup-avatar[data-build="atletica"] .setup-avatar-shoulders {
+  left: 4px;
+  width: 128px;
+  height: 48px;
+  clip-path: polygon(0 0, 100% 0, 88% 100%, 12% 100%);
+}
+
+.setup-avatar[data-build="robusta"] .setup-avatar-shoulders {
+  left: 1px;
+  width: 134px;
+  height: 50px;
+  clip-path: polygon(0 0, 100% 0, 94% 100%, 6% 100%);
+}
+
+.setup-avatar[data-build="morbida"] .setup-avatar-shoulders {
+  left: 4px;
+  width: 128px;
+  height: 48px;
+  border-radius: 62px 62px 16px 16px;
+}
+
+.setup-avatar[data-build="formosa"] .setup-avatar-shoulders {
+  left: 7px;
+  width: 122px;
+  height: 48px;
+  clip-path: polygon(20% 0, 80% 0, 100% 100%, 0 100%);
 }
 
 .setup-avatar-neck {
@@ -2423,15 +2471,60 @@ select:hover {
   z-index: 1;
 }
 
-.setup-avatar-head {
+.setup-avatar-face {
   position: absolute;
   left: 37px;
   top: 22px;
   width: 62px;
   height: 78px;
-  border-radius: 46% 46% 44% 44%;
-  background: var(--avatar-skin, #e6b795);
+  transform: scaleX(var(--face-x, 1)) scaleY(var(--face-y, 1));
+  transform-origin: 50% 100%;
+  transition: transform 180ms ease;
   z-index: 2;
+}
+
+.setup-avatar-head {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--face-radius, 46% 46% 44% 44%);
+  background: var(--avatar-skin, #e6b795);
+  transition: border-radius 180ms ease;
+}
+
+.setup-avatar[data-face="ovale"] {
+  --face-x: 1;
+  --face-y: 1;
+  --face-radius: 46% 46% 44% 44%;
+}
+
+.setup-avatar[data-face="rotondo"] {
+  --face-x: 1.1;
+  --face-y: 0.93;
+  --face-radius: 50% 50% 46% 46%;
+}
+
+.setup-avatar[data-face="squadrato"] {
+  --face-x: 1.06;
+  --face-y: 0.99;
+  --face-radius: 24% 24% 20% 20%;
+}
+
+.setup-avatar[data-face="allungato"] {
+  --face-x: 0.94;
+  --face-y: 1.08;
+  --face-radius: 45% 45% 50% 50%;
+}
+
+.setup-avatar[data-face="cuore"] {
+  --face-x: 1.02;
+  --face-y: 1;
+  --face-radius: 28% 28% 62% 62% / 26% 26% 70% 70%;
+}
+
+.setup-avatar[data-face="triangolare"] {
+  --face-x: 1.04;
+  --face-y: 1;
+  --face-radius: 50% 50% 22% 22% / 40% 40% 24% 24%;
 }
 
 .setup-avatar-hair {
@@ -2519,76 +2612,98 @@ select:hover {
 
 .setup-avatar-eye {
   position: absolute;
-  top: 61px;
+  top: 50%;
   width: 7px;
   height: 7px;
   border-radius: 50%;
   background: var(--avatar-eyes, #4e7a4a);
-  z-index: 4;
-  transition: background 160ms ease;
+  transform: translateX(-50%);
+  transition: background 160ms ease, width 160ms ease, height 160ms ease,
+    border-radius 160ms ease;
 }
 
 .setup-avatar-eye.left {
-  left: 52px;
+  left: 30%;
 }
 
 .setup-avatar-eye.right {
-  left: 76px;
+  left: 68.5%;
+}
+
+.setup-avatar[data-eyes="mandorla"] .setup-avatar-eye {
+  width: 9px;
+  height: 6px;
+  border-radius: 60% 40% 60% 40%;
+}
+
+.setup-avatar[data-eyes="grandi"] .setup-avatar-eye {
+  width: 9px;
+  height: 9px;
+}
+
+.setup-avatar[data-eyes="allungati"] .setup-avatar-eye {
+  width: 11px;
+  height: 5px;
+  border-radius: 50% 40% 50% 40%;
+}
+
+.setup-avatar[data-eyes="tondi"] .setup-avatar-eye {
+  width: 7px;
+  height: 7px;
 }
 
 .setup-avatar-ear {
   position: absolute;
-  top: 55px;
+  top: 42%;
   width: 9px;
   height: 20px;
   border-radius: 50%;
   background: var(--avatar-skin, #e6b795);
   box-shadow: inset -1px 0 0 rgba(0, 0, 0, 0.14);
-  z-index: 1;
 }
 
 .setup-avatar-ear.left {
-  left: 31px;
+  left: -6px;
 }
 
 .setup-avatar-ear.right {
-  left: 96px;
+  right: -6px;
 }
 
 .setup-avatar-brow {
   position: absolute;
-  top: 52px;
+  top: 38%;
   width: 12px;
   height: 2.5px;
   border-radius: 999px;
   background: var(--avatar-hair, #3b2a21);
   opacity: 0.55;
-  z-index: 4;
+  transform: translateX(-50%);
 }
 
 .setup-avatar-brow.left {
-  left: 49px;
+  left: 29%;
 }
 
 .setup-avatar-brow.right {
-  left: 73px;
+  left: 68%;
 }
 
 .setup-avatar-nose {
   position: absolute;
-  left: 65px;
-  top: 69px;
+  left: 50%;
+  top: 60%;
   width: 6px;
   height: 11px;
   border-radius: 50% 50% 60% 60%;
   background: rgba(120, 70, 45, 0.18);
-  z-index: 4;
+  transform: translateX(-50%);
 }
 
 .setup-avatar-mouth {
   position: absolute;
-  left: 59px;
-  top: 85px;
+  left: 50%;
+  top: 81%;
   width: 18px;
   height: 5px;
   border-radius: 0 0 12px 12px;
@@ -2597,7 +2712,7 @@ select:hover {
     rgba(122, 58, 52, 0.35),
     rgba(150, 72, 64, 0.55)
   );
-  z-index: 4;
+  transform: translateX(-50%);
 }
 
 .setup-avatar-progress {

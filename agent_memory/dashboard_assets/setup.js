@@ -55,13 +55,13 @@
       field: "body",
       label: "Corporatura",
       options: [
-        { label: "Esile", value: "corporatura esile, ossatura fine" },
-        { label: "Snella", value: "corporatura snella" },
-        { label: "Media", value: "corporatura media, proporzionata" },
-        { label: "Atletica", value: "corporatura atletica e tonica" },
-        { label: "Robusta", value: "corporatura robusta, spalle larghe" },
-        { label: "Morbida", value: "corporatura morbida e arrotondata" },
-        { label: "Formosa", value: "corporatura formosa, fianchi pronunciati" },
+        { label: "Esile", value: "corporatura esile, ossatura fine", build: "esile" },
+        { label: "Snella", value: "corporatura snella", build: "snella" },
+        { label: "Media", value: "corporatura media, proporzionata", build: "media" },
+        { label: "Atletica", value: "corporatura atletica e tonica", build: "atletica" },
+        { label: "Robusta", value: "corporatura robusta, spalle larghe", build: "robusta" },
+        { label: "Morbida", value: "corporatura morbida e arrotondata", build: "morbida" },
+        { label: "Formosa", value: "corporatura formosa, fianchi pronunciati", build: "formosa" },
       ],
     },
     {
@@ -75,12 +75,12 @@
       field: "face",
       label: "Forma del viso",
       options: [
-        { label: "Ovale", value: "viso ovale, lineamenti morbidi" },
-        { label: "Rotondo", value: "viso rotondo, guance piene" },
-        { label: "Squadrato", value: "viso squadrato, mascella definita" },
-        { label: "Allungato", value: "viso allungato, zigomi alti" },
-        { label: "A cuore", value: "viso a cuore, fronte ampia e mento appuntito" },
-        { label: "Triangolare", value: "viso triangolare, fronte stretta e mascella ampia" },
+        { label: "Ovale", value: "viso ovale, lineamenti morbidi", shape: "ovale" },
+        { label: "Rotondo", value: "viso rotondo, guance piene", shape: "rotondo" },
+        { label: "Squadrato", value: "viso squadrato, mascella definita", shape: "squadrato" },
+        { label: "Allungato", value: "viso allungato, zigomi alti", shape: "allungato" },
+        { label: "A cuore", value: "viso a cuore, fronte ampia e mento appuntito", shape: "cuore" },
+        { label: "Triangolare", value: "viso triangolare, fronte stretta e mascella ampia", shape: "triangolare" },
       ],
     },
     {
@@ -140,10 +140,10 @@
       field: "eyes",
       label: "Forma",
       options: [
-        { label: "A mandorla", value: "occhi a mandorla" },
-        { label: "Grandi", value: "occhi grandi" },
-        { label: "Allungati", value: "occhi allungati" },
-        { label: "Tondi", value: "occhi tondi" },
+        { label: "A mandorla", value: "occhi a mandorla", eyes: "mandorla" },
+        { label: "Grandi", value: "occhi grandi", eyes: "grandi" },
+        { label: "Allungati", value: "occhi allungati", eyes: "allungati" },
+        { label: "Tondi", value: "occhi tondi", eyes: "tondi" },
       ],
     },
     {
@@ -786,6 +786,12 @@
           hair = "mossi";
         }
         avatar.dataset.hair = hair;
+        avatar.dataset.face =
+          (selections.face_shape && selections.face_shape.shape) || "ovale";
+        avatar.dataset.build =
+          (selections.build && selections.build.build) || "media";
+        avatar.dataset.eyes =
+          (selections.eyes_shape && selections.eyes_shape.eyes) || "mandorla";
       }
       if (caption) {
         const parts = [
