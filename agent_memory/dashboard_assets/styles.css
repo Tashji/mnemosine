@@ -2715,6 +2715,142 @@ select:hover {
   transform: translateX(-50%);
 }
 
+.setup-avatar-freckles,
+.setup-avatar-mole,
+.setup-avatar-scar,
+.setup-avatar-beard,
+.setup-avatar-moustache,
+.setup-avatar-glasses,
+.setup-avatar-tattoo {
+  display: none;
+  position: absolute;
+}
+
+.setup-avatar-freckles {
+  left: 50%;
+  top: 66%;
+  width: 36px;
+  height: 12px;
+  border-radius: 50%;
+  background-image: radial-gradient(
+    circle,
+    rgba(150, 90, 60, 0.5) 0.9px,
+    transparent 1.3px
+  );
+  background-size: 6px 5px;
+  opacity: 0.6;
+  transform: translateX(-50%);
+}
+
+.setup-avatar-mole {
+  left: 37%;
+  top: 76%;
+  width: 2.5px;
+  height: 2.5px;
+  border-radius: 50%;
+  background: #5a3a2a;
+}
+
+.setup-avatar-scar {
+  left: 24%;
+  top: 33%;
+  width: 2px;
+  height: 9px;
+  border-radius: 999px;
+  background: rgba(178, 116, 108, 0.65);
+  transform: rotate(14deg);
+}
+
+.setup-avatar-beard {
+  left: 5px;
+  right: 5px;
+  top: 62%;
+  bottom: 1px;
+  background: var(--avatar-hair, #3b2a21);
+  border-radius: 14% 14% 46% 46% / 8% 8% 56% 56%;
+  opacity: 0.92;
+}
+
+.setup-avatar-moustache {
+  left: 50%;
+  top: 71%;
+  width: 22px;
+  height: 7px;
+  transform: translateX(-50%);
+}
+
+.setup-avatar-moustache::before,
+.setup-avatar-moustache::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  width: 12px;
+  height: 7px;
+  background: var(--avatar-hair, #3b2a21);
+}
+
+.setup-avatar-moustache::before {
+  left: 0;
+  border-radius: 60% 30% 50% 50% / 90% 60% 40% 40%;
+  transform: rotate(-6deg);
+}
+
+.setup-avatar-moustache::after {
+  right: 0;
+  border-radius: 30% 60% 50% 50% / 60% 90% 40% 40%;
+  transform: rotate(6deg);
+}
+
+.setup-avatar-glasses {
+  left: 50%;
+  top: 53%;
+  width: 10px;
+  height: 2px;
+  background: rgba(24, 28, 34, 0.85);
+  transform: translateX(-50%);
+}
+
+.setup-avatar-glasses::before,
+.setup-avatar-glasses::after {
+  content: "";
+  position: absolute;
+  top: -8px;
+  width: 21px;
+  height: 15px;
+  border: 1.5px solid rgba(24, 28, 34, 0.85);
+  border-radius: 6px;
+  background: rgba(170, 205, 225, 0.14);
+  box-shadow: inset 0 0 4px rgba(255, 255, 255, 0.16);
+}
+
+.setup-avatar-glasses::before {
+  left: -22px;
+}
+
+.setup-avatar-glasses::after {
+  right: -22px;
+}
+
+.setup-avatar-tattoo {
+  left: 50%;
+  top: 103px;
+  width: 9px;
+  height: 9px;
+  background: rgba(58, 92, 110, 0.7);
+  clip-path: polygon(50% 0, 100% 55%, 50% 100%, 0 55%);
+  transform: translateX(-50%);
+}
+
+.setup-avatar[data-marks="lentiggini"] .setup-avatar-freckles,
+.setup-avatar[data-marks="neo"] .setup-avatar-mole,
+.setup-avatar[data-marks="cicatrice"] .setup-avatar-scar,
+.setup-avatar[data-marks="barba"] .setup-avatar-beard,
+.setup-avatar[data-marks="baffi"] .setup-avatar-moustache,
+.setup-avatar[data-marks="occhiali"] .setup-avatar-glasses,
+.setup-avatar[data-marks="tatuaggio"] .setup-avatar-tattoo {
+  display: block;
+}
+
 .setup-avatar-progress {
   display: flex;
   flex-direction: column;

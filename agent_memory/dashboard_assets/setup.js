@@ -166,14 +166,14 @@
       field: "distinctive_marks",
       label: "Segni particolari",
       options: [
-        { label: "Nessuno", value: "nessun segno evidente" },
-        { label: "Neo", value: "un neo vicino al labbro" },
-        { label: "Cicatrice", value: "una piccola cicatrice sul sopracciglio" },
-        { label: "Lentiggini", value: "lentiggini sul naso" },
-        { label: "Barba", value: "una barba corta e curata" },
-        { label: "Baffi", value: "dei baffi curati" },
-        { label: "Tatuaggio", value: "un tatuaggio sul collo" },
-        { label: "Occhiali", value: "occhiali dalla montatura sottile" },
+        { label: "Nessuno", value: "nessun segno evidente", mark: "nessuno" },
+        { label: "Neo", value: "un neo vicino al labbro", mark: "neo" },
+        { label: "Cicatrice", value: "una piccola cicatrice sul sopracciglio", mark: "cicatrice" },
+        { label: "Lentiggini", value: "lentiggini sul naso", mark: "lentiggini" },
+        { label: "Barba", value: "una barba corta e curata", mark: "barba" },
+        { label: "Baffi", value: "dei baffi curati", mark: "baffi" },
+        { label: "Tatuaggio", value: "un tatuaggio sul collo", mark: "tatuaggio" },
+        { label: "Occhiali", value: "occhiali dalla montatura sottile", mark: "occhiali" },
       ],
     },
     {
@@ -792,6 +792,8 @@
           (selections.build && selections.build.build) || "media";
         avatar.dataset.eyes =
           (selections.eyes_shape && selections.eyes_shape.eyes) || "mandorla";
+        avatar.dataset.marks =
+          (selections.marks && selections.marks.mark) || "nessuno";
       }
       if (caption) {
         const parts = [
