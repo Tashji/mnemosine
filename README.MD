@@ -111,28 +111,24 @@ mnemosine-biography --root ./profiles/marco --apply
 mnemosine-index --root ./profiles/marco --rebuild
 ```
 
-### Chat locale sperimentale con Ollama
+### Collega il tuo modello via MCP
 
-Da PowerShell, dopo aver predisposto l'ambiente e il modello `mnemosine-qwen35:9b-abliterated`:
+Mnemosine non è legato a un modello: memoria, identità e personalità vivono nel profilo, e qualsiasi client MCP può usarlo — Claude Desktop, Cursor, LM Studio, Ollama o un agente scritto da te. Il client porta il modello; Mnemosine porta ciò che il modello ricorda ed è.
 
-```powershell
-.\.venv\Scripts\python.exe scripts\chat_local.py
+```json
+{
+  "mcpServers": {
+    "mnemosine": {
+      "command": "mnemosine",
+      "args": ["--root", "/percorso/del/profilo"]
+    }
+  }
+}
 ```
 
-La chat usa il profilo separato `profiles/qwen_local` e conserva i turni anche dopo la chiusura; `/esci` termina la sessione. Per scegliere un altro modello Ollama già installato, usare `--model NOME`: deve supportare i tool. L'opzione `--prompt "testo"` esegue un turno singolo. Alla prima creazione del profilo, la sorgente deve essere ferma. Il client passa al modello un riassunto datato dei ricordi biografici e tiene separate le dichiarazioni dell'utente; le domande su "ieri" senza un ricordo datato ricevono una risposta breve, senza usare l'attività corrente.
+`--root` è la cartella che contiene `config/` e `data/`: quella creata da `mnemosine-start`. Su Windows, se il client grafico non trova `mnemosine`, indica il percorso completo di `.venv\Scripts\mnemosine.exe`; in alternativa usa l'esempio con `python -m agent_memory.server` e `cwd`.
 
-Il modello predefinito è `mnemosine-qwen35:9b-abliterated`: Qwen3.5 9B abliterated in Q4_K_M (5,6 GB), creato dal GGUF con `models/Modelfile.qwen35-9b`. Per installarlo:
-
-```bash
-ollama pull sachasayan/interimlabs-huihui-qwen3.5-9b-abliterated:q4_k_m
-ollama create mnemosine-qwen35:9b-abliterated -f models/Modelfile.qwen35-9b
-```
-
-Il Modelfile non dichiara `TEMPLATE`: il ChatML e gli stop token arrivano dal GGUF, e sovrascriverli è l'errore che fa scadere il personaggio nel tono da assistente. Il 4B resta disponibile con `--model mnemosine-qwen35:4b-chatml`: è più veloce, ma chiude più spesso con offerte di aiuto.
-
-Con 6 GB di VRAM il 9B gira intorno ai 17 token/s, con un piccolo offload su CPU; `num_ctx` resta 4096. Oltre i 9B non conviene salire su questa macchina: i 14B densi e i MoE da 20 GB non entrano in VRAM.
-
-La memoria recupera dichiarazioni dell'utente come informazioni non verificate, distinte dalle risposte del modello e dalla biografia simulata. La ricerca conversazionale corrente è lessicale: parafrasi senza parole comuni possono non essere trovate. Anche con il ricordo corretto il modello può sbagliare: la chat è sperimentale e richiede supervisione, senza invii esterni autonomi.
+Con il repository non installato servono l'interprete della venv, `-m agent_memory.server` e `cwd`: gli esempi completi sono in [Installazione come pacchetto](#25-installazione-come-pacchetto-e-collegamento-dellagente). La chat sperimentale inclusa, con Ollama, è descritta in [`docs/chat_locale_ollama.md`](docs/chat_locale_ollama.md).
 
 ## Struttura del progetto
 
