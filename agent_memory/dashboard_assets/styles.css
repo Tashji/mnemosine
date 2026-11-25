@@ -3817,6 +3817,113 @@ select:hover {
   margin-top: 4px;
 }
 
+.acquaintance-review {
+  display: grid;
+  gap: 10px;
+}
+
+.acquaintance-review-item {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: rgba(8, 17, 29, 0.45);
+}
+
+.acquaintance-review-item.is-sensitive {
+  border-color: rgba(213, 154, 154, 0.35);
+}
+
+.acquaintance-review-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.acquaintance-review-value {
+  margin: 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.acquaintance-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.acquaintance-review-actions .button {
+  padding: 4px 8px;
+  font-size: 10px;
+}
+
+.acquaintance-policy {
+  display: grid;
+  gap: 12px;
+}
+
+.acquaintance-policy .settings-actions {
+  flex-wrap: wrap;
+}
+
+#acquaintances-content > .settings-card {
+  margin-bottom: 16px;
+}
+
+.setup-profile-generate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.setup-profile-generate .setup-hint {
+  margin: 0;
+}
+
+.visual-generator-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.visual-generator-head .settings-hint {
+  margin: 0;
+}
+
+.visual-field-block {
+  display: grid;
+  gap: 6px;
+}
+
+.visual-field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.visual-field-head > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.visual-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.visual-suggestions .setup-choice {
+  padding: 4px 7px;
+  font-size: 10px;
+}
+
 /* -- impostazioni -------------------------------------------------------- */
 
 .settings-grid {

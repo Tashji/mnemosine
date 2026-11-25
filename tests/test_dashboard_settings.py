@@ -697,6 +697,150 @@ class SettingsHTTPTests(unittest.TestCase):
         data = json.loads(self._request("/api/acquaintances", cookie=cookie).read())
         self.assertEqual(data["count"], 0)
 
+    def test_acquaintances_policy_export_and_promotion(self) -> None:
+        cookie = self._login()
+        token = self._csrf(cookie)
+        created = self._post_json(
+            "/api/acquaintances",
+            {
+                "action": "create",
+                "display_name": "Nina",
+                "channel": "chat",
+                "handle": "nina",
+                "csrf": token,
+            },
+            cookie,
+        )
+        self.assertEqual(created.status, 200)
+        data = json.loads(self._request("/api/acquaintances", cookie=cookie).read())
+        person = data["people"][0]
+        self.assertEqual(data["policy"]["agent_fact_visibility"], "confirmed")
+        self.assertEqual(data["stats"]["candidates"], 0)
+
+        observed = self._post_json(
+            "/api/acquaintances",
+            {
+                "action": "observe",
+                "person_id": person["person_id"],
+                "category": "city",
+                "value": "Bologna",
+                "source": "thread presentazioni",
+                "csrf": self._csrf(cookie),
+            },
+            cookie,
+        )
+        self.assertEqual(observed.status, 200)
+        data = json.loads(self._request("/api/acquaintances", cookie=cookie).read())
+        fact = data["people"][0]["facts"][0]
+        self.assertEqual(data["stats"]["candidates"], 1)
+        self.assertEqual(data["review"][0]["value"], "Bologna")
+        confirmed = self._post_json(
+            "/api/acquaintances",
+            {
+                "action": "fact_status",
+                "person_id": person["person_id"],
+                "fact_id": fact["id"],
+                "status": "confirmed",
+                "csrf": self._csrf(cookie),
+            },
+            cookie,
+        )
+        self.assertEqual(confirmed.status, 200)
+
+        extracted = self._post_json(
+            "/api/acquaintances",
+            {
+                "action": "extract",
+                "person_id": person["person_id"],
+                "text": "Ho 41 anni e abito a Parma. Mi piace il cinema.",
+                "source": "messaggio incollato",
+                "csrf": self._csrf(cookie),
+            },
+            cookie,
+        )
+        self.assertEqual(extracted.status, 200)
+        extracted_body = json.loads(extracted.read())
+        self.assertGreaterEqual(extracted_body["count"], 2)
+
+        policy = self._post_json(
+            "/api/acquaintances",
+            {
+                "action": "policy",
+                "policy": {
+                    "agent_fact_visibility": "all",
+                    "agent_sensitive_access": False,
+                    "retention_days": 90,
+                },
+                "csrf": self._csrf(cookie),
+            },
+            cookie,
+        )
+        self.assertEqual(policy.status, 200)
+        data = json.loads(self._request("/api/acquaintances", cookie=cookie).read())
+        self.assertEqual(data["policy"]["retention_days"], 90)
+        self.assertEqual(data["stats"]["confirmed"], 1)
+
+        self.assertEqual(
+            self._request("/api/acquaintances/export").status, 401
+        )
+        exported = self._request(
+            "/api/acquaintances/export", cookie=cookie
+        )
+        self.assertEqual(exported.status, 200)
+        self.assertIn("attachment", exported.headers["Content-Disposition"])
+        document = json.loads(exported.read())
+        self.assertEqual(document["policy"]["retention_days"], 90)
+        self.assertEqual(document["people"][0]["display_name"], "Nina")
+
+        promote = {
+            "action": "promote",
+            "person_id": person["person_id"],
+            "relation": "Amica",
+            "trust": 55,
+            "intimacy": 20,
+            "confirmation": "PROMUOVI",
+            "csrf": self._csrf(cookie),
+        }
+        response = self._post_json("/api/acquaintances", promote, cookie)
+        self.assertEqual(response.status, 200)
+        self.assertEqual(json.loads(response.read())["user_id"], person["person_id"])
+
+        relations = json.loads(
+            self._request("/api/relations", cookie=cookie).read()
+        )
+        contact = next(
+            item
+            for item in relations["contacts"]
+            if item["user_id"] == person["person_id"]
+        )
+        self.assertEqual(contact["display_name"], "Nina")
+        self.assertEqual(contact["relation"], "Amica")
+        self.assertIn("Città: Bologna", contact["confirmed_facts"])
+        self.assertFalse(
+            any("41 anni" in item for item in contact["confirmed_facts"])
+        )
+
+        duplicate = self._post_json(
+            "/api/acquaintances",
+            {**promote, "csrf": self._csrf(cookie)},
+            cookie,
+        )
+        self.assertEqual(duplicate.status, 400)
+
+        audit = self.root / "data" / "logs" / "audit.jsonl"
+        events = [
+            json.loads(line)
+            for line in audit.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        actions = {
+            item.get("action")
+            for item in events
+            if item.get("event") == "dashboard_write"
+        }
+        self.assertIn("acquaintances.export", actions)
+        self.assertIn("acquaintances.save", actions)
+
     def test_autonomy_review_requires_admin_and_preserves_new_impulse(self) -> None:
         from datetime import UTC, datetime
 

@@ -290,6 +290,208 @@
     },
   ];
 
+  // Generatore di personaggio: riempie i campi facoltativi con dati coerenti.
+  // Resta tutto modificabile e nulla viene inviato finché non si preme
+  // "Crea profilo".
+  const identityPools = {
+    femminile: [
+      "Giulia", "Sofia", "Martina", "Chiara", "Elena", "Francesca",
+      "Alessia", "Sara", "Beatrice", "Ilaria", "Valentina", "Anna",
+    ],
+    maschile: [
+      "Luca", "Marco", "Andrea", "Matteo", "Davide", "Simone",
+      "Stefano", "Paolo", "Lorenzo", "Federico", "Riccardo", "Antonio",
+    ],
+    "non binario": ["Alex", "Ariel", "Nico", "Ely", "Sam", "Robin", "Lior"],
+    "non specificato": [
+      "Giulia", "Luca", "Sofia", "Marco", "Chiara", "Andrea",
+      "Elena", "Davide", "Sara", "Matteo",
+    ],
+  };
+  const identityLastNames = [
+    "Rossi", "Russo", "Ferrari", "Esposito", "Bianchi", "Romano",
+    "Colombo", "Ricci", "Marino", "Greco", "Bruno", "Gallo", "Conti",
+    "Costa", "Giordano", "Mancini", "Rizzo", "Lombardi", "Moretti",
+  ];
+  const identityCities = [
+    "Roma", "Milano", "Torino", "Bologna", "Firenze", "Napoli",
+    "Genova", "Palermo", "Bari", "Verona", "Padova", "Parma",
+    "Brescia", "Cagliari", "Lecce",
+  ];
+
+  function randomItem(list) {
+    return list[Math.floor(Math.random() * list.length)];
+  }
+
+  function isoDate(year, month, day) {
+    return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+
+  function setGeneratedValue(name, value) {
+    const element = form.querySelector(`[name="${name}"]`);
+    if (!element) {
+      return null;
+    }
+    setFieldValue(element, value);
+    element.dispatchEvent(new Event("input", { bubbles: true }));
+    element.dispatchEvent(new Event("change", { bubbles: true }));
+    return element;
+  }
+
+  function generateIdentity() {
+    const genderSelect = form.querySelector('[name="gender"]');
+    const gender = genderSelect ? genderSelect.value : "non specificato";
+    const pool = identityPools[gender] || identityPools["non specificato"];
+    const firstName = randomItem(pool);
+    const lastName = randomItem(identityLastNames);
+    setGeneratedValue("first_name", firstName);
+    setGeneratedValue("last_name", lastName);
+
+    const today = new Date();
+    const age = 20 + Math.floor(Math.random() * 36);
+    const birthYear = today.getFullYear() - age;
+    const birthMonth = 1 + Math.floor(Math.random() * 12);
+    const birthDay = 1 + Math.floor(Math.random() * 28);
+    setGeneratedValue("birth_date", isoDate(birthYear, birthMonth, birthDay));
+    setGeneratedValue("birth_country", "Italia");
+    setGeneratedValue("citizenship", "Italia");
+    const birthCity = randomItem(identityCities);
+    let residenceCity = randomItem(identityCities);
+    while (residenceCity === birthCity) {
+      residenceCity = randomItem(identityCities);
+    }
+    setGeneratedValue("birth_city", birthCity);
+    setGeneratedValue("residence_city", residenceCity);
+    setGeneratedValue("timezone", "Europe/Rome");
+
+    const movedYear = Math.min(
+      today.getFullYear(),
+      Math.max(birthYear + 18, today.getFullYear() - Math.floor(Math.random() * 12))
+    );
+    setGeneratedValue(
+      "residence_since",
+      isoDate(movedYear, 1 + Math.floor(Math.random() * 12), 1)
+    );
+
+    let languageRow = document.querySelector("#languages-rows .setup-row");
+    if (!languageRow) {
+      addRow("language");
+      languageRow = document.querySelector("#languages-rows .setup-row");
+    }
+    if (languageRow) {
+      const code = languageRow.querySelector('[name$="_code"]');
+      const level = languageRow.querySelector('[name$="_level"]');
+      if (code) {
+        setFieldValue(code, "it");
+      }
+      if (level) {
+        setFieldValue(level, "madrelingua");
+      }
+    }
+
+    setGeneratedValue(
+      "biography_summary",
+      `Origini a ${birthCity}, vita quotidiana a ${residenceCity}. ` +
+        `${firstName} ha ${age} anni e sta costruendo la propria strada tra ` +
+        "lavoro, affetti e interessi personali."
+    );
+    setGeneratedValue(
+      "current_situation",
+      `Vive a ${residenceCity}. La giornata ruota attorno agli impegni ` +
+        "quotidiani, alle persone vicine e al tempo libero."
+    );
+
+    form
+      .querySelectorAll('input[type="range"][data-trait]')
+      .forEach((element) => {
+        element.value = String(1 + Math.floor(Math.random() * 10));
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+
+    const visualRandom = document.querySelector("[data-randomize-visual]");
+    if (visualRandom) {
+      visualRandom.click();
+    }
+    const lifePresets = form.querySelectorAll(".setup-life-preset");
+    if (lifePresets.length) {
+      randomItem(Array.from(lifePresets)).click();
+    }
+
+    const parentRows = document.querySelectorAll("#parents-rows .setup-row");
+    parentRows.forEach((row, index) => {
+      const first = row.querySelector('input[name$="_first_name"]');
+      const last = row.querySelector('input[name$="_last_name"]');
+      const relation = row.querySelector('input[name$="_relation"]');
+      if (first) {
+        first.value = randomItem(
+          index === 1 ? identityPools.femminile : identityPools.maschile
+        );
+      }
+      if (last) {
+        last.value = lastName;
+      }
+      if (relation) {
+        relation.value = index === 1 ? "madre" : "padre";
+      }
+    });
+    const siblingRow = document.querySelector("#siblings-rows .setup-row");
+    if (siblingRow) {
+      const first = siblingRow.querySelector('input[name$="_first_name"]');
+      const last = siblingRow.querySelector('input[name$="_last_name"]');
+      const relation = siblingRow.querySelector('input[name$="_relation"]');
+      const male = Math.random() < 0.5;
+      if (first) {
+        first.value = randomItem(
+          male ? identityPools.maschile : identityPools.femminile
+        );
+      }
+      if (last) {
+        last.value = lastName;
+      }
+      if (relation) {
+        relation.value = male ? "fratello" : "sorella";
+      }
+    }
+    const personRow = document.querySelector("#people-rows .setup-row");
+    if (personRow) {
+      const name = personRow.querySelector('input[name$="_display_name"]');
+      const relation = personRow.querySelector('input[name$="_relation"]');
+      const trust = personRow.querySelector('input[name$="_trust"]');
+      const intimacy = personRow.querySelector('input[name$="_intimacy"]');
+      if (name) {
+        name.value = `${randomItem(identityPools.femminile)} ${lastName}`;
+      }
+      if (relation) {
+        relation.value = "amica";
+      }
+      if (trust) {
+        trust.value = String(45 + Math.floor(Math.random() * 45));
+      }
+      if (intimacy) {
+        intimacy.value = String(30 + Math.floor(Math.random() * 45));
+      }
+    }
+    return { firstName, lastName, birthCity, residenceCity, age };
+  }
+
+  function initProfileGenerator() {
+    const button = document.querySelector("[data-generate-profile]");
+    const status = document.getElementById("profile-generation-status");
+    if (!button) {
+      return;
+    }
+    button.addEventListener("click", () => {
+      const generated = generateIdentity();
+      if (status) {
+        status.textContent =
+          `Personaggio generato: ${generated.firstName} ${generated.lastName}, ` +
+          `${generated.age} anni, da ${generated.birthCity} a ${generated.residenceCity}. ` +
+          "Controlla i passaggi e modifica ciò che vuoi.";
+      }
+      clearError();
+    });
+  }
+
   let currentStep = 0;
   const rowCounters = {};
 
@@ -1931,6 +2133,7 @@
   initTraitGuides();
   initVisualSuggestions();
   initLifeSuggestions();
+  initProfileGenerator();
   initNoteIdeas(
     form.querySelector('[name="family_notes"]'),
     form.querySelector('[data-note-ideas="family"]'),

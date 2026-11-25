@@ -28,6 +28,7 @@ from .migrations import (
     JSON_MIGRATIONS,
 )
 from .db import DATABASE_TABLES
+from .errors import ConfigError
 
 EPISODIC_STATES = {
     "open",
@@ -201,6 +202,85 @@ class ConsistencyChecker:
         check["details"]["migrations"] = {
             name: len(steps) for name, steps in JSON_MIGRATIONS.items() if steps
         }
+        return self._finish(check)
+
+    def _check_acquaintances(self) -> dict[str, Any]:
+        """Verifica il registro Incontrati e il collegamento al grafo."""
+
+        check = self._check("incontrati")
+        path = self.root / "config" / "acquaintances.json"
+        if not path.is_file():
+            check["details"]["exists"] = False
+            return self._finish(check)
+        from .acquaintances import AcquaintanceStore
+
+        check["details"]["exists"] = True
+        try:
+            document = AcquaintanceStore(self.root).read()
+        except ConfigError as exc:
+            check["errors"].append(str(exc))
+            return self._finish(check)
+        policy = document["policy"]
+        graph_people: dict[str, str] | None = {}
+        graph_path = self.root / "config" / "social_graph.json"
+        try:
+            graph = json.loads(graph_path.read_text(encoding="utf-8"))
+            if not isinstance(graph, dict) or not isinstance(
+                graph.get("people"), list
+            ):
+                raise ValueError("people non è una lista")
+            for item in graph["people"]:
+                if isinstance(item, dict) and isinstance(
+                    item.get("user_id"), str
+                ):
+                    graph_people[item["user_id"]] = str(
+                        item.get("display_name") or ""
+                    )
+        except (OSError, ValueError):
+            graph_people = None
+            check["warnings"].append(
+                "social_graph.json non leggibile: salto il controllo dei "
+                "collegamenti promossi."
+            )
+        counts = {"people": 0, "candidate": 0, "confirmed": 0, "rejected": 0}
+        sensitive_confirmed = 0
+        promoted = 0
+        for person in document["people"]:
+            counts["people"] += 1
+            contact_id = person.get("promoted_user_id")
+            if contact_id:
+                promoted += 1
+                if graph_people is not None and contact_id not in graph_people:
+                    check["errors"].append(
+                        f"incontrati:{person['person_id']}: promosso verso "
+                        f"{contact_id!r}, assente da social_graph.json."
+                    )
+                if not person.get("promoted_at"):
+                    check["errors"].append(
+                        f"incontrati:{person['person_id']}: promoted_user_id "
+                        "senza promoted_at."
+                    )
+                elif person.get("status") != "known":
+                    check["warnings"].append(
+                        f"incontrati:{person['person_id']}: promosso ma stato "
+                        f"{person.get('status')!r}."
+                    )
+            for fact in person["facts"]:
+                status = fact.get("status")
+                counts[status] = counts.get(status, 0) + 1
+                if status == "confirmed" and not str(
+                    fact.get("source") or ""
+                ).strip():
+                    check["warnings"].append(
+                        f"incontrati:{person['person_id']}: fatto confermato "
+                        "senza fonte."
+                    )
+                if status == "confirmed" and fact.get("sensitive"):
+                    sensitive_confirmed += 1
+        check["details"].update(counts)
+        check["details"]["promoted"] = promoted
+        check["details"]["sensitive_confirmed"] = sensitive_confirmed
+        check["details"]["policy"] = policy
         return self._finish(check)
 
     # -- database ----------------------------------------------------------
@@ -874,6 +954,7 @@ class ConsistencyChecker:
         try:
             checks.append(self._check_profile())
             checks.append(self._check_config())
+            checks.append(self._check_acquaintances())
             connections, database_checks = self._open_databases()
             checks.extend(database_checks)
             checks.append(

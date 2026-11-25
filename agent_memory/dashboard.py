@@ -95,6 +95,7 @@ RELATIONS_PATH = "/api/relations"
 SHADOW_TRAITS_PATH = "/api/traits/shadow"
 SETTINGS_PATH = "/api/settings"
 ACQUAINTANCES_PATH = "/api/acquaintances"
+ACQUAINTANCES_EXPORT_PATH = "/api/acquaintances/export"
 SETTINGS_BROWSER_PATH = "/api/settings/browser"
 SETTINGS_WHATSAPP_PATH = "/api/settings/whatsapp"
 SETTINGS_BEHAVIOR_PATH = "/api/settings/behavior"
@@ -1580,6 +1581,31 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 self._send_json(
                     AcquaintanceService(self.server.data.root).snapshot()
                 )
+            elif path == ACQUAINTANCES_EXPORT_PATH:
+                service = AcquaintanceService(self.server.data.root)
+                try:
+                    document = service.export()
+                except Exception as exc:
+                    self.server.audit_write(
+                        "acquaintances.export",
+                        "error",
+                        error_type=type(exc).__name__,
+                    )
+                    raise
+                body = json.dumps(
+                    document, ensure_ascii=False, indent=2
+                ).encode("utf-8")
+                stamp = datetime.now().strftime("%Y%m%d")
+                self.server.audit_write("acquaintances.export", "ok")
+                self._send_bytes(
+                    body,
+                    "application/json; charset=utf-8",
+                    headers={
+                        "Content-Disposition": (
+                            f'attachment; filename="incontrati-{stamp}.json"'
+                        )
+                    },
+                )
             elif path == SETTINGS_PATH:
                 self._send_json(DashboardSettings(self.server.data.root).snapshot())
             elif path == LIFE_PATH:
@@ -2530,13 +2556,20 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         content_type: str,
         *,
         status: HTTPStatus = HTTPStatus.OK,
+        headers: dict[str, str] | None = None,
     ) -> None:
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
+        for name, value in (headers or {}).items():
+            self.send_header(name, value)
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Referrer-Policy", "no-referrer")
+        # ``no-referrer`` fa inviare a Chromium ``Origin: null`` sui form
+        # same-origin, che il controllo di origine rifiuta: il login e il
+        # wizard non funzionerebbero in un browser reale. ``same-origin``
+        # non espone il referrer a siti esterni e mantiene l'Origin corretto.
+        self.send_header("Referrer-Policy", "same-origin")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header(
             "Content-Security-Policy",

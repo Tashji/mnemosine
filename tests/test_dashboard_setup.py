@@ -262,6 +262,9 @@ class DashboardSetupTests(SetupFixture):
         self.assertIn("data-reset-visual", page)
         self.assertIn('data-randomize-visual', page)
         self.assertIn("Genera tutto", page)
+        self.assertIn("data-generate-profile", page)
+        self.assertIn("Genera personaggio completo", page)
+        self.assertIn('id="profile-generation-status"', page)
         self.assertIn("Scrivi i dettagli a mano", page)
         self.assertIn('id="visual-suggestion-status"', page)
         self.assertIn('name="visual_fixed_seed"', page)
@@ -1042,6 +1045,8 @@ class DashboardSetupTests(SetupFixture):
         self.assertIn(b"setup-form", body)
         self.assertIn(b"relationNoteIdeas", body)
         self.assertIn(b"familyNoteIdeas", body)
+        self.assertIn(b"generateIdentity", body)
+        self.assertIn(b"identityPools", body)
 
         response = self._request("/static/setup_complete.js")
         self.assertEqual(response.status, 200)

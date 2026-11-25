@@ -103,6 +103,65 @@ const ACQUAINTANCE_FACT_STATUS_LABELS = {
   rejected: "Scartato",
 };
 
+const ACQUAINTANCE_ORIGIN_LABELS = {
+  manual: "Aggiunto a mano",
+  extracted: "Estratto da un messaggio",
+  imported: "Importato",
+};
+
+// Proposte rapide per la vista Aspetto: le stesse voci del creatore del
+// wizard, ridotte a descrizioni pronte da inserire nel profilo visivo.
+const VISUAL_SUGGESTIONS = {
+  body: [
+    "corporatura esile, ossatura fine, altezza 163 cm",
+    "corporatura snella, altezza 170 cm",
+    "corporatura media e proporzionata, altezza 175 cm",
+    "corporatura atletica e tonica, altezza 180 cm",
+    "corporatura robusta, spalle larghe, altezza 186 cm",
+    "corporatura morbida e arrotondata, altezza 168 cm",
+  ],
+  face: [
+    "viso ovale, lineamenti morbidi, carnagione chiara",
+    "viso rotondo, guance piene, carnagione olivastra",
+    "viso squadrato, mascella definita, carnagione ambrata",
+    "viso allungato, zigomi alti, carnagione scura",
+    "viso a cuore, fronte ampia e mento appuntito",
+    "viso triangolare, fronte stretta e mascella ampia",
+  ],
+  hair: [
+    "capelli corti castani",
+    "capelli medi mossi castano scuro",
+    "capelli lunghi lisci neri",
+    "capelli ricci biondi",
+    "capelli raccolti in una coda, castani chiari",
+    "capelli rasati, grigi",
+  ],
+  eyes: [
+    "occhi a mandorla castani",
+    "occhi grandi verdi",
+    "occhi allungati azzurri",
+    "occhi tondi nocciola",
+    "occhi grigi",
+    "occhi ambra",
+  ],
+  distinctive_marks: [
+    "nessun segno evidente",
+    "un neo vicino al labbro",
+    "una piccola cicatrice sul sopracciglio",
+    "lentiggini sul naso",
+    "una barba corta e curata",
+    "occhiali dalla montatura sottile",
+  ],
+  style: [
+    "casual, jeans e magliette scure",
+    "minimal, colori neutri",
+    "sportivo, felpe e sneakers",
+    "elegante ma informale, camicia e giacca",
+    "alternativo, giacca di pelle e anelli",
+    "formale, abito scuro",
+  ],
+};
+
 const DEFENSE_LABELS = {
   projection: "Proiezione",
   rationalization: "Razionalizzazione",
@@ -1251,12 +1310,22 @@ function acquaintanceFacts(person) {
                     })
                   : null
               ),
-              fact.source
-                ? h("p", {
-                    class: "acquaintance-fact-source",
-                    text: fact.source,
-                  })
-                : null,
+              h("p", {
+                class: "acquaintance-fact-source",
+                text: [
+                  ACQUAINTANCE_ORIGIN_LABELS[fact.origin] ||
+                    ACQUAINTANCE_ORIGIN_LABELS.manual,
+                  fact.source,
+                  fact.observed_at
+                    ? fmtDate(fact.observed_at, { time: true })
+                    : "",
+                  typeof fact.confidence === "number"
+                    ? `confidenza ${Math.round(fact.confidence * 100)}%`
+                    : "",
+                ]
+                  .filter(Boolean)
+                  .join(" · "),
+              }),
               h(
                 "div",
                 { class: "acquaintance-fact-actions" },
@@ -1326,6 +1395,299 @@ function acquaintanceAddFact(person, categories) {
     "details",
     { class: "acquaintance-add" },
     h("summary", { text: "Aggiungi un fatto" }),
+    form
+  );
+}
+
+function acquaintanceReviewSection(data) {
+  const review = Array.isArray(data.review) ? data.review : [];
+  if (!review.length) {
+    return null;
+  }
+  return settingsCard(
+    "Da rivedere",
+    `${review.length} fatti candidati aspettano una conferma o uno scarto. La coda unisce tutte le persone.`,
+    h(
+      "div",
+      { class: "acquaintance-review" },
+      review.map((item) =>
+        h(
+          "article",
+          {
+            class: `acquaintance-review-item${item.sensitive ? " is-sensitive" : ""}`,
+          },
+          h(
+            "div",
+            { class: "acquaintance-review-head" },
+            h("strong", { text: item.display_name }),
+            h("span", {
+              class: "acquaintance-fact-label",
+              text: item.category_label || item.category,
+            }),
+            item.sensitive
+              ? h("span", {
+                  class: "tag acquaintance-fact-sensitive",
+                  text: "Sensibile",
+                })
+              : null
+          ),
+          h("p", { class: "acquaintance-review-value", text: item.value }),
+          h("p", {
+            class: "acquaintance-fact-source",
+            text: [
+              ACQUAINTANCE_ORIGIN_LABELS[item.origin] ||
+                ACQUAINTANCE_ORIGIN_LABELS.manual,
+              item.source,
+              item.observed_at ? fmtDate(item.observed_at, { time: true }) : "",
+              typeof item.confidence === "number"
+                ? `confidenza ${Math.round(item.confidence * 100)}%`
+                : "",
+            ]
+              .filter(Boolean)
+              .join(" · "),
+          }),
+          h(
+            "div",
+            { class: "acquaintance-review-actions" },
+            h("button", {
+              type: "button",
+              class: "button button-quiet",
+              text: "Conferma",
+              onClick: () =>
+                acquaintanceRequest(
+                  {
+                    action: "fact_status",
+                    person_id: item.person_id,
+                    fact_id: item.fact_id,
+                    status: "confirmed",
+                  },
+                  "Fatto confermato."
+                ),
+            }),
+            h("button", {
+              type: "button",
+              class: "button button-quiet",
+              text: "Scarta",
+              onClick: () =>
+                acquaintanceRequest(
+                  {
+                    action: "fact_status",
+                    person_id: item.person_id,
+                    fact_id: item.fact_id,
+                    status: "rejected",
+                  },
+                  "Fatto scartato."
+                ),
+            })
+          )
+        )
+      )
+    )
+  );
+}
+
+function acquaintancePolicyCard(data) {
+  const policy = data.policy || {};
+  const stats = data.stats || {};
+  const form = settingsForm(
+    "Salva policy",
+    [
+      settingsField(
+        "L'agente può leggere",
+        h(
+          "select",
+          { name: "agent_fact_visibility" },
+          h("option", {
+            value: "confirmed",
+            text: "Solo i fatti confermati",
+            selected: policy.agent_fact_visibility !== "all",
+          }),
+          h("option", {
+            value: "all",
+            text: "Anche i candidati",
+            selected: policy.agent_fact_visibility === "all",
+          })
+        ),
+        "I fatti scartati non sono mai visibili ai tool MCP."
+      ),
+      settingsCheck(
+        "agent_sensitive_access",
+        "Consenti i dati sensibili confermati",
+        Boolean(policy.agent_sensitive_access),
+        "Salute, religione, politica, orientamento, indirizzo e contatti restano nel registro amministrativo salvo questa scelta."
+      ),
+      settingsField(
+        "Conservazione (giorni)",
+        settingsInput("retention_days", policy.retention_days ?? 365, "number", {
+          min: "1",
+          max: "3650",
+          step: "1",
+        }),
+        "Soglia usata dal pulsante Applica retention: non tocca le persone promosse."
+      ),
+    ],
+    async (formData) => {
+      await postJson("/api/acquaintances", {
+        action: "policy",
+        policy: {
+          agent_fact_visibility: String(
+            formData.get("agent_fact_visibility") || "confirmed"
+          ),
+          agent_sensitive_access: formData.has("agent_sensitive_access"),
+          retention_days: Number(formData.get("retention_days") || 365),
+        },
+      });
+      state.loaded.acquaintances = null;
+      await loadAcquaintances(true);
+      setNotice("Policy del registro aggiornata.", "success");
+    }
+  );
+  const retentionButton = h("button", {
+    type: "button",
+    class: "button button-danger",
+    text: "Applica retention",
+    onClick: async () => {
+      const days = window.prompt(
+        "Elimina i fatti scartati e i profili inattivi più vecchi di quanti giorni?",
+        String(policy.retention_days || 365)
+      );
+      if (days === null) return;
+      const number = Number(days);
+      if (!Number.isInteger(number) || number < 1 || number > 3650) {
+        setNotice("La retention richiede un intero tra 1 e 3650 giorni.");
+        return;
+      }
+      const confirmation = window.prompt(
+        `Scrivi APPLICA per confermare la retention di ${number} giorni.`
+      );
+      if (confirmation === null) return;
+      await acquaintanceRequest(
+        { action: "retention", days: number, confirmation },
+        "Retention applicata."
+      );
+    },
+  });
+  const exportLink = h("a", {
+    class: "button button-quiet",
+    href: "/api/acquaintances/export",
+    download: "incontrati.json",
+    text: "Esporta registro",
+  });
+  return settingsCard(
+    "Policy e conservazione",
+    `${stats.promoted ?? 0} relazioni promosse · ${stats.sensitive_confirmed ?? 0} dati sensibili confermati`,
+    h(
+      "div",
+      { class: "acquaintance-policy" },
+      form,
+      h("div", { class: "settings-actions" }, exportLink, retentionButton)
+    )
+  );
+}
+
+function acquaintanceExtract(person) {
+  const form = settingsForm(
+    "Estrai candidati",
+    [
+      settingsField(
+        "Messaggio",
+        h("textarea", {
+          name: "text",
+          rows: "4",
+          maxlength: "4000",
+          required: true,
+          placeholder:
+            "Incolla il messaggio: «mi chiamo…», «ho 30 anni», «abito a…»",
+        }),
+        "L'estrazione è conservativa e crea solo candidati; la conferma resta manuale."
+      ),
+      settingsField(
+        "Fonte",
+        settingsInput("source", "", "text", {
+          maxlength: "500",
+          placeholder: "thread, chat, profilo pubblico…",
+        })
+      ),
+    ],
+    async (formData) => {
+      const result = await postJson("/api/acquaintances", {
+        action: "extract",
+        person_id: person.person_id,
+        text: String(formData.get("text") || ""),
+        source: String(formData.get("source") || ""),
+      });
+      state.loaded.acquaintances = null;
+      await loadAcquaintances(true);
+      setNotice(
+        `${result.count} fatti candidati estratti: controllali nella coda.`,
+        "success"
+      );
+    }
+  );
+  return h(
+    "details",
+    { class: "acquaintance-add" },
+    h("summary", { text: "Estrai da un messaggio" }),
+    form
+  );
+}
+
+function acquaintancePromote(person) {
+  if (person.promoted) {
+    return h("p", {
+      class: "settings-hint",
+      text: `Già in Relazioni come ${person.promoted_user_id}.`,
+    });
+  }
+  const form = settingsForm(
+    "Promuovi a relazione",
+    [
+      settingsField(
+        "Relazione",
+        settingsInput("relation", "", "text", {
+          maxlength: "80",
+          placeholder: "Amico, collega, conoscente…",
+        })
+      ),
+      settingsField(
+        "Affidabilità (0–100)",
+        settingsInput("trust", "30", "number", { min: "0", max: "100" })
+      ),
+      settingsField(
+        "Intimità (0–100)",
+        settingsInput("intimacy", "10", "number", { min: "0", max: "100" })
+      ),
+      settingsField(
+        "Conferma",
+        settingsInput("confirmation", "", "text", {
+          placeholder: "Scrivi PROMUOVI",
+          autocomplete: "off",
+        }),
+        "Crea un contatto in Relazioni con i soli fatti confermati non sensibili."
+      ),
+    ],
+    async (formData) => {
+      await postJson("/api/acquaintances", {
+        action: "promote",
+        person_id: person.person_id,
+        relation: String(formData.get("relation") || ""),
+        trust: Number(formData.get("trust") || 30),
+        intimacy: Number(formData.get("intimacy") || 10),
+        confirmation: String(formData.get("confirmation") || ""),
+      });
+      state.loaded.acquaintances = null;
+      state.loaded.relations = null;
+      await loadAcquaintances(true);
+      setNotice(
+        `${person.display_name} è ora una relazione fidata. I dati sensibili restano nel registro.`,
+        "success"
+      );
+    }
+  );
+  return h(
+    "details",
+    { class: "acquaintance-edit" },
+    h("summary", { text: "Promuovi a relazione" }),
     form
   );
 }
@@ -1408,6 +1770,9 @@ function acquaintanceCard(person, categories) {
   if (person.last_seen_at) {
     meta.push(`ultimo ${fmtDate(person.last_seen_at, { time: true })}`);
   }
+  if (person.promoted) {
+    meta.push("in Relazioni");
+  }
   return h(
     "article",
     { class: "panel acquaintance-card" },
@@ -1442,6 +1807,8 @@ function acquaintanceCard(person, categories) {
       "div",
       { class: "acquaintance-tools" },
       acquaintanceAddFact(person, categories),
+      acquaintanceExtract(person),
+      acquaintancePromote(person),
       acquaintanceEdit(person)
     )
   );
@@ -1450,22 +1817,32 @@ function acquaintanceCard(person, categories) {
 function renderAcquaintances(data) {
   const people = Array.isArray(data.people) ? data.people : [];
   const categories = Array.isArray(data.categories) ? data.categories : [];
-  $("#acquaintances-count").textContent = `${people.length} profili`;
+  const stats = data.stats || {};
+  $("#acquaintances-count").textContent = `${people.length} profili · ${stats.candidates ?? 0} da rivedere`;
   const content = $("#acquaintances-content");
-  clear(
-    content,
-    acquaintanceCreateForm(),
-    people.length
-      ? h(
-          "div",
-          { class: "acquaintance-grid" },
-          people.map((person) => acquaintanceCard(person, categories))
-        )
-      : emptyState(
-          "Nessuna persona incontrata",
-          "Aggiungi un nickname oppure registra la prima osservazione con il tool MCP record_acquaintance_observation."
-        )
-  );
+  const sections = [];
+  const review = acquaintanceReviewSection(data);
+  if (review) {
+    sections.push(review);
+  }
+  sections.push(acquaintancePolicyCard(data), acquaintanceCreateForm());
+  if (people.length) {
+    sections.push(
+      h(
+        "div",
+        { class: "acquaintance-grid" },
+        people.map((person) => acquaintanceCard(person, categories))
+      )
+    );
+  } else {
+    sections.push(
+      emptyState(
+        "Nessuna persona incontrata",
+        "Aggiungi un nickname oppure registra la prima osservazione con il tool MCP record_acquaintance_observation."
+      )
+    );
+  }
+  clear(content, ...sections);
 }
 
 async function loadAcquaintances(force = false) {
@@ -2823,14 +3200,86 @@ function renderVisual(data) {
     ["distinctive_marks", "Segni particolari"],
     ["style", "Stile visivo"],
   ];
+  const controls = {};
+  function randomizeVisualField(key) {
+    const pool = VISUAL_SUGGESTIONS[key] || [];
+    if (!pool.length || !controls[key]) {
+      return;
+    }
+    controls[key].value = pool[Math.floor(Math.random() * pool.length)];
+    controls[key].dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  const generatorHead = h(
+    "div",
+    { class: "visual-generator-head" },
+    h("p", {
+      class: "settings-hint",
+      text: "Scegli una proposta o sorteggia una riga: il dado accanto al titolo cambia solo quel campo. Puoi sempre scrivere a mano e salvare.",
+    }),
+    h(
+      "button",
+      {
+        type: "button",
+        class: "button button-quiet",
+        text: "🎲 Genera tutto",
+        onClick: () => {
+          fields.forEach(([key]) => randomizeVisualField(key));
+          setNotice("Aspetto generato: salva per applicarlo.", "success");
+        },
+      }
+    )
+  );
+  const fieldNodes = fields.map(([key, title]) => {
+    const textarea = h(
+      "textarea",
+      {
+        name: key,
+        rows: key === "body" ? "3" : "2",
+        maxlength: "2000",
+        placeholder: `Descrivi ${title.toLowerCase()}…`,
+      },
+      profile[key] || ""
+    );
+    controls[key] = textarea;
+    return h(
+      "div",
+      { class: "settings-field visual-field-block" },
+      h(
+        "div",
+        { class: "visual-field-head" },
+        h("span", { text: title }),
+        h("button", {
+          type: "button",
+          class: "setup-creator-dice",
+          text: "🎲",
+          title: `Sorteggia ${title.toLowerCase()}`,
+          "aria-label": `Sorteggia ${title.toLowerCase()}`,
+          onClick: () => randomizeVisualField(key),
+        })
+      ),
+      textarea,
+      h(
+        "div",
+        { class: "visual-suggestions" },
+        (VISUAL_SUGGESTIONS[key] || []).map((value) =>
+          h("button", {
+            type: "button",
+            class: "setup-choice",
+            text: value,
+            onClick: () => {
+              textarea.value = value;
+              textarea.dispatchEvent(new Event("input", { bubbles: true }));
+            },
+          })
+        )
+      )
+    );
+  });
   const form = settingsForm(
     "Salva aspetto",
     [
-      h("p", { class: "settings-hint", text: "Definisci i tratti che devono restare riconoscibili. Puoi aggiornare questi dati in qualsiasi momento." }),
-      ...fields.map(([key, title]) => settingsField(
-        title,
-        h("textarea", { name: key, rows: key === "body" ? "3" : "2", maxlength: "2000", placeholder: `Descrivi ${title.toLowerCase()}…` }, profile[key] || "")
-      )),
+      generatorHead,
+      ...fieldNodes,
       settingsField("Seed fisso (facoltativo)", settingsInput("fixed_seed", profile.fixed_seed ?? "", "number", { min: "0", max: "2147483647", step: "1", placeholder: "Vuoto = seed casuale per generazione" }), "Il seed aiuta la ripetibilità, ma non garantisce da solo la stessa identità."),
     ],
     async (formData) => {

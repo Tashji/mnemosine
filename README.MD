@@ -50,6 +50,7 @@ Il progetto ruota attorno al Model Context Protocol: il server espone all'LLM la
 | **Deliberazione (Fase 2)** | Salienza, episodi, scadenza e default conservativo; il motore resta spento finché non viene abilitato. |
 | **Esecuzione interna (Fase 3)** | Decisioni continue, unstructured e intenti simulati con effetti limitati, riflessione e stream. |
 | **Relazioni** | Fiducia, intimità e storia sintetica delle persone importanti. |
+| **Incontrati** | Registro separato delle persone conosciute online: fatti candidati, revisione, promozione a relazione, policy dell'agente, retention ed export. |
 | **Browser controllato** | Navigazione con Playwright confinata a origini HTTPS in whitelist, con indice numerato dei link per i modelli piccoli. |
 | **File locali** | Sandbox `files/` del profilo per leggere e scrivere testo, senza uscire dalla cartella e senza symlink. |
 | **Dashboard locale** | Consultazione e prima configurazione da browser, con login e HTTPS. |
@@ -133,6 +134,8 @@ La memoria recupera dichiarazioni dell'utente come informazioni non verificate, 
 ```bash
 python -m unittest discover -s tests -t .
 ```
+
+La suite include un test end-to-end della vista **Incontrati** con Chromium di Playwright (accesso, coda di revisione, conferma, promozione e verifica in **Relazioni**): se Playwright o il browser non sono installati, il test viene saltato invece di fallire.
 
 <a id="indice" name="indice"></a>
 
@@ -819,6 +822,36 @@ Il sistema potrà utilizzare il RAG per recuperare le interazioni precedenti con
 Oltre alle relazioni fidate, il registro `config/acquaintances.json` conserva i profili parziali delle persone incontrate (per esempio su un forum) senza inserirle in `social_graph.json`. Ogni persona parte dal solo nickname e accumula fatti candidati; un fatto diventa confermato solo dopo una verifica esplicita nella vista **Incontrati** della dashboard.
 
 Le categorie coprono nickname, nome, città, età, lavoro, formazione, aspetto, interessi, valori, abitudini, relazioni e altro. Salute, religione, politica, orientamento, indirizzo e contatti sono marcati come sensibili: i tool MCP possono registrarli solo come candidati, mentre la conferma resta un'azione amministrativa. I tool `list_acquaintances`, `get_acquaintance` e `record_acquaintance_observation` leggono e aggiungono osservazioni; conferma, scarto e rimozione passano dalla dashboard. La barra di completezza conta le categorie di base confermate e il registro non concede permessi né crea legami nel grafo fidato.
+
+### 11.2. Promozione a relazione
+
+Una persona incontrata può diventare una relazione fidata dalla vista **Incontrati**, aprendo **Promuovi a relazione**. La promozione richiede la conferma esplicita `PROMUOVI` e accetta relazione, fiducia, intimità e un `user_id` per il grafo (per impostazione predefinita coincide con il `person_id`).
+
+La promozione crea un contatto in `social_graph.json` e copia solo i fatti **confermati e non sensibili**: finiscono in `confirmed_facts` come righe «Categoria: valore», gli interessi anche in `preferences`, e le note riportano la data della promozione. Salute, religione, politica, orientamento, indirizzo e contatti restano nel registro amministrativo. Se il `user_id` esiste già la promozione viene rifiutata; se la scrittura del registro fallisce dopo quella del grafo, il contatto appena aggiunto viene rimosso, così i due file non divergono. Nel registro la persona passa allo stato `known` e conserva `promoted_user_id` e `promoted_at`; non viene più toccata dalla retention.
+
+### 11.3. Estrazione dai messaggi e coda di revisione
+
+Il tool MCP `extract_acquaintance_facts` e il modulo **Estrai candidati** della dashboard leggono il testo originale di un messaggio condiviso dall'utente e riconoscono solo dichiarazioni esplicite in prima persona: «mi chiamo…», «ho … anni», «abito a…», «lavoro come…», «studio…», «mi interessa…». L'estrazione è deterministica e conservativa, non usa un modello linguistico, non deduce dati sensibili e non conferma nulla: ogni voce diventa un fatto candidato a bassa confidenza con origine `extracted` (l'origine può essere `manual`, `extracted` o `imported`).
+
+La coda **Da rivedere** unisce i candidati di tutte le persone, dal più vecchio al più recente, e mostra categoria, valore, fonte, data e confidenza. **Conferma** e **Scarta** cambiano lo stato del singolo fatto; un dato sensibile si conferma solo dalla dashboard. I fatti scartati non sono mai visibili ai tool MCP.
+
+### 11.4. Policy dell'agente, conservazione ed export
+
+La sezione `policy` di `acquaintances.json` decide cosa può leggere l'agente:
+
+| Chiave | Default | Effetto |
+| --- | --- | --- |
+| `agent_fact_visibility` | `confirmed` | `confirmed` mostra solo i fatti confermati; `all` include anche i candidati. |
+| `agent_sensitive_access` | `false` | Consente ai tool MCP di leggere i dati sensibili confermati. |
+| `retention_days` | `365` | Soglia (1–3650 giorni) usata dalla retention manuale. |
+
+I tool `list_acquaintances` e `get_acquaintance` applicano la policy e riportano `hidden_facts`, cioè quanti fatti sono stati nascosti; `list_acquaintances` espone anche `agent_access` con i due valori attivi. La dashboard mostra sempre tutto, perché è la vista amministrativa.
+
+**Applica retention** elimina i fatti scartati più vecchi della soglia e i profili inattivi senza fatti; richiede la conferma `APPLICA` e non tocca mai le persone `known` o promosse. **Esporta registro** scarica un JSON con data (`incontrati-AAAAMMGG.json`) da `GET /api/acquaintances/export`: la route richiede l'autenticazione della dashboard, risponde con `Content-Disposition: attachment` e il documento contiene `exported_at`, `schema_version`, `policy` e `people` con tutti i fatti e la loro provenienza.
+
+### 11.5. Coerenza del registro
+
+`mnemosine-consistency` controlla anche il registro Incontrati: una persona promossa deve avere `promoted_at` e un contatto corrispondente in `social_graph.json`, i fatti confermati devono avere una fonte e la policy deve essere valida. Un registro assente non è un errore, perché `acquaintances.json` viene creato al primo utilizzo.
 
 ---
 
@@ -1610,6 +1643,7 @@ Prima configurazione da browser:
 - Nel passaggio **Carattere** la sezione interessi, valori e abitudini offre tre modelli pronti (**Curioso e riflessivo**, **Creativo e sociale**, **Concreto e metodico**) che riempiono insieme i tre campi con voci coerenti; sotto ogni campo ci sono idee divise per categoria, da aggiungere o togliere con un clic. I testi restano modificabili a mano e **Azzera i tre campi** li svuota tutti.
 - Nel passaggio **Relazioni** le note di familiari e persone importanti offrono frasi pronte per rapporto, carattere, distanza e presenza (per la famiglia: clima, legami, distanza); un clic aggiunge o toglie la frase e la punteggiatura si compone da sola. Il testo resta libero e le persone importanti conservano relazione, fiducia e intimità.
 - Nel passaggio **Aspetto** il personaggio si compone come in un creatore di personaggi: corporatura (7 varianti), altezza in centimetri (150–205), forma del viso, carnagione (6 tonalità), lunghezza, texture e colore dei capelli, forma e colore degli occhi, segni particolari e stile. Ogni riga ha un dado per sorteggiare solo quella voce; **Genera tutto** compone l'intero aspetto in un clic, **Azzera** lo svuota. L'anteprima cambia con carnagione, capelli, occhi, stile e altezza, e una riga di riepilogo mostra le scelte attive. I testi restano modificabili a mano nella sezione richiudibile.
+- Il pulsante **Genera personaggio completo**, in cima al passaggio **Identità**, compila in un clic nome e cognome, età e date coerenti, nascita e residenza in Italia, fuso orario, lingua madre, biografia e situazione attuale, tratti, interessi, valori e abitudini, aspetto, genitori, un fratello o una sorella e una persona importante. Il genere scelto guida i nomi; ogni campo resta modificabile e nulla viene salvato finché non si invia il wizard.
 
 - Il profilo creato contiene i dati raccolti in `identity.json` e popola `social_graph.json` con le persone importanti. Non inserisce il dataset demo; i ricordi possono arrivare dal passaggio finale del wizard.
 
@@ -1699,7 +1733,7 @@ La dashboard espone dieci viste:
 
 - **Relazioni**: elenco dei contatti ordinato per ultima interazione e scheda completa con fiducia, intimità, preferenze, fatti confermati, confini relazionali e storico delle interazioni (con apertura diretta dei ricordi collegati). Si possono aggiungere e modificare i contatti senza alterare storico e contatori. La rimozione richiede di scrivere `RIMUOVI` ed elimina il contatto e il suo storico relazionale, non i ricordi episodici. La whitelist WhatsApp resta separata e non viene modificata automaticamente.
 
-- **Incontrati**: profili progressivi delle persone conosciute per gradi. Ogni scheda mostra stato, canali, barra di completezza, fatti candidati/confermati/scartati con fonte e confidenza, un form per aggiungere osservazioni e la gestione di stato, note e rimozione. I dati sensibili sono evidenziati e si confermano solo da qui; il registro è separato dal grafo fidato.
+- **Incontrati**: profili progressivi delle persone conosciute per gradi. Ogni scheda mostra stato, canali, barra di completezza, fatti candidati/confermati/scartati con fonte e confidenza, un form per aggiungere osservazioni e la gestione di stato, note e rimozione. I dati sensibili sono evidenziati e si confermano solo da qui; il registro è separato dal grafo fidato. La coda **Da rivedere** raccoglie i candidati di tutte le persone, **Estrai candidati** riconosce i fatti espliciti di un messaggio e la card **Policy e conservazione** imposta cosa vede l'agente, applica la retention ed esporta il registro.
 
 - **Timeline**: ricerca e filtri per fonte e livello di accesso; i ricordi latenti e repressi sono visibili solo attivando esplicitamente l'opzione dedicata. Il dettaglio mostra revisioni, collegamenti episodici e conoscenze collegate.
 
@@ -1847,6 +1881,8 @@ mnemosine-backup --root <profilo> prune --keep 3
 mnemosine-consistency --root <profilo>
 mnemosine-consistency --root <profilo> --json
 ```
+
+Lo stesso controllo include il registro Incontrati: verifica che ogni promozione abbia `promoted_at` e un contatto presente in `social_graph.json`, che i fatti confermati abbiano una fonte e che la policy sia valida; un registro assente viene saltato, perché il file nasce al primo utilizzo.
 
 Nessuno di questi moduli chiama un modello linguistico né servizi esterni.
 
