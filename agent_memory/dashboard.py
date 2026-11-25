@@ -47,6 +47,7 @@ from .autonomy import AutonomyService
 from .biography import BiographyService
 from .config import project_root
 from .dashboard_auth import SESSION_COOKIE, DashboardAuth, resolve_auth
+from .dashboard_maintenance import MaintenanceService
 from .dashboard_settings import ARCHIVE_CONFIRMATION, DashboardSettings
 from .dashboard_tls import DashboardTLS, ensure_dashboard_tls
 from .db import decode_memory
@@ -94,6 +95,8 @@ SESSION_PATH = "/api/session"
 RELATIONS_PATH = "/api/relations"
 SHADOW_TRAITS_PATH = "/api/traits/shadow"
 SETTINGS_PATH = "/api/settings"
+MAINTENANCE_PATH = "/api/maintenance"
+MAINTENANCE_ACTION_PATH = "/api/maintenance/action"
 ACQUAINTANCES_PATH = "/api/acquaintances"
 ACQUAINTANCES_EXPORT_PATH = "/api/acquaintances/export"
 SETTINGS_BROWSER_PATH = "/api/settings/browser"
@@ -125,6 +128,7 @@ SETTINGS_POST_PATHS = {
     LIFE_PATH,
     PROFILE_ARCHIVE_PATH,
     AUTONOMY_REVIEW_PATH,
+    MAINTENANCE_ACTION_PATH,
 }
 DASHBOARD_WRITE_ACTIONS = {
     RELATIONS_PATH: "relations.save",
@@ -136,6 +140,7 @@ DASHBOARD_WRITE_ACTIONS = {
     LIFE_PATH: "life.toggle",
     PROFILE_ARCHIVE_PATH: "profile.archive",
     AUTONOMY_REVIEW_PATH: "autonomy.review",
+    MAINTENANCE_ACTION_PATH: "maintenance.action",
     VISUAL_REFERENCE_PATH: "visual.reference.save",
     VISUAL_PROFILE_PATH: "visual.profile",
     VISUAL_REFERENCE_REMOVE_PATH: "visual.reference.remove",
@@ -1608,6 +1613,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 )
             elif path == SETTINGS_PATH:
                 self._send_json(DashboardSettings(self.server.data.root).snapshot())
+            elif path == MAINTENANCE_PATH:
+                self._send_json(
+                    MaintenanceService(self.server.data.root).snapshot()
+                )
             elif path == LIFE_PATH:
                 self._send_json(self.server.data.life())
             elif path == "/api/timeline":
@@ -1656,7 +1665,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._send_json(
                 {"error": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR
             )
-        except (BrokenPipeError, ConnectionResetError):
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             return
         except Exception:  # noqa: BLE001 - confine del server: risposta JSON, mai stack trace al client
             traceback.print_exc(file=sys.stderr)
@@ -1752,7 +1761,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._send_json(
                 {"error": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR
             )
-        except (BrokenPipeError, ConnectionResetError):
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             return
         except Exception:  # noqa: BLE001 - confine del server: risposta JSON, mai stack trace al client
             traceback.print_exc(file=sys.stderr)
@@ -1893,6 +1902,8 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             result = AutonomyService(self.server.data.root, None).review_uncertain(
                 payload.get("run_id"), payload.get("confirmation"), payload.get("note")
             )
+        elif path == MAINTENANCE_ACTION_PATH:
+            result = MaintenanceService(self.server.data.root).run_action(payload)
         else:
             confirmation = payload.get("confirmation")
             if not isinstance(confirmation, str):
@@ -2650,16 +2661,23 @@ def create_server(
             else data.root / "data" / "dashboard_tls"
         )
         tls = ensure_dashboard_tls(directory, extra_names=tls_sans)
-    return DashboardHTTPServer(
-        (host, port),
-        data,
-        assets_dir=assets_dir,
-        quiet=quiet,
-        auth=auth,
-        tls=tls,
-        trusted_origins=trusted_origins,
-        allow_null_origin=allow_null_origin,
-    )
+    try:
+        return DashboardHTTPServer(
+            (host, port),
+            data,
+            assets_dir=assets_dir,
+            quiet=quiet,
+            auth=auth,
+            tls=tls,
+            trusted_origins=trusted_origins,
+            allow_null_origin=allow_null_origin,
+        )
+    except OSError as exc:
+        raise AgentMemoryError(
+            f"Impossibile aprire {host}:{port}: {exc.strerror or exc}. "
+            "La porta potrebbe essere occupata da un altro programma: "
+            "riprova con --port 8790 (o un'altra porta libera)."
+        ) from exc
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -2793,7 +2811,7 @@ def main(argv: list[str] | None = None) -> int:
             allow_null_origin=args.allow_null_origin,
         )
     except AgentMemoryError as exc:
-        print(f"Errore TLS: {exc}", file=sys.stderr)
+        print(f"Errore di avvio: {exc}", file=sys.stderr)
         return 2
     display_host = "127.0.0.1" if args.host in {"0.0.0.0", "::"} else args.host
     if ":" in display_host and not display_host.startswith("["):

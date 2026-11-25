@@ -41,6 +41,10 @@ const VIEW_META = {
     title: "Aspetto",
     subtitle: "Seed visivo, caratteristiche fisiche e generazione manuale di immagini.",
   },
+  maintenance: {
+    title: "Manutenzione",
+    subtitle: "Backup verificati, controllo di coerenza e stato dell'indice vettoriale.",
+  },
 };
 
 const SOURCE_LABELS = {
@@ -3494,6 +3498,394 @@ async function loadSettings(force = false) {
   }
 }
 
+/* -- manutenzione -------------------------------------------------------- */
+
+const CHECK_LABELS = {
+  profile: "Profilo",
+  config: "Configurazione",
+  acquaintances: "Incontrati",
+  timeline: "Timeline",
+  semantic: "Conoscenze",
+  vector: "Indice vettoriale",
+  outbox: "Outbox",
+  files: "File",
+};
+
+function fmtBytes(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0) return "—";
+  if (number < 1024) return `${number} B`;
+  if (number < 1024 * 1024) return `${(number / 1024).toFixed(1)} KB`;
+  return `${(number / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function maintenanceBadge(ok, okText = "Regolare", koText = "Da controllare") {
+  return badge(
+    ok ? okText : koText,
+    ok ? "maintenance-badge is-ok" : "maintenance-badge is-warning"
+  );
+}
+
+function maintenanceIndexCard(index) {
+  const entries = Object.entries(index.indexes || {});
+  if (!entries.length) {
+    return emptyState(
+      "Indice non leggibile",
+      index.error || "Esegui `python -m agent_memory.index --status` per il dettaglio."
+    );
+  }
+  return h(
+    "div",
+    { class: "maintenance-stack" },
+    h(
+      "div",
+      { class: "maintenance-row" },
+      h("span", { text: "Stato complessivo" }),
+      maintenanceBadge(Boolean(index.ok))
+    ),
+    h(
+      "p",
+      { class: "settings-hint" },
+      `Directory: ${text(index.index_dir)} · modello: ${text(index.model)}`
+    ),
+    ...entries.map(([kind, item]) =>
+      h(
+        "div",
+        { class: "maintenance-index-item" },
+        h(
+          "div",
+          { class: "maintenance-check-head" },
+          h("strong", {
+            text: kind === "episodic" ? "Ricordi episodici" : "Conoscenze",
+          }),
+          maintenanceBadge(
+            Boolean(item.ok),
+            `${item.count} voci`,
+            "Da ricostruire"
+          )
+        ),
+        h("p", {
+          class: "settings-hint",
+          text: `stato ${text(item.status)} · vettori ${text(item.ntotal)}`,
+        }),
+        ...(item.issues || []).map((issue) =>
+          h("p", { class: "maintenance-issue", text: issue })
+        )
+      )
+    ),
+    h("p", {
+      class: "settings-hint",
+      text: "Per allineare l'indice: python -m agent_memory.index --sync (o --rebuild).",
+    })
+  );
+}
+
+function maintenanceDatabasesCard(databases, root) {
+  return h(
+    "div",
+    { class: "maintenance-stack" },
+    h(
+      "div",
+      { class: "maintenance-row" },
+      h("span", { text: "Directory profilo" }),
+      h("code", { class: "mono", text: text(root) })
+    ),
+    h(
+      "ul",
+      { class: "maintenance-db-list" },
+      ...databases.map((item) =>
+        h(
+          "li",
+          { class: "maintenance-db-item" },
+          h("strong", { text: item.name }),
+          h("span", {
+            text: item.exists
+              ? `schema ${text(item.schema_version)} · ${fmtBytes(item.bytes)}`
+              : "assente",
+          }),
+          maintenanceBadge(
+            item.exists && Boolean(item.schema_version),
+            "Ok",
+            "Manca"
+          )
+        )
+      )
+    )
+  );
+}
+
+function maintenanceCheckItem(check) {
+  const errors = Array.isArray(check.errors) ? check.errors : [];
+  const warnings = Array.isArray(check.warnings) ? check.warnings : [];
+  const state = errors.length
+    ? "is-error"
+    : warnings.length
+      ? "is-warning"
+      : "is-ok";
+  return h(
+    "li",
+    { class: `maintenance-check-item ${state}` },
+    h(
+      "div",
+      { class: "maintenance-check-head" },
+      h("strong", { text: label(CHECK_LABELS, check.name) }),
+      h("span", {
+        class: "maintenance-check-count",
+        text: `${errors.length} errori · ${warnings.length} avvisi`,
+      })
+    ),
+    ...errors.map((message) =>
+      h("p", { class: "maintenance-issue", text: message })
+    ),
+    ...warnings.map((message) =>
+      h("p", { class: "maintenance-issue is-warning", text: message })
+    )
+  );
+}
+
+function renderCheckReport(container, report) {
+  const checks = Array.isArray(report.checks) ? report.checks : [];
+  clear(
+    container,
+    h(
+      "p",
+      { class: "maintenance-check-summary" },
+      h("strong", {
+        text: report.ok ? "Nessun errore" : `${report.error_count} errori`,
+      }),
+      ` · ${report.warning_count} avvisi · ${fmtDate(report.generated_at, { time: true })}`
+    ),
+    h(
+      "ul",
+      { class: "maintenance-check-list" },
+      ...checks.map(maintenanceCheckItem)
+    )
+  );
+}
+
+function maintenanceBackupRow(item, root, confirmationLabel) {
+  const command =
+    `mnemosine-backup --root "${root}" restore ${item.name} ` +
+    `--confirm ${confirmationLabel}`;
+  const copyButton = h("button", {
+    class: "button button-quiet",
+    type: "button",
+    text: "Copia comando",
+  });
+  const restorePanel = h(
+    "div",
+    { class: "maintenance-restore-panel", hidden: true },
+    h("p", {
+      class: "settings-warning",
+      text: "Sostituisce configurazione, database e file del profilo con quelli del backup. Esegui il comando da terminale con la dashboard ferma (CTRL+C), poi riavvia mnemosine-start.",
+    }),
+    h("pre", { class: "maintenance-command" }, h("code", { text: command })),
+    h(
+      "p",
+      { class: "settings-hint",
+        text: "Prima del ripristino viene creato un backup pre-restore; i backup precedenti restano." }
+    ),
+    copyButton
+  );
+  const verifyButton = h(
+    "button",
+    { class: "button button-quiet", type: "button", text: "Verifica" }
+  );
+  const restoreButton = h(
+    "button",
+    { class: "button button-quiet", type: "button", text: "Come ripristinare" }
+  );
+  copyButton.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(command);
+      setNotice("Comando copiato.", "success");
+    } catch (error) {
+      setNotice("Copia non riuscita: seleziona il comando e copialo a mano.");
+    }
+  });
+  verifyButton.addEventListener("click", async () => {
+    verifyButton.disabled = true;
+    verifyButton.textContent = "Verifica…";
+    try {
+      const result = await postJson("/api/maintenance/action", {
+        action: "verify",
+        name: item.name,
+      });
+      const check = result.result || {};
+      if (check.ok) {
+        setNotice(
+          `Backup verificato: ${check.checked ?? check.files ?? 0} file e ${check.databases ?? 0} database integri.`,
+          "success"
+        );
+      } else {
+        setNotice(`Verifica fallita: ${(check.errors || []).join(" ")}`);
+      }
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      verifyButton.disabled = false;
+      verifyButton.textContent = "Verifica";
+    }
+  });
+  restoreButton.addEventListener("click", () => {
+    restorePanel.hidden = !restorePanel.hidden;
+  });
+  return h(
+    "div",
+    { class: "maintenance-backup" },
+    h(
+      "div",
+      { class: "maintenance-backup-main" },
+      h("strong", { text: item.name }),
+      h("span", {
+        text: `${fmtDate(item.created_at, { time: true })} · ${item.files} file · ${fmtBytes(item.bytes)}`,
+      })
+    ),
+    h(
+      "div",
+      { class: "maintenance-backup-actions" },
+      verifyButton,
+      restoreButton
+    ),
+    restorePanel
+  );
+}
+
+function maintenanceBackupsCard(backups, root, confirmationLabel) {
+  const items = Array.isArray(backups.items) ? backups.items : [];
+  const rows = items.length
+    ? items.map((item) => maintenanceBackupRow(item, root, confirmationLabel))
+    : [
+        emptyState(
+          "Nessun backup",
+          "Crea il primo snapshot: configurazione, database e file del profilo."
+        ),
+      ];
+  return h(
+    "div",
+    { class: "maintenance-stack" },
+    h(
+      "div",
+      { class: "maintenance-row" },
+      h("span", {
+        text: `${items.length} snapshot · ne conserva ${text(backups.keep)} per volta`,
+      }),
+      maintenanceBadge(Boolean(backups.ok), "Cartella pronta", "Errore")
+    ),
+    backups.error ? h("p", { class: "maintenance-issue", text: backups.error }) : null,
+    ...rows
+  );
+}
+
+function renderMaintenance(data) {
+  const content = $("#maintenance-content");
+  const backups = data.backups || { items: [], keep: 7 };
+  const databases = Array.isArray(data.databases) ? data.databases : [];
+  const confirmationLabel = text(data.restore_confirmation, "RIPRISTINA");
+
+  const createButton = h("button", {
+    class: "button",
+    type: "button",
+    text: "Crea backup adesso",
+  });
+  createButton.addEventListener("click", async () => {
+    createButton.disabled = true;
+    createButton.textContent = "Creazione…";
+    try {
+      const result = await postJson("/api/maintenance/action", {
+        action: "create",
+      });
+      const name = (result.result || {}).name || "snapshot";
+      await loadMaintenance(true);
+      setNotice(`Backup ${name} creato.`, "success");
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      createButton.disabled = false;
+      createButton.textContent = "Crea backup adesso";
+    }
+  });
+
+  const checkButton = h("button", {
+    class: "button button-quiet",
+    type: "button",
+    text: "Esegui controllo",
+  });
+  const checkBox = h(
+    "div",
+    { class: "maintenance-check", "aria-live": "polite" },
+    h("p", {
+      class: "settings-hint",
+      text: "Il controllo è in sola lettura e non modifica il profilo.",
+    })
+  );
+  checkButton.addEventListener("click", async () => {
+    checkButton.disabled = true;
+    checkButton.textContent = "Controllo in corso…";
+    clear(checkBox, loadingBlock("Verifica di profilo, database, indice e file…"));
+    try {
+      const result = await postJson("/api/maintenance/action", {
+        action: "check",
+      });
+      renderCheckReport(checkBox, result.report || {});
+    } catch (error) {
+      clear(checkBox, emptyState("Controllo non eseguito", error.message));
+      setNotice(error.message);
+    } finally {
+      checkButton.disabled = false;
+      checkButton.textContent = "Esegui controllo";
+    }
+  });
+
+  clear(
+    content,
+    h(
+      "div",
+      { class: "settings-grid" },
+      settingsCard(
+        "Stato del profilo",
+        "Directory, database locali e versione dello schema.",
+        maintenanceDatabasesCard(databases, data.root)
+      ),
+      settingsCard(
+        "Indice vettoriale",
+        "Copertura dei ricordi e delle conoscenze, senza caricare il modello.",
+        maintenanceIndexCard(data.index || {})
+      ),
+      settingsCard(
+        "Controllo di coerenza",
+        "Profili, date, promozioni, outbox e file: verifica completa in sola lettura.",
+        h("div", { class: "maintenance-stack" }, checkButton, checkBox)
+      ),
+      settingsCard(
+        "Backup",
+        "Snapshot verificabili di configurazione, database e file del profilo.",
+        h(
+          "div",
+          { class: "maintenance-stack" },
+          createButton,
+          maintenanceBackupsCard(backups, data.root, confirmationLabel)
+        )
+      )
+    )
+  );
+}
+
+async function loadMaintenance(force = false) {
+  if (state.loaded.maintenance && !force) return;
+  const content = $("#maintenance-content");
+  setLoading(content, "Caricamento della manutenzione…");
+  try {
+    const data = await api("/api/maintenance");
+    state.loaded.maintenance = data;
+    renderMaintenance(data);
+    setNotice("");
+  } catch (error) {
+    setNotice(`Impossibile caricare la manutenzione: ${error.message}`);
+    clear(content, emptyState("Manutenzione non disponibile", error.message));
+  }
+}
+
 /* -- navigazione --------------------------------------------------------- */
 
 const LOADERS = {
@@ -3507,6 +3899,7 @@ const LOADERS = {
   evolution: loadEvolution,
   settings: loadSettings,
   visual: loadVisual,
+  maintenance: loadMaintenance,
 };
 
 function navigate(view) {

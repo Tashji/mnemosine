@@ -653,7 +653,9 @@ def _parse_parents(values: Mapping[str, Any]) -> list[dict[str, str]] | None:
         return None
     parents: list[dict[str, str]] = []
     for index in indexes:
-        fields = ("first_name", "last_name", "relation", "birth_date", "occupation", "notes")
+        # ``relation`` è precompilato nella riga vuota del wizard: non basta
+        # da solo a considerare compilato il familiare.
+        fields = ("first_name", "last_name", "birth_date", "occupation", "notes")
         if not _has_row_values(values, "parent", index, fields):
             continue
         first_name = _form_text(values, f"parent_{index}_first_name")
@@ -683,7 +685,7 @@ def _parse_siblings(values: Mapping[str, Any]) -> list[dict[str, str]] | None:
         return None
     siblings: list[dict[str, str]] = []
     for index in indexes:
-        fields = ("first_name", "last_name", "relation", "birth_date", "occupation", "notes")
+        fields = ("first_name", "last_name", "birth_date", "occupation", "notes")
         if not _has_row_values(values, "sibling", index, fields):
             continue
         first_name = _form_text(values, f"sibling_{index}_first_name")
@@ -712,7 +714,9 @@ def _parse_people(values: Mapping[str, Any]) -> list[dict[str, Any]]:
     people: list[dict[str, Any]] = []
     seen: set[str] = set()
     for index in indexes:
-        fields = ("display_name", "relation", "trust", "intimacy", "notes")
+        # I cursori di fiducia e intimità partono da 50 nella riga vuota:
+        # contano solo i campi che identificano davvero la persona.
+        fields = ("display_name", "relation", "notes")
         if not _has_row_values(values, "person", index, fields):
             continue
         display_name = _form_text(values, f"person_{index}_display_name")

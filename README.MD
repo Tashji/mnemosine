@@ -54,6 +54,7 @@ Il progetto ruota attorno al Model Context Protocol: il server espone all'LLM la
 | **Browser controllato** | Navigazione con Playwright confinata a origini HTTPS in whitelist, con indice numerato dei link per i modelli piccoli. |
 | **File locali** | Sandbox `files/` del profilo per leggere e scrivere testo, senza uscire dalla cartella e senza symlink. |
 | **Dashboard locale** | Consultazione e prima configurazione da browser, con login e HTTPS. |
+| **Manutenzione** | Backup verificabili, controllo di coerenza e stato dell'indice dalla dashboard; ripristino guidato dal terminale. |
 | **Sicurezza** | Separazione tra contenuti consci e latenti, filtri temporali e limiti operativi. |
 
 <a id="avvio-rapido" name="avvio-rapido"></a>
@@ -81,6 +82,18 @@ Al primo avvio il server rifiuta una directory senza profilo e indica proprio qu
 ERRORE: Cartella di configurazione non trovata: ...
 Nessun profilo in questa directory: al primo avvio esegui `mnemosine-start` ...
 ```
+
+### Se qualcosa non funziona
+
+- **`mnemosine-start` non viene trovato**: l'ambiente virtuale non è attivo o il pacchetto non è installato. Attiva la venv (`source .venv/bin/activate`, su Windows `.venv\Scripts\activate`) e rilancia `pip install -e ".[browser]"`.
+- **Python troppo vecchio**: serve Python 3.12 o successivo. Controlla con `python --version` e ricrea la venv con l'interprete giusto.
+- **La porta è occupata**: `mnemosine-start --port 8790`. Il messaggio di errore indica sempre `--port`; l'indirizzo effettivo viene stampato all'avvio.
+- **Il browser non si apre**: apri l'indirizzo stampato a mano, oppure avvia con `--no-open` e visita `/setup`.
+- **Dove viene salvato il profilo**: `~/.mnemosine/profile`. `--root <cartella>` o la variabile `AGENT_MEMORY_PROFILE` cambiano la posizione; il profilo non viene mai scritto dentro il repository.
+- **Biografia o indice si interrompono**: il profilo resta valido. Riapri `/setup/finalize` dalla dashboard oppure esegui `mnemosine-biography --root <profilo> --apply` e `mnemosine-index --root <profilo> --rebuild`; entrambi sono idempotenti.
+- **Playwright non è installato**: `python -m playwright install chromium`; senza browser i test end-to-end vengono saltati e i tool browser restano disabilitati.
+- **Backup, coerenza e indice**: la vista **Manutenzione** della dashboard crea e verifica i backup, esegue il controllo di coerenza e mostra lo stato dell'indice. Il ripristino si esegue da terminale con la dashboard ferma, usando il comando già compilato nella vista.
+- **Vuoi ripartire da zero**: ferma il server e avvia con un'altra `--root`; i backup precedenti restano in `<profilo>/backups`. Non cancellare `config/` o `data/` a mano.
 
 Dopo la creazione, collega l'agente indicando la directory del profilo:
 
@@ -135,7 +148,7 @@ La memoria recupera dichiarazioni dell'utente come informazioni non verificate, 
 python -m unittest discover -s tests -t .
 ```
 
-La suite include un test end-to-end della vista **Incontrati** con Chromium di Playwright (accesso, coda di revisione, conferma, promozione e verifica in **Relazioni**): se Playwright o il browser non sono installati, il test viene saltato invece di fallire.
+La suite include due test end-to-end con Chromium di Playwright: il wizard di primo avvio (campi obbligatori, sei passaggi, creazione del profilo senza biografia né indice, apertura della dashboard) e la vista **Incontrati** (accesso, coda di revisione, conferma, promozione e verifica in **Relazioni**). Se Playwright o il browser non sono installati, i test vengono saltati invece di fallire.
 
 <a id="indice" name="indice"></a>
 
@@ -1658,6 +1671,8 @@ Prima configurazione da browser:
 
 - Se la directory contiene già un profilo pronto, `/setup` reindirizza alla dashboard. Un profilo incompleto non viene sovrascritto: usa `profile init --force` da terminale.
 
+- La voce **Manutenzione** riepiloga database e versioni di schema, copertura dell'indice, backup presenti e controllo di coerenza; da qui si creano e si verificano i backup. Il ripristino non è un pulsante: richiede la dashboard ferma, quindi la vista mostra il comando `mnemosine-backup ... restore ... --confirm RIPRISTINA` già compilato, da eseguire in un terminale.
+
 - Ogni POST di configurazione richiede un token CSRF monouso, valido 30 minuti, e il controllo dell'Origin. Quando la dashboard è esposta oltre loopback, `/setup` richiede l'autenticazione come le altre pagine.
 
 Autenticazione:
@@ -1858,7 +1873,7 @@ L’esecutore si ferma all’outbox; il trasporto è il comando separato `mnemos
 
 `agent_memory/backup.py` crea snapshot locali in `backups/backup-AAAAMMGG-HHMMSS`. I quattro database vengono copiati con l'API di backup di SQLite, quindi anche con il server aperto; `config/`, `files/` e `data/outbox/` sono inclusi per impostazione predefinita. Restano esclusi `data/secrets`, `data/models`, `data/dashboard_tls`, `data/browser`, `data/indexes` e `data/logs`: sono credenziali, cache o artefatti rigenerabili. Un backup contiene comunque dati personali, inclusi eventuali contatti in `config/integrations.json`: va conservato localmente e non condiviso.
 
-Ogni snapshot ha un `manifest.json` con checksum, dimensioni, versioni di schema e motivo delle esclusioni. `verify` ricontrolla i checksum e l'integrità SQLite. Il ripristino richiede la conferma letterale `RIPRISTINA`, crea prima un backup `pre-restore` e non cancella i backup precedenti. Il ripristino va eseguito con il server e la dashboard fermi, perché sostituisce configurazione, database e, se inclusi, `files/` e outbox. La retention predefinita conserva gli ultimi sette backup; un backup automatico viene creato prima di una migrazione SQLite, al massimo uno ogni cinque minuti per profilo.
+Ogni snapshot ha un `manifest.json` con checksum, dimensioni, versioni di schema e motivo delle esclusioni. `verify` ricontrolla i checksum e l'integrità SQLite. Il ripristino richiede la conferma letterale `RIPRISTINA`, crea prima un backup `pre-restore` e non cancella i backup precedenti. Il ripristino va eseguito con il server e la dashboard fermi, perché sostituisce configurazione, database e, se inclusi, `files/` e outbox: per questo la vista **Manutenzione** lo lascia alla CLI e mostra solo il comando già compilato. La retention predefinita conserva gli ultimi sette backup; un backup automatico viene creato prima di una migrazione SQLite, al massimo uno ogni cinque minuti per profilo.
 
 ```bash
 # Backup completo e verifica

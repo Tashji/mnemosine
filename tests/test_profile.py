@@ -550,5 +550,44 @@ class ProfileInitTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, 2)
 
 
+class EmptyFamilyRowTests(unittest.TestCase):
+    """Le righe precompilate del wizard non devono bloccare la creazione."""
+
+    def test_default_relation_alone_does_not_fill_the_row(self) -> None:
+        from agent_memory.profile import _parse_parents, _parse_siblings
+
+        self.assertEqual(
+            _parse_parents(
+                {"parent_0_relation": "genitore", "parent_1_relation": "genitore"}
+            ),
+            [],
+        )
+        self.assertEqual(
+            _parse_siblings({"sibling_0_relation": "sorella"}),
+            [],
+        )
+
+    def test_parent_with_name_is_kept(self) -> None:
+        from agent_memory.profile import _parse_parents
+
+        parents = _parse_parents(
+            {"parent_0_relation": "genitore", "parent_0_first_name": "Anna"}
+        )
+        self.assertEqual(parents[0]["first_name"], "Anna")
+
+    def test_default_person_sliders_do_not_fill_the_row(self) -> None:
+        from agent_memory.profile import _parse_people
+
+        self.assertEqual(
+            _parse_people(
+                {
+                    "person_0_trust": "50",
+                    "person_0_intimacy": "50",
+                }
+            ),
+            [],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
