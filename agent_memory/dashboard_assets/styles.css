@@ -2366,18 +2366,20 @@ select:hover {
 
 .setup-visual-creator {
   display: grid;
-  grid-template-columns: minmax(0, 196px) minmax(0, 1fr);
-  gap: 18px;
+  grid-template-columns: minmax(0, 216px) minmax(0, 1fr);
+  gap: 22px;
   margin-top: 12px;
 }
 
 .setup-avatar-panel {
+  position: sticky;
+  top: 16px;
   display: flex;
   flex-direction: column;
   align-items: center;
   align-self: start;
-  gap: 8px;
-  padding: 16px 12px 12px;
+  gap: 10px;
+  padding: 16px 12px 14px;
   border: 1px solid var(--line-soft);
   border-radius: 12px;
   background:
@@ -2405,7 +2407,9 @@ select:hover {
   width: 120px;
   height: 46px;
   border-radius: 58px 58px 10px 10px;
-  background: var(--avatar-outfit, #3a4a63);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0.16)),
+    var(--avatar-outfit, #3a4a63);
 }
 
 .setup-avatar-neck {
@@ -2437,7 +2441,9 @@ select:hover {
   width: 72px;
   height: 44px;
   border-radius: 50% 50% 36% 36%;
-  background: var(--avatar-hair, #3b2a21);
+  background:
+    linear-gradient(150deg, rgba(255, 255, 255, 0.16), transparent 55%),
+    var(--avatar-hair, #3b2a21);
   z-index: 1;
   transition: height 160ms ease, border-radius 160ms ease;
 }
@@ -2449,7 +2455,9 @@ select:hover {
   width: 66px;
   height: 28px;
   border-radius: 52% 52% 62% 38%;
-  background: var(--avatar-hair, #3b2a21);
+  background:
+    linear-gradient(150deg, rgba(255, 255, 255, 0.14), transparent 60%),
+    var(--avatar-hair, #3b2a21);
   z-index: 3;
   transition: background 160ms ease;
 }
@@ -2511,7 +2519,7 @@ select:hover {
 
 .setup-avatar-eye {
   position: absolute;
-  top: 58px;
+  top: 61px;
   width: 7px;
   height: 7px;
   border-radius: 50%;
@@ -2528,15 +2536,107 @@ select:hover {
   left: 76px;
 }
 
+.setup-avatar-ear {
+  position: absolute;
+  top: 55px;
+  width: 9px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--avatar-skin, #e6b795);
+  box-shadow: inset -1px 0 0 rgba(0, 0, 0, 0.14);
+  z-index: 1;
+}
+
+.setup-avatar-ear.left {
+  left: 31px;
+}
+
+.setup-avatar-ear.right {
+  left: 96px;
+}
+
+.setup-avatar-brow {
+  position: absolute;
+  top: 52px;
+  width: 12px;
+  height: 2.5px;
+  border-radius: 999px;
+  background: var(--avatar-hair, #3b2a21);
+  opacity: 0.55;
+  z-index: 4;
+}
+
+.setup-avatar-brow.left {
+  left: 49px;
+}
+
+.setup-avatar-brow.right {
+  left: 73px;
+}
+
+.setup-avatar-nose {
+  position: absolute;
+  left: 65px;
+  top: 69px;
+  width: 6px;
+  height: 11px;
+  border-radius: 50% 50% 60% 60%;
+  background: rgba(120, 70, 45, 0.18);
+  z-index: 4;
+}
+
 .setup-avatar-mouth {
   position: absolute;
-  left: 61px;
-  top: 80px;
-  width: 14px;
-  height: 3px;
-  border-radius: 0 0 8px 8px;
-  background: rgba(94, 44, 34, 0.5);
+  left: 59px;
+  top: 85px;
+  width: 18px;
+  height: 5px;
+  border-radius: 0 0 12px 12px;
+  background: linear-gradient(
+    180deg,
+    rgba(122, 58, 52, 0.35),
+    rgba(150, 72, 64, 0.55)
+  );
   z-index: 4;
+}
+
+.setup-avatar-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+  margin-top: 2px;
+}
+
+.setup-avatar-progress-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--faint);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.setup-avatar-progress-head span:last-child {
+  color: var(--gold);
+  letter-spacing: 0.02em;
+}
+
+.setup-avatar-progress-track {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(216, 179, 106, 0.14);
+}
+
+.setup-avatar-progress-track > span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(216, 179, 106, 0.6), var(--gold));
+  transition: width 180ms ease;
 }
 
 .setup-avatar-caption {
@@ -2551,8 +2651,45 @@ select:hover {
 .setup-visual-options {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
   min-width: 0;
+}
+
+.setup-creator-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.setup-creator-group + .setup-creator-group {
+  padding-top: 14px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.setup-creator-group-title {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 0;
+  color: var(--gold);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.setup-creator-group-title::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(216, 179, 106, 0.35), transparent);
+}
+
+.setup-creator-group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .setup-creator-row {
@@ -2569,29 +2706,45 @@ select:hover {
 }
 
 .setup-creator-label {
-  color: var(--faint);
-  font-size: 9px;
+  color: var(--muted);
+  font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
+.setup-creator-value {
+  max-width: 55%;
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--gold);
+  font-size: 10px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.setup-creator-value.is-empty {
+  display: none;
+}
+
 .setup-creator-dice {
   flex: 0 0 auto;
-  padding: 2px 6px;
-  border: 1px solid transparent;
-  border-radius: 5px;
-  color: var(--faint);
-  background: transparent;
+  padding: 3px 7px;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  color: var(--muted);
+  background: rgba(8, 17, 29, 0.5);
   font: inherit;
   font-size: 11px;
   line-height: 1;
   cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
 }
 
 .setup-creator-dice:hover,
 .setup-creator-dice:focus-visible {
-  border-color: rgba(216, 179, 106, 0.5);
+  border-color: rgba(216, 179, 106, 0.55);
   color: var(--gold);
+  background: var(--gold-soft);
 }
 
 .setup-creator-range {
@@ -2630,7 +2783,7 @@ select:hover {
   display: inline-flex;
   gap: 6px;
   align-items: center;
-  padding: 6px 10px;
+  padding: 6px 11px;
   border: 1px solid var(--line-soft);
   border-radius: 999px;
   color: var(--muted);
@@ -2639,17 +2792,20 @@ select:hover {
   font-size: 11px;
   line-height: 1.25;
   cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
 }
 
 .setup-choice:hover {
   border-color: rgba(216, 179, 106, 0.6);
   color: var(--text);
+  background: rgba(216, 179, 106, 0.08);
 }
 
 .setup-choice[aria-pressed="true"] {
   border-color: var(--gold);
   color: var(--gold);
   background: var(--gold-soft);
+  box-shadow: inset 0 0 0 1px rgba(216, 179, 106, 0.25);
 }
 
 .setup-choice-swatch {
@@ -2789,8 +2945,13 @@ select:hover {
   }
 
   .setup-avatar-panel {
-    flex-direction: row;
+    position: static;
+    flex-flow: row wrap;
     justify-content: center;
+  }
+
+  .setup-avatar-progress {
+    flex: 1 1 180px;
   }
 }
 

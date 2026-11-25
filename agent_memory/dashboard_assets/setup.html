@@ -302,7 +302,7 @@
             <fieldset class="setup-section">
               <legend>Aspetto</legend>
               <div class="setup-visual-toolbar">
-                <p class="setup-hint">Scegli una voce per ogni riga: l’anteprima cambia subito. Il dado accanto al nome sorteggia solo quella riga; <strong>Genera tutto</strong> compone l’intero aspetto in un clic. L’altezza si regola in centimetri e i testi restano modificabili a mano.</p>
+                <p class="setup-hint">Una scelta per riga, raggruppata per zona: l’anteprima cambia subito. Il dado accanto al nome sorteggia solo quella riga; <strong>Genera tutto</strong> compone l’intero aspetto in un clic. Clicca di nuovo una voce per toglierla; i testi restano modificabili a mano.</p>
                 <div class="setup-visual-actions">
                   <button type="button" class="setup-visual-random" data-randomize-visual title="Sorteggia tutte le voci dell’aspetto">🎲 Genera tutto</button>
                   <button type="button" class="setup-visual-reset" data-reset-visual title="Svuota tutte le scelte">Azzera</button>
@@ -315,14 +315,23 @@
                     <span class="setup-avatar-shoulders"></span>
                     <span class="setup-avatar-tail"></span>
                     <span class="setup-avatar-hair"></span>
+                    <span class="setup-avatar-ear left"></span>
+                    <span class="setup-avatar-ear right"></span>
                     <span class="setup-avatar-neck"></span>
                     <span class="setup-avatar-head"></span>
                     <span class="setup-avatar-fringe"></span>
+                    <span class="setup-avatar-brow left"></span>
+                    <span class="setup-avatar-brow right"></span>
                     <span class="setup-avatar-eye left"></span>
                     <span class="setup-avatar-eye right"></span>
+                    <span class="setup-avatar-nose"></span>
                     <span class="setup-avatar-mouth"></span>
                   </div>
                   <p class="setup-avatar-caption" data-avatar-caption>Personaggio da definire</p>
+                  <div class="setup-avatar-progress">
+                    <div class="setup-avatar-progress-head"><span>Voci scelte</span><span data-visual-progress>0 di 11</span></div>
+                    <div class="setup-avatar-progress-track" role="progressbar" aria-label="Voci dell’aspetto scelte" aria-valuemin="0" aria-valuemax="11" aria-valuenow="0"><span data-visual-progress-bar></span></div>
+                  </div>
                 </div>
                 <div class="setup-visual-options" data-visual-options></div>
               </div>

@@ -73,7 +73,7 @@
     {
       id: "face_shape",
       field: "face",
-      label: "Viso",
+      label: "Forma del viso",
       options: [
         { label: "Ovale", value: "viso ovale, lineamenti morbidi" },
         { label: "Rotondo", value: "viso rotondo, guance piene" },
@@ -99,7 +99,7 @@
     {
       id: "hair_length",
       field: "hair",
-      label: "Capelli · lunghezza",
+      label: "Lunghezza",
       options: [
         { label: "Rasati", value: "capelli rasati", hair: "rasati" },
         { label: "Corti", value: "capelli corti", hair: "corti" },
@@ -111,7 +111,7 @@
     {
       id: "hair_texture",
       field: "hair",
-      label: "Capelli · texture",
+      label: "Texture",
       standalonePrefix: "capelli ",
       options: [
         { label: "Lisci", value: "lisci", texture: "lisci" },
@@ -122,7 +122,7 @@
     {
       id: "hair_color",
       field: "hair",
-      label: "Capelli · colore",
+      label: "Colore",
       standalonePrefix: "capelli ",
       options: [
         { label: "Neri", value: "neri", swatch: "#1f1a17" },
@@ -138,7 +138,7 @@
     {
       id: "eyes_shape",
       field: "eyes",
-      label: "Occhi · forma",
+      label: "Forma",
       options: [
         { label: "A mandorla", value: "occhi a mandorla" },
         { label: "Grandi", value: "occhi grandi" },
@@ -149,7 +149,7 @@
     {
       id: "eyes_color",
       field: "eyes",
-      label: "Occhi · colore",
+      label: "Colore",
       standalonePrefix: "occhi ",
       options: [
         { label: "Castani", value: "castani", swatch: "#6b4a2f" },
@@ -192,6 +192,17 @@
       ],
     },
   ];
+
+  // Intestazioni dei gruppi del creatore: ogni campo del profilo visivo
+  // raccoglie le righe che lo compongono.
+  const visualGroupLabels = {
+    body: "Corpo",
+    face: "Viso",
+    hair: "Capelli",
+    eyes: "Occhi",
+    distinctive_marks: "",
+    style: "",
+  };
 
   const lifeFieldNames = ["interests", "values", "habits"];
 
@@ -661,6 +672,9 @@
     const selections = {};
     const buttonsByRow = new Map();
     const rangeInputs = new Map();
+    const valueByRow = new Map();
+    const progressLabel = form.querySelector("[data-visual-progress]");
+    const progressBar = form.querySelector("[data-visual-progress-bar]");
 
     function heightSelection(cm) {
       return { label: `${cm} cm`, value: `altezza ${cm} cm`, cm };
@@ -696,6 +710,35 @@
           );
         });
       });
+    }
+
+    function refreshRowValues() {
+      visualRows.forEach((row) => {
+        const node = valueByRow.get(row.id);
+        if (!node) {
+          return;
+        }
+        const chosen = selections[row.id];
+        node.textContent = chosen ? chosen.label : "";
+        node.classList.toggle("is-empty", !chosen);
+      });
+    }
+
+    function updateProgress() {
+      const chosen = visualRows.filter((row) => selections[row.id]).length;
+      if (progressLabel) {
+        progressLabel.textContent = `${chosen} di ${visualRows.length}`;
+      }
+      if (progressBar) {
+        progressBar.style.width = `${Math.round(
+          (chosen / visualRows.length) * 100
+        )}%`;
+        const track = progressBar.parentElement;
+        if (track) {
+          track.setAttribute("aria-valuenow", String(chosen));
+          track.setAttribute("aria-valuemax", String(visualRows.length));
+        }
+      }
     }
 
     function updateAvatar() {
@@ -797,7 +840,30 @@
         return;
       }
       container.textContent = "";
+      let groupBody = null;
+      let groupLabel = "";
       visualRows.forEach((row) => {
+        const groupName =
+          visualGroupLabels[row.field] === undefined
+            ? "Aspetto"
+            : visualGroupLabels[row.field];
+        if (!groupBody || groupName !== groupLabel) {
+          groupLabel = groupName;
+          const group = document.createElement("section");
+          group.className = "setup-creator-group";
+          if (groupName) {
+            const title = document.createElement("h4");
+            title.className = "setup-creator-group-title";
+            title.textContent = groupName;
+            group.appendChild(title);
+          } else {
+            group.classList.add("is-plain");
+          }
+          groupBody = document.createElement("div");
+          groupBody.className = "setup-creator-group-body";
+          group.appendChild(groupBody);
+          container.appendChild(group);
+        }
         const wrapper = document.createElement("div");
         wrapper.className = "setup-creator-row";
         const head = document.createElement("div");
@@ -813,11 +879,19 @@
         dice.setAttribute("aria-label", `Sorteggia ${row.label.toLowerCase()}`);
         dice.addEventListener("click", () => {
           randomizeRow(row);
+          refreshRowValues();
+          updateProgress();
           if (status) {
             status.textContent = "";
           }
         });
+        const value = document.createElement("span");
+        value.className = "setup-creator-value";
+        if (!row.range) {
+          valueByRow.set(row.id, value);
+        }
         head.appendChild(label);
+        head.appendChild(value);
         head.appendChild(dice);
         wrapper.appendChild(head);
 
@@ -848,6 +922,8 @@
             selections[row.id] = heightSelection(cm);
             output.textContent = `${cm} cm`;
             writeField(row.field);
+            refreshRowValues();
+            updateProgress();
             updateAvatar();
             if (status) {
               status.textContent = "";
@@ -856,7 +932,7 @@
           rangeInputs.set(row.id, input);
           wrapper.appendChild(range);
           wrapper.appendChild(scale);
-          container.appendChild(wrapper);
+          groupBody.appendChild(wrapper);
           return;
         }
 
@@ -886,6 +962,8 @@
             }
             writeField(row.field);
             refreshPressed(row.field);
+            refreshRowValues();
+            updateProgress();
             updateAvatar();
             if (status) {
               status.textContent = "";
@@ -896,7 +974,7 @@
         });
         buttonsByRow.set(row.id, buttons);
         wrapper.appendChild(choices);
-        container.appendChild(wrapper);
+        groupBody.appendChild(wrapper);
       });
     }
 
@@ -939,6 +1017,8 @@
     buildRows();
     preselectFromText();
     refreshPressed();
+    refreshRowValues();
+    updateProgress();
     updateAvatar();
 
     // Se il testo viene riscritto a mano, le scelte che non compaiono più
@@ -960,6 +1040,8 @@
           }
         });
         refreshPressed(field);
+        refreshRowValues();
+        updateProgress();
         updateAvatar();
       });
     });
@@ -969,6 +1051,8 @@
         visualRows.forEach((row) => randomizeRow(row));
         visualFields.forEach(writeField);
         refreshPressed();
+        refreshRowValues();
+        updateProgress();
         updateAvatar();
         if (status) {
           status.textContent =
@@ -1000,6 +1084,8 @@
           }
         });
         refreshPressed();
+        refreshRowValues();
+        updateProgress();
         updateAvatar();
         if (status) {
           status.textContent =
